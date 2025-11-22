@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth } from '../firebaseConfig'; // authインスタンスをインポート
 
 // 1. Contextを作成
@@ -20,6 +20,17 @@ export const AuthProvider = ({ children }) => {
     return signInWithEmailAndPassword(auth, email, password);
   };
 
+  // ユーザー登録処理
+  const signup = (email, password) => {
+    return createUserWithEmailAndPassword(auth, email, password);
+  };
+
+  // Googleログイン処理
+  const signInWithGoogle = () => {
+    const provider = new GoogleAuthProvider();
+    return signInWithPopup(auth, provider);
+  };
+
   // ログアウト処理
   const logout = () => {
     return signOut(auth);
@@ -38,6 +49,8 @@ export const AuthProvider = ({ children }) => {
   const value = {
     currentUser,
     login,
+    signup,
+    signInWithGoogle,
     logout
   };
 
