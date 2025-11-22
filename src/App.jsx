@@ -3,8 +3,9 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './components/Login';
 import PrivateRoute from './components/PrivateRoute';
 import { useAuth } from './context/AuthContext';
+import Signup from './components/Signup';
 
-// ⭐ 仮の Home コンポーネント (動作確認用)
+//  仮の Home コンポーネント (動作確認用)
 const TempHome = () => {
   const { currentUser, logout } = useAuth();
   return (
@@ -41,7 +42,8 @@ function App() {
         />
         {/* ログイン画面（認証不要） */}
         <Route path="/login" element={<Login />} />
-        {/* 他のルートもここに追加 */}
+        {/* 新しいサインアップルートを追加（認証不要） */}
+        <Route path="/signup" element={<Signup />} />
       </Routes>
     </Router>
   );
