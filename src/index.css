@@ -24,10 +24,11 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
+  /* 中央寄せを解除して横幅いっぱいにする */
   min-width: 320px;
   min-height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 h1 {

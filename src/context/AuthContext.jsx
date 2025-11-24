@@ -48,6 +48,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser,
+    loading, // ← 追加: 読み込み状態を提供する
     login,
     signup,
     signInWithGoogle,
