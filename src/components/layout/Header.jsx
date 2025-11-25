@@ -125,6 +125,18 @@ const Header = () => {
                   >
                     チーム登録
                   </li>
+
+                  {/* 追加: 選手登録 */}
+                  <li
+                    style={{ padding: '10px 14px', cursor: 'pointer' }}
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      navigate('/player'); // 選手登録ページへ遷移
+                    }}
+                  >
+                    選手登録
+                  </li>
+
                   <li
                     style={{ padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => {
