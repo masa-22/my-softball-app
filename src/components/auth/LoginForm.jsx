@@ -85,7 +85,7 @@ const LoginForm = ({ switchTo, onClose }) => {
       <div style={{ margin: '20px 0', textAlign: 'center', color: '#888' }}>または</div>
 
       {/* 2) Googleログインボタン */}
-      <GoogleLoginButton />
+      <GoogleLoginButton onClose={onClose} />
 
       {/* 新規登録をモーダルで開く（モーダル内なら切替、ページならローカルでモーダル表示） */}
       <div style={{ marginTop: '15px', textAlign: 'center' }}>

@@ -84,7 +84,7 @@ const SignupForm = ({ switchTo, onClose }) => {
       <div style={{ margin: '20px 0', textAlign: 'center', color: '#888' }}>または</div>
 
       {/* 2) Googleで登録（既存の GoogleLoginButton を流用） */}
-      <GoogleLoginButton />
+      <GoogleLoginButton onClose={onClose} />
 
       <div style={{ marginTop: '15px', textAlign: 'center' }}>
         <a href="/login" onClick={handleOpenLogin} style={{ color: '#3498db', textDecoration: 'none', cursor: 'pointer' }}>
