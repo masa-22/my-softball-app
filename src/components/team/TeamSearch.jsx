@@ -1,23 +1,35 @@
-import React, { useState } from 'react';
-import { searchTeams } from '../../services/teamService';
+import React, { useState, useEffect } from 'react';
+import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 
 const TeamSearch = () => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [prefecture, setPrefecture] = useState('');
+  const [affiliation, setAffiliation] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [prefectures, setPrefectures] = useState([]);
+  const [affiliations, setAffiliations] = useState([]);
+
+  useEffect(() => {
+    // 選択肢を取得
+    setPrefectures(getPrefectures());
+    setAffiliations(getAffiliations());
+  }, []);
 
   const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) {
-      setError('チーム名を入力してください。');
-      return;
-    }
-
+    e && e.preventDefault();
     try {
       setError('');
       setLoading(true);
-      const results = await searchTeams(searchQuery);
+
+      // 複数条件で検索（name, prefecture, affiliation）
+      const results = await searchTeams({
+        name: searchQuery,
+        prefecture,
+        affiliation,
+      });
+
       setSearchResults(results);
       if (results.length === 0) {
         setError('検索結果が見つかりませんでした。');
@@ -30,18 +42,49 @@ const TeamSearch = () => {
     }
   };
 
+  const handleReset = () => {
+    setSearchQuery('');
+    setPrefecture('');
+    setAffiliation('');
+    setSearchResults([]);
+    setError('');
+  };
+
   return (
     <div>
       <h2>チーム検索</h2>
       <form onSubmit={handleSearch} style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <input
             type="text"
-            placeholder="チーム名で検索"
+            placeholder="チーム名で検索（部分一致）"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
           />
+          <select
+            value={prefecture}
+            onChange={(e) => setPrefecture(e.target.value)}
+            style={{ width: '180px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            <option value="">都道府県を選択</option>
+            {prefectures.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <select
+            value={affiliation}
+            onChange={(e) => setAffiliation(e.target.value)}
+            style={{ width: '180px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+          >
+            <option value="">所属を選択</option>
+            {affiliations.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
           <button
             type="submit"
             disabled={loading}
@@ -55,6 +98,20 @@ const TeamSearch = () => {
             }}
           >
             {loading ? '検索中...' : '検索'}
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#eee',
+              color: '#333',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            リセット
           </button>
         </div>
       </form>
@@ -74,15 +131,12 @@ const TeamSearch = () => {
               marginBottom: '10px',
             }}
           >
-            <h3 style={{ margin: '0 0 10px 0' }}>{team.teamName}</h3>
-            <p style={{ margin: '5px 0' }}>
-              <strong>略称:</strong> {team.teamAbbr}
-            </p>
+            <h3 style={{ margin: '0 0 10px 0' }}>{team.teamName} <span style={{ fontSize: '0.9em', color: '#666' }}>({team.teamAbbr})</span></h3>
             <p style={{ margin: '5px 0' }}>
               <strong>所属:</strong> {team.affiliation}
             </p>
-            <p style={{ margin: '5px 0', fontSize: '0.9em', color: '#666' }}>
-              <strong>チームID:</strong> {team.id}
+            <p style={{ margin: '5px 0' }}>
+              <strong>都道府県:</strong> {team.prefecture || '—'}
             </p>
           </div>
         ))}

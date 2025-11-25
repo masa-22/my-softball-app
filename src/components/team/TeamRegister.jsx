@@ -4,6 +4,7 @@ import { registerTeam } from '../../services/teamService';
 const TeamRegister = () => {
   const teamNameRef = useRef();
   const teamAbbrRef = useRef();
+  const prefectureRef = useRef(); // 修正: 都道府県専用 ref
   const affiliationRef = useRef();
 
   const [loading, setLoading] = useState(false);
@@ -16,11 +17,12 @@ const TeamRegister = () => {
     const teamData = {
       teamName: teamNameRef.current.value.trim(),
       teamAbbr: teamAbbrRef.current.value.trim(),
+      prefecture: prefectureRef.current.value.trim(),
       affiliation: affiliationRef.current.value.trim(),
     };
 
     // バリデーション
-    if (!teamData.teamName || !teamData.teamAbbr || !teamData.affiliation) {
+    if (!teamData.teamName || !teamData.teamAbbr || !teamData.prefecture || !teamData.affiliation) {
       setError('すべてのフィールドを入力してください。');
       return;
     }
@@ -33,10 +35,15 @@ const TeamRegister = () => {
       setSuccess(`チーム「${newTeam.teamName}」を登録しました。(ID: ${newTeam.id})`);
       teamNameRef.current.value = '';
       teamAbbrRef.current.value = '';
+      prefectureRef.current.value = '';
       affiliationRef.current.value = '';
     } catch (err) {
       console.error(err);
-      setError('チーム登録に失敗しました。');
+      if (err.code === 'DUPLICATE') {
+        setError('同じチーム名と都道府県の組合せは既に登録されています。');
+      } else {
+        setError(err.message || 'チーム登録に失敗しました。');
+      }
     } finally {
       setLoading(false);
     }
@@ -67,6 +74,17 @@ const TeamRegister = () => {
             ref={teamAbbrRef}
             required
             placeholder="例: 理科大"
+            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>都道府県</label>
+          <input
+            type="text"
+            ref={prefectureRef}
+            required
+            placeholder="例: 千葉県"
             style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
           />
         </div>
