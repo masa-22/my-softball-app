@@ -138,3 +138,8 @@ export const registerTeam = async (teamData) => {
 };
 
 // 既存の Firestore 実装が必要なら残すが、ここではローカル版を優先して利用する設計です.
+
+// 追加: 現在保持しているチーム一覧を返す（コピーを返す）
+export const getTeams = () => {
+  return teams.slice().map(t => ({ ...t }));
+};

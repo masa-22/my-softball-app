@@ -5,6 +5,7 @@ import PrivateRoute from './components/routes/PrivateRoute';
 import AuthContainer from './components/auth/AuthContainer';
 import LoadingIndicator from './components/common/LoadingIndicator';
 import TeamManagement from './components/team/TeamManagement';
+import PlayerManagement from './components/player/PlayerManagement'; // 追加
 
 // --- サンプルページ ---
 const HomePage = () => <div>ホームページ</div>;
@@ -26,6 +27,16 @@ function App() {
             element={
               <PrivateRoute>
                 <TeamManagement />
+              </PrivateRoute>
+            }
+          />
+
+          {/* 選手登録ページ（ログイン必須） */}
+          <Route
+            path="/player"
+            element={
+              <PrivateRoute>
+                <PlayerManagement />
               </PrivateRoute>
             }
           />
