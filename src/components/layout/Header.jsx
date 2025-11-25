@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LoginModal from '../auth/LoginModal';
 import AuthContainer from '../auth/AuthContainer';
-import { useAuth } from '../../context/AuthContext'; // 追加: 認証情報を参照/操作する
+import { useAuth } from '../../context/AuthContext';
 
 const Header = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -10,8 +10,8 @@ const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef();
 
-  const { currentUser, logout } = useAuth(); // 追加
-  const navigate = useNavigate(); // 追加
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
 
   // 外側クリックでメニューを閉じる
   useEffect(() => {
@@ -29,7 +29,7 @@ const Header = () => {
     setIsMenuOpen(false);
     try {
       await logout();
-      navigate('/'); // ホームへ遷移
+      navigate('/');
     } catch (err) {
       console.error('ログアウトに失敗しました', err);
     }
@@ -120,7 +120,16 @@ const Header = () => {
                     style={{ padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => {
                       setIsMenuOpen(false);
-                      navigate('/dashboard'); // 任意: ダッシュボードへ
+                      navigate('/team'); // チーム登録ページへ遷移
+                    }}
+                  >
+                    チーム登録
+                  </li>
+                  <li
+                    style={{ padding: '10px 14px', cursor: 'pointer' }}
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      navigate('/dashboard'); // ダッシュボードへ遷移
                     }}
                   >
                     ダッシュボード
