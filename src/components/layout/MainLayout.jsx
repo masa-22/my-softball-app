@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Header from './Header';
+import TeamManagement from '../team/TeamManagement';
 
 const MainLayout = ({ children }) => {
+  const [currentPage, setCurrentPage] = useState('home');
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Header />
