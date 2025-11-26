@@ -1,29 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 
-const TeamSearch = () => {
+const TeamSearch: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [prefecture, setPrefecture] = useState('');
   const [affiliation, setAffiliation] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [prefectures, setPrefectures] = useState([]);
-  const [affiliations, setAffiliations] = useState([]);
+  const [prefectures, setPrefectures] = useState<string[]>([]);
+  const [affiliations, setAffiliations] = useState<string[]>([]);
 
   useEffect(() => {
-    // 選択肢を取得
     setPrefectures(getPrefectures());
     setAffiliations(getAffiliations());
   }, []);
 
-  const handleSearch = async (e) => {
-    e && e.preventDefault();
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
       setError('');
       setLoading(true);
 
-      // 複数条件で検索（name, prefecture, affiliation）
       const results = await searchTeams({
         name: searchQuery,
         prefecture,
@@ -118,7 +116,6 @@ const TeamSearch = () => {
 
       {error && <p style={{ color: 'red', marginBottom: '10px' }}>{error}</p>}
 
-      {/* 検索結果表示 */}
       <div>
         {searchResults.map((team) => (
           <div

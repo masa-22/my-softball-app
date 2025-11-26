@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import TeamSearch from './TeamSearch';
 import TeamRegister from './TeamRegister';
 
-const TeamManagement = () => {
-  const [activeTab, setActiveTab] = useState('search'); // 'search' | 'register'
+type ActiveTab = 'search' | 'register';
+
+const TeamManagement: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('search');
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>チーム管理</h1>
 
-      {/* タブ切り替え */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #ccc' }}>
         <button
           onClick={() => setActiveTab('search')}
@@ -41,7 +42,6 @@ const TeamManagement = () => {
         </button>
       </div>
 
-      {/* コンテンツ表示 */}
       <div style={{ padding: '20px', backgroundColor: '#fafafa', borderRadius: '4px' }}>
         {activeTab === 'search' && <TeamSearch />}
         {activeTab === 'register' && <TeamRegister />}

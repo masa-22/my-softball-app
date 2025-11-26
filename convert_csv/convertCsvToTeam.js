@@ -2,7 +2,7 @@ import csv from 'csvtojson';
 import fs from 'fs';
 
 const csvFilePath = 'csv_data/team.csv';
-const outputFilePath = 'src/data/Teams.js';
+const outputFilePath = 'src/data/Teams.ts';
 
 csv()
 .fromFile(csvFilePath)

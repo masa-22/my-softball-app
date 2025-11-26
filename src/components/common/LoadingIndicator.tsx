@@ -1,7 +1,7 @@
 import React from 'react';
 
-const LoadingIndicator = () => {
-  const spinnerStyle = {
+const LoadingIndicator: React.FC = () => {
+  const spinnerStyle: React.CSSProperties = {
     width: '40px',
     height: '40px',
     border: '4px solid #ccc',
@@ -15,7 +15,6 @@ const LoadingIndicator = () => {
     <div style={{ textAlign: 'center' }}>
       <div style={spinnerStyle} />
 
-      {/* keyframes を inline で追加 */}
       <style>
         {`
           @keyframes spin {

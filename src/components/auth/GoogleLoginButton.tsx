@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const GoogleLoginButton = ({ onClose }) => {
+interface Props {
+  onClose?: () => void;
+}
+
+const GoogleLoginButton: React.FC<Props> = ({ onClose }) => {
   const { signInWithGoogle } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -12,16 +16,14 @@ const GoogleLoginButton = ({ onClose }) => {
     try {
       setError('');
       setLoading(true);
-      await signInWithGoogle(); // 既存・新規アカウント両方成功扱い
-      
-      // モーダル内での使用の場合は onClose を呼ぶ
+      await signInWithGoogle();
+
       if (typeof onClose === 'function') {
         onClose();
       }
-      
-      // その後ホームに遷移
+
       navigate('/');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setError('Googleアカウントでのログインに失敗しました。');
     } finally {

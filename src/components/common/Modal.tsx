@@ -1,24 +1,21 @@
-import React from 'react';
+import React, { ReactNode } from 'react';
 import PropTypes from 'prop-types';
 
-/**
- * Modal
- * 汎用モーダルコンポーネント
- *
- * Props:
- * - isOpen: モーダルを開くかどうか
- * - onClose: 閉じる関数
- * - children: モーダル内コンテンツ
- */
-const Modal = ({ isOpen = true, onClose, children }) => {
-  // isOpen が未指定でもデフォルトで開くようにする（既存コードとの互換性）
+interface Props {
+  isOpen?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}
+
+const Modal: React.FC<Props> = ({ isOpen = true, onClose, children }) => {
   if (!isOpen) return null;
 
   return (
     <div
       style={{
         position: 'fixed',
-        top: 0, left: 0,
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -27,7 +24,7 @@ const Modal = ({ isOpen = true, onClose, children }) => {
         alignItems: 'center',
         zIndex: 1000,
       }}
-      onClick={onClose} // 背景クリックで閉じる
+      onClick={onClose}
     >
       <div
         style={{
@@ -38,9 +35,8 @@ const Modal = ({ isOpen = true, onClose, children }) => {
           maxWidth: '90%',
           position: 'relative',
         }}
-        onClick={(e) => e.stopPropagation()} // 内部クリックは閉じない
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* 閉じるボタン */}
         <button
           onClick={onClose}
           style={{
@@ -63,7 +59,7 @@ const Modal = ({ isOpen = true, onClose, children }) => {
 };
 
 Modal.propTypes = {
-  isOpen: PropTypes.bool, // 必須ではなくする
+  isOpen: PropTypes.bool,
   onClose: PropTypes.func.isRequired,
   children: PropTypes.node.isRequired,
 };

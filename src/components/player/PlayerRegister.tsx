@@ -2,18 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { getTeams } from '../../services/teamService';
 import { registerPlayer } from '../../services/playerService';
 
-const PlayerRegister = () => {
-  const [teams, setTeams] = useState([]);
+const PlayerRegister: React.FC = () => {
+  const [teams, setTeams] = useState<any[]>([]);
   const [teamId, setTeamId] = useState('');
-  const [familyName, setFamilyName] = useState(''); // 追加: 苗字
-  const [givenName, setGivenName] = useState('');   // 追加: 名前（下の名前）
+  const [familyName, setFamilyName] = useState('');
+  const [givenName, setGivenName] = useState('');
   const [throwing, setThrowing] = useState('右');
   const [batting, setBatting] = useState('右');
   const [entryYear, setEntryYear] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState<any>(null);
 
   useEffect(() => {
     const ts = getTeams();
@@ -24,8 +24,8 @@ const PlayerRegister = () => {
     setSelectedTeam(teams.find(t => String(t.id) === String(teamId)) || null);
   }, [teamId, teams]);
 
-  const handleSubmit = async (e) => {
-    e && e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setError('');
     setMessage('');
     if (!teamId) {
@@ -50,7 +50,7 @@ const PlayerRegister = () => {
       setThrowing('右');
       setBatting('右');
       setEntryYear('');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setError(err.message || '登録に失敗しました。');
     } finally {
@@ -73,14 +73,12 @@ const PlayerRegister = () => {
           </select>
         </div>
 
-        {/* 苗字と名前入力（間に物理的スペースを挿入） */}
         <div style={{ display:'flex', gap:0, marginBottom:12, alignItems: 'center' }}>
           <div style={{ flex:1 }}>
             <label>苗字</label>
             <input value={familyName} onChange={(e)=>setFamilyName(e.target.value)} style={{ width:'100%', padding:8 }} />
           </div>
 
-          {/* 明示的な物理スペース（幅を空ける） */}
           <div aria-hidden="true" style={{ width: 24 }} />
 
           <div style={{ flex:1 }}>

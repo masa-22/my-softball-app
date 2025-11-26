@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import PlayerSearch from './PlayerSearch';
 import PlayerRegister from './PlayerRegister';
 
-const PlayerManagement = () => {
-  const [activeTab, setActiveTab] = useState('search'); // 'search' | 'register'
+type ActiveTab = 'search' | 'register';
+
+const PlayerManagement: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('search');
+
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
       <h1>選手管理</h1>

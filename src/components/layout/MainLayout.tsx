@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { ReactNode } from 'react';
 import Header from './Header';
-import TeamManagement from '../team/TeamManagement';
 
-const MainLayout = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState('home');
+interface Props {
+  children: ReactNode;
+}
 
+const MainLayout: React.FC<Props> = ({ children }) => {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Header />
