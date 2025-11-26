@@ -2,15 +2,12 @@ import React from 'react';
 import AuthContainer from './AuthContainer';
 import PropTypes from 'prop-types';
 
-/**
- * LoginModal
- * ログイン用モーダルコンポーネント
- *
- * Props:
- * - isOpen: モーダル表示中かどうか
- * - onClose: モーダルを閉じる時のコールバック
- */
-const LoginModal = ({ isOpen, onClose }) => {
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const LoginModal: React.FC<Props> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (

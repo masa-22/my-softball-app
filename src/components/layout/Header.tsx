@@ -4,19 +4,18 @@ import LoginModal from '../auth/LoginModal';
 import AuthContainer from '../auth/AuthContainer';
 import { useAuth } from '../../context/AuthContext';
 
-const Header = () => {
+const Header: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef();
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
-  // 外側クリックでメニューを閉じる
   useEffect(() => {
-    const onDocClick = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsMenuOpen(false);
       }
     };
@@ -24,7 +23,6 @@ const Header = () => {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  // ログアウト処理
   const handleLogout = async () => {
     setIsMenuOpen(false);
     try {
@@ -51,7 +49,6 @@ const Header = () => {
         <Link to="/" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold', fontSize: '20px' }}>🥎 ソフトボール成績管理</Link>
       </div>
 
-      {/* 右上: ハンバーガーメニュー */}
       <div style={{ position: 'relative' }} ref={menuRef}>
         <button
           onClick={() => setIsMenuOpen((s) => !s)}
@@ -71,7 +68,6 @@ const Header = () => {
             cursor: 'pointer',
           }}
         >
-          {/* 横三本線（均一な太さ） */}
           <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
           <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
           <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
@@ -92,7 +88,6 @@ const Header = () => {
             }}
           >
             <ul style={{ listStyle: 'none', margin: 0, padding: '8px 0' }}>
-              {/* 認証状態により表示を切り替え */}
               {!currentUser ? (
                 <>
                   <li
@@ -120,28 +115,25 @@ const Header = () => {
                     style={{ padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => {
                       setIsMenuOpen(false);
-                      navigate('/team'); // チーム登録ページへ遷移
+                      navigate('/team');
                     }}
                   >
                     チーム登録
                   </li>
-
-                  {/* 追加: 選手登録 */}
                   <li
                     style={{ padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => {
                       setIsMenuOpen(false);
-                      navigate('/player'); // 選手登録ページへ遷移
+                      navigate('/player');
                     }}
                   >
                     選手登録
                   </li>
-
                   <li
                     style={{ padding: '10px 14px', cursor: 'pointer' }}
                     onClick={() => {
                       setIsMenuOpen(false);
-                      navigate('/dashboard'); // ダッシュボードへ遷移
+                      navigate('/dashboard');
                     }}
                   >
                     ダッシュボード
@@ -159,7 +151,6 @@ const Header = () => {
         )}
       </div>
 
-      {/* 各モーダル（条件付き表示） */}
       {isLoginOpen && (
         <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
       )}

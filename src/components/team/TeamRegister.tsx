@@ -1,27 +1,26 @@
 import React, { useRef, useState } from 'react';
 import { registerTeam } from '../../services/teamService';
 
-const TeamRegister = () => {
-  const teamNameRef = useRef();
-  const teamAbbrRef = useRef();
-  const prefectureRef = useRef(); // 修正: 都道府県専用 ref
-  const affiliationRef = useRef();
+const TeamRegister: React.FC = () => {
+  const teamNameRef = useRef<HTMLInputElement>(null);
+  const teamAbbrRef = useRef<HTMLInputElement>(null);
+  const prefectureRef = useRef<HTMLInputElement>(null);
+  const affiliationRef = useRef<HTMLSelectElement>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const teamData = {
-      teamName: teamNameRef.current.value.trim(),
-      teamAbbr: teamAbbrRef.current.value.trim(),
-      prefecture: prefectureRef.current.value.trim(),
-      affiliation: affiliationRef.current.value.trim(),
+      teamName: teamNameRef.current?.value.trim() || '',
+      teamAbbr: teamAbbrRef.current?.value.trim() || '',
+      prefecture: prefectureRef.current?.value.trim() || '',
+      affiliation: affiliationRef.current?.value.trim() || '',
     };
 
-    // バリデーション
     if (!teamData.teamName || !teamData.teamAbbr || !teamData.prefecture || !teamData.affiliation) {
       setError('すべてのフィールドを入力してください。');
       return;
@@ -33,11 +32,11 @@ const TeamRegister = () => {
       setLoading(true);
       const newTeam = await registerTeam(teamData);
       setSuccess(`チーム「${newTeam.teamName}」を登録しました。(ID: ${newTeam.id})`);
-      teamNameRef.current.value = '';
-      teamAbbrRef.current.value = '';
-      prefectureRef.current.value = '';
-      affiliationRef.current.value = '';
-    } catch (err) {
+      if (teamNameRef.current) teamNameRef.current.value = '';
+      if (teamAbbrRef.current) teamAbbrRef.current.value = '';
+      if (prefectureRef.current) prefectureRef.current.value = '';
+      if (affiliationRef.current) affiliationRef.current.value = '';
+    } catch (err: any) {
       console.error(err);
       if (err.code === 'DUPLICATE') {
         setError('同じチーム名と都道府県の組合せは既に登録されています。');

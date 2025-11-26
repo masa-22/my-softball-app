@@ -4,50 +4,53 @@ import { useNavigate } from 'react-router-dom';
 import GoogleLoginButton from './GoogleLoginButton';
 import AuthContainer from './AuthContainer';
 
-const SignupForm = ({ switchTo, onClose }) => {
-  const emailRef = useRef();
-  const passwordRef = useRef();
-  const { signup, currentUser } = useAuth();
+interface Props {
+  switchTo?: (mode: 'login' | 'signup') => void;
+  onClose?: () => void;
+}
+
+const LoginForm: React.FC<Props> = ({ switchTo, onClose }) => {
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const { login, currentUser } = useAuth();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const [showSignupModal, setShowSignupModal] = useState(false);
 
-  // ログイン済みならホームにリダイレクト
   if (currentUser) {
     navigate('/');
     return null;
   }
 
-  const [showLoginModal, setShowLoginModal] = useState(false);
-
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setError('');
       setLoading(true);
-      await signup(emailRef.current.value, passwordRef.current.value);
+      await login(emailRef.current?.value || '', passwordRef.current?.value || '');
       if (onClose) onClose();
       navigate('/');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setError('ユーザー登録に失敗しました。このメールアドレスは既に使用されている可能性があります。');
+      setError('ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenLogin = (e) => {
-    e && e.preventDefault();
+  const handleOpenSignup = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (typeof switchTo === 'function') {
-      switchTo('login');
+      switchTo('signup');
     } else {
-      setShowLoginModal(true);
+      setShowSignupModal(true);
     }
   };
 
   return (
     <div>
-      <h2>新規ユーザー登録</h2>
+      <h2>ログイン</h2>
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       <form onSubmit={handleSubmit}>
@@ -71,31 +74,28 @@ const SignupForm = ({ switchTo, onClose }) => {
           />
         </div>
 
-        {/* 1) メールで登録 */}
         <button
           type="submit"
           disabled={loading}
-          style={{ width: '100%', padding: '10px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer' }}
+          style={{ width: '100%', padding: '10px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer' }}
         >
-          登録
+          ログイン
         </button>
       </form>
 
       <div style={{ margin: '20px 0', textAlign: 'center', color: '#888' }}>または</div>
 
-      {/* 2) Googleで登録（既存の GoogleLoginButton を流用） */}
       <GoogleLoginButton onClose={onClose} />
 
       <div style={{ marginTop: '15px', textAlign: 'center' }}>
-        <a href="/login" onClick={handleOpenLogin} style={{ color: '#3498db', textDecoration: 'none', cursor: 'pointer' }}>
-          既にアカウントをお持ちの方はこちら
+        <a href="/signup" onClick={handleOpenSignup} style={{ color: '#3498db', textDecoration: 'none', cursor: 'pointer' }}>
+          新規ユーザー登録はこちら
         </a>
       </div>
 
-      {/* ページ表示時に開くローカルモーダル */}
-      {showLoginModal && <AuthContainer mode="login" isModal={true} onClose={() => setShowLoginModal(false)} />}
+      {showSignupModal && <AuthContainer mode="signup" isModal={true} onClose={() => setShowSignupModal(false)} />}
     </div>
   );
 };
 
-export default SignupForm;
+export default LoginForm;

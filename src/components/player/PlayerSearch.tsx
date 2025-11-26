@@ -2,20 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { getTeams } from '../../services/teamService';
 import { searchPlayers } from '../../services/playerService';
 
-const PlayerSearch = () => {
-  const [teams, setTeams] = useState([]);
+const PlayerSearch: React.FC = () => {
+  const [teams, setTeams] = useState<any[]>([]);
   const [teamId, setTeamId] = useState('');
   const [nameQuery, setNameQuery] = useState('');
   const [entryYear, setEntryYear] = useState('');
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     setTeams(getTeams());
   }, []);
 
-  const handleSearch = async (e) => {
-    e && e.preventDefault();
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!teamId) {
       setError('チームを選択してください。');
       return;
