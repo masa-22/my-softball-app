@@ -48,7 +48,7 @@ const Header = () => {
       }}
     >
       <div>
-        <Link to="/" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold', fontSize: '20px' }}>MyApp</Link>
+        <Link to="/" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold', fontSize: '20px' }}>🥎 ソフトボール成績管理</Link>
       </div>
 
       {/* 右上: ハンバーガーメニュー */}
@@ -63,7 +63,7 @@ const Header = () => {
             flexDirection: 'column',
             justifyContent: 'center',
             alignItems: 'center',
-            gap: '4px',
+            gap: '6px',
             padding: '6px',
             borderRadius: '6px',
             border: '1px solid #ddd',
@@ -71,10 +71,10 @@ const Header = () => {
             cursor: 'pointer',
           }}
         >
-          {/* 横三本線（シンプル） */}
-          <span style={{ display: 'block', width: '18px', height: '2px', background: '#333' }} />
-          <span style={{ display: 'block', width: '18px', height: '2px', background: '#333' }} />
-          <span style={{ display: 'block', width: '18px', height: '2px', background: '#333' }} />
+          {/* 横三本線（均一な太さ） */}
+          <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
+          <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
+          <span style={{ display: 'block', width: '20px', height: '2px', background: '#333' }} />
         </button>
 
         {isMenuOpen && (
