@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { registerTeam } from '../../services/teamService';
+import Modal from '../common/Modal';
 
 const TeamRegister: React.FC = () => {
   const teamNameRef = useRef<HTMLInputElement>(null);
@@ -10,6 +11,10 @@ const TeamRegister: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 追加: 確認モーダル用 state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pending, setPending] = useState<{ teamName: string; teamAbbr: string; prefecture: string; affiliation: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +31,19 @@ const TeamRegister: React.FC = () => {
       return;
     }
 
+    // 確認モーダルを開く
+    setPending(teamData);
+    setConfirmOpen(true);
+  };
+
+  const confirmRegister = async () => {
+    if (!pending) return;
+    setConfirmOpen(false);
     try {
       setError('');
       setSuccess('');
       setLoading(true);
-      const newTeam = await registerTeam(teamData);
+      const newTeam = await registerTeam(pending);
       setSuccess(`チーム「${newTeam.teamName}」を登録しました。(ID: ${newTeam.id})`);
       if (teamNameRef.current) teamNameRef.current.value = '';
       if (teamAbbrRef.current) teamAbbrRef.current.value = '';
@@ -45,6 +58,7 @@ const TeamRegister: React.FC = () => {
       }
     } finally {
       setLoading(false);
+      setPending(null);
     }
   };
 
@@ -53,7 +67,6 @@ const TeamRegister: React.FC = () => {
       <h2>チーム新規登録</h2>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {success && <p style={{ color: 'green' }}>{success}</p>}
-
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
           <label>チーム名</label>
@@ -121,6 +134,24 @@ const TeamRegister: React.FC = () => {
           {loading ? '登録中...' : 'チームを登録'}
         </button>
       </form>
+
+      {/* 確認モーダル */}
+      {confirmOpen && pending && (
+        <Modal onClose={() => setConfirmOpen(false)}>
+          <div>
+            <h3>登録内容の確認</h3>
+            <p><strong>チーム名:</strong> {pending.teamName}</p>
+            <p><strong>略称:</strong> {pending.teamAbbr}</p>
+            <p><strong>都道府県:</strong> {pending.prefecture}</p>
+            <p><strong>所属:</strong> {pending.affiliation}</p>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>
+              <button onClick={confirmRegister} style={{ padding: '8px 12px', background: '#27ae60', color: '#fff', border: 'none' }}>登録する</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
