@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { registerTournament } from '../../services/tournamentService';
+import Modal from '../common/Modal';
 
 const TournamentRegister: React.FC = () => {
   const [year, setYear] = useState('');
@@ -9,17 +10,28 @@ const TournamentRegister: React.FC = () => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // 追加: 確認モーダル
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pending, setPending] = useState<{ year: string; name: string; type: string } | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!year || !name || !type) {
       setError('すべてのフィールドを入力してください。');
       return;
     }
+    setPending({ year, name, type });
+    setConfirmOpen(true);
+  };
+
+  const confirmRegister = async () => {
+    if (!pending) return;
+    setConfirmOpen(false);
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      const t = await registerTournament({ year, name, type });
+      const t = await registerTournament(pending);
       setMessage(`大会「${t.name}」を登録しました（ID: ${t.id}）`);
       setYear('');
       setName('');
@@ -30,6 +42,7 @@ const TournamentRegister: React.FC = () => {
       else setError(err.message || '登録に失敗しました。');
     } finally {
       setLoading(false);
+      setPending(null);
     }
   };
 
@@ -63,6 +76,22 @@ const TournamentRegister: React.FC = () => {
           {loading ? '登録中...' : '大会を登録'}
         </button>
       </form>
+
+      {confirmOpen && pending && (
+        <Modal onClose={() => setConfirmOpen(false)}>
+          <div>
+            <h3>登録内容の確認</h3>
+            <p><strong>開催年:</strong> {pending.year}</p>
+            <p><strong>大会名:</strong> {pending.name}</p>
+            <p><strong>種別:</strong> {pending.type}</p>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>
+              <button onClick={confirmRegister} style={{ padding: '8px 12px', background: '#27ae60', color:'#fff', border: 'none' }}>登録する</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
