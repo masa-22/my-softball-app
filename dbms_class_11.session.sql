@@ -1,0 +1,1 @@
+select * FROM 6323009_scores;

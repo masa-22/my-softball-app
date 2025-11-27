@@ -6,6 +6,7 @@ import AuthContainer from './components/auth/AuthContainer';
 import LoadingIndicator from './components/common/LoadingIndicator';
 import TeamManagement from './components/team/TeamManagement';
 import PlayerManagement from './components/player/PlayerManagement';
+import TournamentManagement from './components/tournament/TournamentManagement';
 
 const HomePage = () => <div>ホームページ</div>;
 const Dashboard = () => <div>ダッシュボード（ログイン必須）</div>;
@@ -18,6 +19,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/team" element={<PrivateRoute><TeamManagement /></PrivateRoute>} />
           <Route path="/player" element={<PrivateRoute><PlayerManagement /></PrivateRoute>} />
+          <Route path="/tournament" element={<PrivateRoute><TournamentManagement /></PrivateRoute>} />   {/* 追加 */}
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/login" element={<AuthContainer mode="login" />} />
           <Route path="/signup" element={<AuthContainer mode="signup" />} />
