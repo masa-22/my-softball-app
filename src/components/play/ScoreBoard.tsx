@@ -21,7 +21,6 @@ const ScoreBoard: React.FC = () => {
   useEffect(() => {
     if (!matchId) return;
 
-    // チーム名取得
     const m = getMatches().find(x => x.id === matchId);
     if (m) {
       const teams = getTeams();
@@ -31,7 +30,6 @@ const ScoreBoard: React.FC = () => {
       if (away) setAwayName(away.teamName);
     }
 
-    // 初期読み込み + ポーリング
     setData(computeScoreBoard(matchId));
     const t = setInterval(() => setData(computeScoreBoard(matchId)), 1000);
 
@@ -71,7 +69,8 @@ const ScoreBoard: React.FC = () => {
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <th style={{ border: '1px solid #ccc', padding: 6, background: '#f7f7f7', textAlign: 'left', minWidth: 140 }}>　</th>
+            {/* チーム名列の幅を狭く */}
+            <th style={{ border: '1px solid #ccc', padding: 6, background: '#f7f7f7', textAlign: 'left', minWidth: 80 }}>　</th>
             {inningCols.map(n => {
               const highlight = n === current.inning;
               return (
@@ -80,7 +79,7 @@ const ScoreBoard: React.FC = () => {
                   style={{
                     border: '1px solid #ccc',
                     padding: 6,
-                    width: 40,
+                    width: 70, // 各イニングの幅を広げる
                     background: highlight ? '#fffbcc' : '#f7f7f7',
                   }}
                 >
@@ -88,39 +87,35 @@ const ScoreBoard: React.FC = () => {
                 </th>
               );
             })}
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 40, background: '#f0f0f0' }}>計</th>
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 40, background: '#f0f0f0' }}>安</th>
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 40, background: '#f0f0f0' }}>失</th>
+            <th style={{ border: '1px solid #ccc', padding: 6, width: 70, background: '#f0f0f0' }}>計</th>
+            <th style={{ border: '1px solid #ccc', padding: 6, width: 60, background: '#f0f0f0' }}>安</th>
+            <th style={{ border: '1px solid #ccc', padding: 6, width: 60, background: '#f0f0f0' }}>失</th>
           </tr>
         </thead>
         <tbody>
-          {/* 先攻（表）＝ home を上段に */}
+          {/* 先攻（表）＝ home */}
           <tr>
-            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left' }}>{homeName}</th>
+            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left', minWidth: 80 }}>{homeName}</th>
             {inningCols.map(n => (
-              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>
+              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 70 }}>
                 {scoreTopByInning[n] || 0}
               </td>
             ))}
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold' }}>{totals.home}</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>0</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>0</td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold', width: 70 }}>{totals.home}</td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
           </tr>
-          {/* 後攻（裏）＝ away を下段に */}
+          {/* 後攻（裏）＝ away */}
           <tr>
-            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left' }}>{awayName}</th>
+            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left', minWidth: 80 }}>{awayName}</th>
             {inningCols.map(n => (
-              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>
+              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 70 }}>
                 {scoreBottomByInning[n] || 0}
               </td>
             ))}
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold' }}>{totals.away}</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>
-              0
-            </td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center' }}>
-              0
-            </td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold', width: 70 }}>{totals.away}</td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
+            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
           </tr>
         </tbody>
       </table>
