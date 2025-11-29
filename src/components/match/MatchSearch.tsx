@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
 import { searchMatches } from '../../services/matchService';
@@ -12,6 +13,7 @@ const MatchSearch: React.FC = () => {
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setTournaments(getTournaments());
@@ -45,6 +47,10 @@ const MatchSearch: React.FC = () => {
   const findTournament = (id: string) => tournaments.find(t => String(t.id) === String(id));
   const findTeam = (id: string | number) => teams.find(t => String(t.id) === String(id));
 
+  const handleMatchClick = (matchId: string) => {
+    navigate(`/match/${matchId}/lineup`);
+  };
+
   return (
     <div>
       <h2>試合検索</h2>
@@ -71,9 +77,23 @@ const MatchSearch: React.FC = () => {
           const home = findTeam(m.homeTeamId);
           const away = findTeam(m.awayTeamId);
           return (
-            <div key={m.id} style={{ padding:12, border:'1px solid #ddd', borderRadius:4, marginBottom:10, background:'#fff' }}>
+            <div
+              key={m.id}
+              onClick={() => handleMatchClick(m.id)}
+              style={{
+                padding:12,
+                border:'1px solid #ddd',
+                borderRadius:4,
+                marginBottom:10,
+                background:'#fff',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+            >
               <h3 style={{ margin:0 }}>{tour ? `${tour.year} ${tour.name}` : m.tournamentId} <small style={{ color:'#666' }}>[{m.id}]</small></h3>
-              <p style={{ margin:4 }}><strong>開催日:</strong> {m.date} / <strong>先攻:</strong> {home ? home.teamName : m.homeTeamId} / <strong>後攻:</strong> {away ? away.teamName : m.awayTeamId}</p>
+              <p style={{ margin:4 }}><strong>開催日:</strong> {m.date} <strong>開始:</strong> {m.startTime} / <strong>先攻:</strong> {home ? home.teamName : m.homeTeamId} / <strong>後攻:</strong> {away ? away.teamName : m.awayTeamId}</p>
               <p style={{ margin:4, fontSize:12, color:'#666' }}><strong>登録日時:</strong> {m.createdAt || '—'}</p>
             </div>
           );

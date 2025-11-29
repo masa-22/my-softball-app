@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
 import { registerMatch } from '../../services/matchService';
@@ -19,6 +20,8 @@ const MatchRegister: React.FC = () => {
   // confirm
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState<any | null>(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     setTournaments(getTournaments());
@@ -61,6 +64,11 @@ const MatchRegister: React.FC = () => {
       setStartTime('');
       setHomeTeamId('');
       setAwayTeamId('');
+
+      // 登録後、スタメン登録画面へ遷移
+      setTimeout(() => {
+        navigate(`/match/${m.id}/lineup`);
+      }, 1000);
     } catch (err: any) {
       console.error(err);
       setError(err.message || '登録に失敗しました。');
