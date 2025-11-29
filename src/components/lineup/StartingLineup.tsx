@@ -23,8 +23,6 @@ const StartingLineup: React.FC = () => {
 
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-
-  // 追加: 確認モーダル用
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -77,15 +75,17 @@ const StartingLineup: React.FC = () => {
   const handleSave = () => {
     setError('');
     setMessage('');
-    // 確認モーダルを表示
+    if (!matchId) return;
+    
+    // 確認モーダルを開く
     setConfirmOpen(true);
   };
 
   const confirmSave = () => {
     if (!matchId) return;
-    setConfirmOpen(false);
     saveLineup(matchId, { home: homeLineup, away: awayLineup });
     setMessage('スタメンを保存しました。');
+    setConfirmOpen(false);
   };
 
   const handleBack = () => {
@@ -95,42 +95,6 @@ const StartingLineup: React.FC = () => {
   if (!match) {
     return <div style={{ padding: 20 }}>{error || '読み込み中...'}</div>;
   }
-
-  const getPlayerName = (playerId: string, players: any[]) => {
-    const p = players.find(pl => pl.playerId === playerId);
-    return p ? `${p.familyName} ${p.givenName}` : '—';
-  };
-
-  const renderConfirmTable = (title: string, lineup: any[], players: any[]) => {
-    return (
-      <div style={{ marginBottom: 16 }}>
-        <h4 style={{ margin: '8px 0' }}>{title}</h4>
-        <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ccc', fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: '#f0f0f0' }}>
-              <th style={{ border: '1px solid #ccc', padding: 4 }}>打順</th>
-              <th style={{ border: '1px solid #ccc', padding: 4 }}>守備</th>
-              <th style={{ border: '1px solid #ccc', padding: 4 }}>選手名</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lineup.map((entry, idx) => {
-              const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
-              const positionText = entry.position || '—';
-              const playerName = entry.playerId ? getPlayerName(entry.playerId, players) : '—';
-              return (
-                <tr key={idx}>
-                  <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{displayOrder}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{positionText}</td>
-                  <td style={{ border: '1px solid #ccc', padding: 4 }}>{playerName}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
 
   const renderLineupTable = (side: 'home' | 'away', lineup: any[], players: any[], usedPositions: Set<string>) => {
     return (
@@ -144,7 +108,7 @@ const StartingLineup: React.FC = () => {
         </thead>
         <tbody>
           {lineup.map((entry, idx) => {
-            const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
+            const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
             return (
               <tr key={idx}>
                 <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>{displayOrder}</td>
@@ -184,6 +148,52 @@ const StartingLineup: React.FC = () => {
           })}
         </tbody>
       </table>
+    );
+  };
+
+  const renderConfirmationContent = () => {
+    const renderTeamConfirm = (side: 'home' | 'away', lineup: any[], players: any[], teamName: string) => {
+      return (
+        <div style={{ flex: 1 }}>
+          <h4 style={{ margin: '8px 0', textAlign: 'center' }}>{teamName}</h4>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ background: '#f0f0f0' }}>
+                <th style={{ border: '1px solid #ccc', padding: 4 }}>打順</th>
+                <th style={{ border: '1px solid #ccc', padding: 4 }}>守備</th>
+                <th style={{ border: '1px solid #ccc', padding: 4 }}>選手</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineup.map((entry, idx) => {
+                const player = players.find(p => p.playerId === entry.playerId);
+                const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
+                return (
+                  <tr key={idx}>
+                    <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{displayOrder}</td>
+                    <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{entry.position || '—'}</td>
+                    <td style={{ border: '1px solid #ccc', padding: 4 }}>{player ? `${player.familyName} ${player.givenName}` : '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
+    return (
+      <div style={{ minWidth: '600px' }}>
+        <h3 style={{ textAlign: 'center', marginBottom: 16 }}>登録内容の確認</h3>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+          {renderTeamConfirm('away', awayLineup, awayPlayers, awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻')}
+          {renderTeamConfirm('home', homeLineup, homePlayers, homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻')}
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>
+          <button onClick={confirmSave} style={{ padding: '8px 12px', background: '#27ae60', color: '#fff', border: 'none' }}>保存する</button>
+        </div>
+      </div>
     );
   };
 
@@ -227,25 +237,9 @@ const StartingLineup: React.FC = () => {
         </button>
       </div>
 
-      {/* 確認モーダル */}
       {confirmOpen && (
         <Modal onClose={() => setConfirmOpen(false)}>
-          <div>
-            <h3>スタメン登録内容の確認</h3>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <div style={{ flex: 1 }}>
-                {renderConfirmTable(awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻チーム', awayLineup, awayPlayers)}
-              </div>
-              <div style={{ flex: 1 }}>
-                {renderConfirmTable(homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻チーム', homeLineup, homePlayers)}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'center' }}>
-              <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>
-              <button onClick={confirmSave} style={{ padding: '8px 12px', background: '#27ae60', color: '#fff', border: 'none' }}>保存する</button>
-            </div>
-          </div>
+          {renderConfirmationContent()}
         </Modal>
       )}
     </div>

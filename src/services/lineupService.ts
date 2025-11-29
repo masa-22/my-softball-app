@@ -1,5 +1,5 @@
 type LineupEntry = {
-  battingOrder: number; // 1-9 or 10 (P)
+  battingOrder: number; // 1-9 or FP(10)
   position: string; // '1'-'9', 'DP', or ''
   playerId: string; // player ID or ''
 };

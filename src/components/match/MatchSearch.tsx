@@ -77,24 +77,23 @@ const MatchSearch: React.FC = () => {
           const home = findTeam(m.homeTeamId);
           const away = findTeam(m.awayTeamId);
           return (
-            <div 
-              key={m.id} 
+            <div
+              key={m.id}
               onClick={() => handleMatchClick(m.id)}
-              style={{ 
-                padding:12, 
-                border:'1px solid #ddd', 
-                borderRadius:4, 
-                marginBottom:10, 
+              style={{
+                padding:12,
+                border:'1px solid #ddd',
+                borderRadius:4,
+                marginBottom:10,
                 background:'#fff',
                 cursor: 'pointer',
-                transition: 'background 0.2s'
+                transition: 'background 0.2s',
               }}
               onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
               onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
             >
               <h3 style={{ margin:0 }}>{tour ? `${tour.year} ${tour.name}` : m.tournamentId} <small style={{ color:'#666' }}>[{m.id}]</small></h3>
-              <p style={{ margin:4 }}><strong>開催日:</strong> {m.date} <strong>開始:</strong> {m.startTime}</p>
-              <p style={{ margin:4 }}><strong>先攻:</strong> {home ? home.teamName : m.homeTeamId} vs <strong>後攻:</strong> {away ? away.teamName : m.awayTeamId}</p>
+              <p style={{ margin:4 }}><strong>開催日:</strong> {m.date} <strong>開始:</strong> {m.startTime} / <strong>先攻:</strong> {home ? home.teamName : m.homeTeamId} / <strong>後攻:</strong> {away ? away.teamName : m.awayTeamId}</p>
               <p style={{ margin:4, fontSize:12, color:'#666' }}><strong>登録日時:</strong> {m.createdAt || '—'}</p>
             </div>
           );

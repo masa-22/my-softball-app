@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
 import { registerMatch } from '../../services/matchService';
@@ -20,6 +21,8 @@ const MatchRegister: React.FC = () => {
   // confirm
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState<any | null>(null);
+  const navigate = useNavigate();
+
   const navigate = useNavigate();
 
   useEffect(() => {
