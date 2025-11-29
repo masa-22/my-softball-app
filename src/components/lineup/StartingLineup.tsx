@@ -86,6 +86,10 @@ const StartingLineup: React.FC = () => {
     saveLineup(matchId, { home: homeLineup, away: awayLineup });
     setMessage('スタメンを保存しました。');
     setConfirmOpen(false);
+    // スタメン保存後にプレイ登録画面へ遷移
+    setTimeout(() => {
+      navigate(`/match/${matchId}/play`);
+    }, 1000);
   };
 
   const handleBack = () => {

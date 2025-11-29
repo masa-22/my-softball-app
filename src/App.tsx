@@ -9,6 +9,7 @@ import PlayerManagement from './components/player/PlayerManagement';
 import TournamentManagement from './components/tournament/TournamentManagement';
 import MatchManagement from './components/match/MatchManagement';
 import StartingLineup from './components/lineup/StartingLineup';
+import PlayRegister from './components/play/PlayRegister';
 
 const HomePage = () => <div>ホームページ</div>;
 const Dashboard = () => <div>ダッシュボード（ログイン必須）</div>;
@@ -24,6 +25,7 @@ function App() {
           <Route path="/tournament" element={<PrivateRoute><TournamentManagement /></PrivateRoute>} />
           <Route path="/match" element={<PrivateRoute><MatchManagement /></PrivateRoute>} />
           <Route path="/match/:matchId/lineup" element={<PrivateRoute><StartingLineup /></PrivateRoute>} />
+          <Route path="/match/:matchId/play" element={<PrivateRoute><PlayRegister /></PrivateRoute>} />
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/login" element={<AuthContainer mode="login" />} />
           <Route path="/signup" element={<AuthContainer mode="signup" />} />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
 import { searchMatches } from '../../services/matchService';
+import { getLineup } from '../../services/lineupService';
 
 const MatchSearch: React.FC = () => {
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -48,7 +49,15 @@ const MatchSearch: React.FC = () => {
   const findTeam = (id: string | number) => teams.find(t => String(t.id) === String(id));
 
   const handleMatchClick = (matchId: string) => {
-    navigate(`/match/${matchId}/lineup`);
+    // スタメンが全て埋まっているか判定
+    const lineup = getLineup(matchId);
+    const isHomeComplete = lineup.home.every(e => e.position && e.playerId);
+    const isAwayComplete = lineup.away.every(e => e.position && e.playerId);
+    if (isHomeComplete && isAwayComplete) {
+      navigate(`/match/${matchId}/play`);
+    } else {
+      navigate(`/match/${matchId}/lineup`);
+    }
   };
 
   return (
