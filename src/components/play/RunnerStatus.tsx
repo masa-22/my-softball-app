@@ -9,6 +9,8 @@ import { useParams } from 'react-router-dom';
 import MiniScoreBoard from './common/MiniScoreBoard';
 import DiamondField from './runner/DiamondField';
 import PitchChart from './runner/PitchChart';
+import AdvanceReasonDialog, { RunnerAdvancement, AdvanceReasonResult } from './runner/AdvanceReasonDialog';
+import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonDialog';
 import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 import { getPlays } from '../../services/playService';
@@ -142,13 +144,104 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
   const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
     '1': null, '2': null, '3': null,
   });
+  const [previousRunners, setPreviousRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
+    '1': null, '2': null, '3': null,
+  });
+
+  // ダイアログ表示用state
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+  const [showOutDialog, setShowOutDialog] = useState(false);
+  const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
+  const [pendingOuts, setPendingOuts] = useState<RunnerOut[]>([]);
+
+  // ランナー変更を検出して適切なダイアログを表示
+  const detectRunnerChanges = (
+    before: { '1': string | null; '2': string | null; '3': string | null },
+    after: { '1': string | null; '2': string | null; '3': string | null }
+  ) => {
+    const advancements: RunnerAdvancement[] = [];
+    const outs: RunnerOut[] = [];
+
+    // 各ベースをチェック
+    (['1', '2', '3'] as const).forEach(base => {
+      const beforePlayer = before[base];
+      if (!beforePlayer) return;
+
+      // プレー後にそのランナーがどこにいるか探す
+      const afterBases = ['1', '2', '3', 'home'] as const;
+      const foundBase = afterBases.find(b => after[b as '1' | '2' | '3'] === beforePlayer);
+
+      if (foundBase && foundBase !== base) {
+        // 進塁した
+        const player = selectablePlayers.find(p => p.playerId === beforePlayer);
+        if (player) {
+          advancements.push({
+            runnerId: beforePlayer,
+            runnerName: `${player.familyName} ${player.givenName}`.trim(),
+            fromBase: base,
+            toBase: foundBase,
+          });
+        }
+      } else if (!foundBase) {
+        // ランナーが消えた（アウトまたは得点）
+        // 本塁への移動は得点なのでアウト扱いしない
+        const player = selectablePlayers.find(p => p.playerId === beforePlayer);
+        if (player) {
+          outs.push({
+            runnerId: beforePlayer,
+            runnerName: `${player.familyName} ${player.givenName}`.trim(),
+            fromBase: base,
+            outAtBase: base, // とりあえず元の塁でアウト
+          });
+        }
+      }
+    });
+
+    return { advancements, outs };
+  };
 
   const commitRunner = () => {
     if (!selectedBase || selectedBase === 'home' || !selectedPlayerId) return;
     const next = { ...runners, [selectedBase]: selectedPlayerId } as typeof runners;
+    
+    // 変更を検出
+    const { advancements, outs } = detectRunnerChanges(previousRunners, next);
+    
+    if (advancements.length > 0) {
+      setPendingAdvancements(advancements);
+      setShowAdvanceDialog(true);
+      setPreviousRunners(next); // 変更を記録
+    } else if (outs.length > 0) {
+      setPendingOuts(outs);
+      setShowOutDialog(true);
+      setPreviousRunners(next); // 変更を記録
+    } else {
+      // 変更なし、そのまま確定
+      setRunners(next);
+      setPreviousRunners(next);
+      setSelectedBase(null);
+      setSelectedPlayerId(null);
+      if (onChange) {
+        try {
+          onChange(next);
+        } catch (error) {
+          console.error('onChange実行エラー:', error);
+        }
+      }
+    }
+  };
+
+  const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
+    console.log('進塁理由:', results);
+    // TODO: playServiceに保存
+    
+    const next = { ...runners };
     setRunners(next);
     setSelectedBase(null);
     setSelectedPlayerId(null);
+    setShowAdvanceDialog(false);
+    setPendingAdvancements([]);
+    
     if (onChange) {
       try {
         onChange(next);
@@ -158,8 +251,59 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
     }
   };
 
+  const handleOutConfirm = (results: OutReasonResult[]) => {
+    console.log('アウト理由:', results);
+    // TODO: playServiceに保存
+    
+    const next = { ...runners };
+    setRunners(next);
+    setSelectedBase(null);
+    setSelectedPlayerId(null);
+    setShowOutDialog(false);
+    setPendingOuts([]);
+    
+    if (onChange) {
+      try {
+        onChange(next);
+      } catch (error) {
+        console.error('onChange実行エラー:', error);
+      }
+    }
+  };
+
+  const handleDialogCancel = () => {
+    // キャンセル時は変更を戻す
+    setRunners(previousRunners);
+    setShowAdvanceDialog(false);
+    setShowOutDialog(false);
+    setPendingAdvancements([]);
+    setPendingOuts([]);
+    setSelectedBase(null);
+    setSelectedPlayerId(null);
+  };
+
   return (
     <div style={styles.container}>
+      {/* 進塁理由ダイアログ */}
+      {showAdvanceDialog && (
+        <AdvanceReasonDialog
+          advancements={pendingAdvancements}
+          context="pitch"
+          onConfirm={handleAdvanceConfirm}
+          onCancel={handleDialogCancel}
+        />
+      )}
+
+      {/* アウト理由ダイアログ */}
+      {showOutDialog && (
+        <OutReasonDialog
+          outs={pendingOuts}
+          context="pitch"
+          onConfirm={handleOutConfirm}
+          onCancel={handleDialogCancel}
+        />
+      )}
+
       <div style={styles.mainLayout}>
         <div style={styles.leftColumn}>
           <MiniScoreBoard bso={bso} />
