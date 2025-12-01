@@ -36,6 +36,17 @@ const PlayRegister: React.FC = () => {
   const [homeTeamName, setHomeTeamName] = useState<string>('先攻');
   const [awayTeamName, setAwayTeamName] = useState<string>('後攻');
 
+  // 追加: ランナー状態を管理
+  const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
+    '1': null, '2': null, '3': null,
+  });
+
+  // ランナー変更ハンドラ
+  const handleRunnersChange = (newRunners: { '1': string | null; '2': string | null; '3': string | null }) => {
+    console.log('ランナー変更:', newRunners); // デバッグ用
+    setRunners(newRunners);
+  };
+
   useEffect(() => {
     if (!matchId) return;
     const m = getMatches().find(x => x.id === matchId);
@@ -158,9 +169,17 @@ const PlayRegister: React.FC = () => {
               // 強調条件
               const isCurrentPitcher = !!currentPitcher && entry.playerId === currentPitcher.playerId;
               const isCurrentBatter = !!currentBatter && entry.playerId === currentBatter.playerId;
+              const isRunner = Object.values(runners).includes(entry.playerId);
 
-              // 行背景色（投手: ピンク / 打者: 薄緑）。両方該当時は打者色を優先
-              const rowBg = isCurrentBatter ? '#e8f7e8' : (isCurrentPitcher ? '#ffe3ea' : 'transparent');
+              // 行背景色（投手: ピンク / 打者: 薄緑 / ランナー: 薄いオレンジ）
+              let rowBg = 'transparent';
+              if (isCurrentBatter) {
+                rowBg = '#e8f7e8'; // 打者: 薄緑
+              } else if (isCurrentPitcher) {
+                rowBg = '#ffe3ea'; // 投手: ピンク
+              } else if (isRunner) {
+                rowBg = '#fff4e6'; // ランナー: 薄いオレンジ
+              }
 
               return (
                 <tr key={idx} style={{ backgroundColor: rowBg }}>
@@ -288,9 +307,9 @@ const PlayRegister: React.FC = () => {
               <div style={{ padding: 12, background: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
                 {activeTab === 'pitch' ? (
                   <PitchCourseInput onInplayCommit={handleInplayCommit} />
-                ) : (
-                  <RunnerStatus />
-                )}
+                ) : activeTab === 'runner' ? (
+                  <RunnerStatus onChange={handleRunnersChange} />
+                ) : null}
               </div>
             </>
           ) : (
