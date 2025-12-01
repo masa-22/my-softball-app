@@ -235,7 +235,7 @@ const PlayRegister: React.FC = () => {
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20, backgroundColor: '#f8f9fa' }}>
       {/* スコアボード（常時上部） */}
       <ScoreBoard />
 
@@ -243,68 +243,67 @@ const PlayRegister: React.FC = () => {
       <div style={{ display:'grid', gridTemplateColumns:'280px 1fr 280px', gap:16 }}>
         {/* 左（後攻） */}
         <div>
-          <div style={{ fontWeight:'bold', marginBottom:8 }}>{awayTeamName} </div>
+          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 16, color: '#212529' }}>{awayTeamName}</div>
           {renderEditableLineupTable('away', awayLineup, awayPlayers)}
+          
+          {/* 投手情報 */}
+          <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の投手</div>
+            <div style={{ marginBottom: 6, fontSize: 15, fontWeight: 500 }}>
+              {currentPitcher ? `${currentPitcher.familyName} ${currentPitcher.givenName}` : '—'}
+            </div>
+            <div style={{ fontSize: 12, color: '#6c757d' }}>
+              {`投球回: ${pitcherStats.inningStr}回 / 球数: ${pitcherStats.total}球`}
+            </div>
+            <div style={{ fontSize: 12, color: '#6c757d' }}>
+              {`S:${pitcherStats.strikes} B:${pitcherStats.balls}`}
+            </div>
+          </div>
         </div>
 
-        {/* 中央: 打者・投手＋タブ or プレー結果入力 */}
-        <div>
+        {/* 中央: タブ or プレー結果入力 */}
+        <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           {!showPlayResult ? (
             <>
-              {/* 現在の打者・投手情報 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 24, margin: '0 0 12px 0', alignItems: 'flex-start' }}>
-                {/* 打者 */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: 4 }}>打者</div>
-                  <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {currentBattingOrder && <span style={{ fontWeight: 'bold', fontSize: 18 }}>{currentBattingOrder}</span>}
-                    <span>{currentBatter ? `${currentBatter.familyName} ${currentBatter.givenName}` : '—'}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#666' }}>
-                    {recentBatterResults.length > 0 ? (
-                      <div>
-                        直近打席:
-                        <ul style={{ margin: '4px 0 0 16px' }}>
-                          {recentBatterResults.map((r, i) => (
-                            <li key={i}>{`${r.inning}回${r.half === 'top' ? '表' : '裏'}: ${r.result}`}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : (
-                      <span>過去打席なし</span>
-                    )}
-                  </div>
-                </div>
-                {/* 投手 */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 'bold', marginBottom: 4 }}>投手</div>
-                  <div style={{ marginBottom: 4 }}>{currentPitcher ? `${currentPitcher.familyName} ${currentPitcher.givenName}` : '—'}</div>
-                  <div style={{ fontSize: 12, color: '#666' }}>
-                    {/* イニングはアウト数から算出（例: 5アウト => 1.2回） */}
-                     {`投球回: ${pitcherStats.inningStr}回 / 球数: ${pitcherStats.total}球（S:${pitcherStats.strikes} B:${pitcherStats.balls}）`}
-                  </div>
-                </div>
-              </div>
-
               {/* タブ切り替え */}
-              <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid #eee', marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid #dee2e6', marginBottom: 16 }}>
                 <button
                   type="button"
                   onClick={() => setActiveTab('pitch')}
-                  style={{ padding: '10px 16px', background: activeTab === 'pitch' ? '#3498db' : '#f5f5f5', color: activeTab === 'pitch' ? '#fff' : '#333', border: 'none', borderRadius: '4px 4px 0 0', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ 
+                    padding: '12px 20px', 
+                    background: activeTab === 'pitch' ? '#4c6ef5' : 'transparent', 
+                    color: activeTab === 'pitch' ? '#fff' : '#495057', 
+                    border: 'none', 
+                    borderRadius: '8px 8px 0 0', 
+                    fontWeight: 600, 
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    transition: 'all 0.2s ease',
+                  }}
                 >
                   コース・球種
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('runner')}
-                  style={{ padding: '10px 16px', background: activeTab === 'runner' ? '#3498db' : '#f5f5f5', color: activeTab === 'runner' ? '#fff' : '#333', border: 'none', borderRadius: '4px 4px 0 0', fontWeight: 'bold', cursor: 'pointer' }}
+                  style={{ 
+                    padding: '12px 20px', 
+                    background: activeTab === 'runner' ? '#4c6ef5' : 'transparent', 
+                    color: activeTab === 'runner' ? '#fff' : '#495057', 
+                    border: 'none', 
+                    borderRadius: '8px 8px 0 0', 
+                    fontWeight: 600, 
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    transition: 'all 0.2s ease',
+                  }}
                 >
                   ランナー
                 </button>
               </div>
 
-              <div style={{ padding: 12, background: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
+              <div>
                 {activeTab === 'pitch' ? (
                   <PitchCourseInput onInplayCommit={handleInplayCommit} />
                 ) : activeTab === 'runner' ? (
@@ -313,15 +312,39 @@ const PlayRegister: React.FC = () => {
               </div>
             </>
           ) : (
-            // インプレイ後のプレー結果入力画面
             <PlayResultPanel onComplete={handlePlayResultComplete} />
           )}
         </div>
 
         {/* 右（先攻） */}
         <div>
-          <div style={{ fontWeight:'bold', marginBottom:8 }}>{homeTeamName} </div>
+          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 16, color: '#212529' }}>{homeTeamName}</div>
           {renderEditableLineupTable('home', homeLineup, homePlayers)}
+          
+          {/* 打者情報 */}
+          <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の打者</div>
+            <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {currentBattingOrder && <span style={{ fontWeight: 700, fontSize: 18, color: '#212529' }}>{currentBattingOrder}</span>}
+              <span style={{ fontSize: 15, fontWeight: 500 }}>
+                {currentBatter ? `${currentBatter.familyName} ${currentBatter.givenName}` : '—'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: '#6c757d' }}>
+              {recentBatterResults.length > 0 ? (
+                <div>
+                  直近打席:
+                  <ul style={{ margin: '4px 0 0 16px', paddingLeft: 0 }}>
+                    {recentBatterResults.map((r, i) => (
+                      <li key={i} style={{ fontSize: 11 }}>{`${r.inning}回${r.half === 'top' ? '表' : '裏'}: ${r.result}`}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <span>過去打席なし</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
