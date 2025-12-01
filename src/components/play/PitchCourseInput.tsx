@@ -65,9 +65,11 @@ const styles = {
 
 interface PitchCourseInputProps {
   onInplayCommit?: () => void;
+  onStrikeoutCommit?: (isSwinging: boolean) => void;
+  onWalkCommit?: () => void; // 追加: フォアボール・デッドボール時のコールバック
 }
 
-const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit }) => {
+const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onStrikeoutCommit, onWalkCommit }) => {
   const { matchId } = useParams<{ matchId: string }>();
   const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
 
@@ -115,19 +117,58 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit }) =
     };
     setPitches([...pitches, newPitch]);
 
+    // 現在のカウントを取得
+    const currentBalls = bso.b;
+    const currentStrikes = bso.s;
+
     setBso(prev => {
       let { b, s, o } = prev;
       if (pendingResult === 'ball') b = Math.min(3, b + 1);
       else if (pendingResult === 'swing' || pendingResult === 'looking') s = Math.min(2, s + 1);
       else if (pendingResult === 'inplay') o = Math.min(2, o + 1);
-      else if (pendingResult === 'deadball') b = 3; // デッドボールは四球扱い
+      else if (pendingResult === 'deadball') b = 3;
+      
+      // デッドボールは即座にランナー動き入力画面へ
+      if (pendingResult === 'deadball') {
+        setTimeout(() => {
+          if (onWalkCommit) {
+            onWalkCommit();
+          }
+        }, 0);
+        setPendingPoint(null);
+        setPendingResult('');
+        return prev; // カウントリセット前に遷移
+      }
+
+      // 4ボール目（3→4になる時）はフォアボールでランナー動き入力画面へ
+      if (currentBalls === 3 && pendingResult === 'ball') {
+        setTimeout(() => {
+          if (onWalkCommit) {
+            onWalkCommit();
+          }
+        }, 0);
+        setPendingPoint(null);
+        setPendingResult('');
+        return prev; // カウントリセット前に遷移
+      }
+      
+      // 3ストライク目（2→3になる時）のみ三振画面へ遷移
+      if (currentStrikes === 2 && (pendingResult === 'swing' || pendingResult === 'looking')) {
+        const isSwinging = pendingResult === 'swing';
+        setTimeout(() => {
+          if (onStrikeoutCommit) {
+            onStrikeoutCommit(isSwinging);
+          }
+        }, 0);
+      }
+      
       return { b, s, o };
     });
 
     setPendingPoint(null);
     setPendingResult('');
 
-    if ((pendingResult === 'inplay' || pendingResult === 'deadball') && onInplayCommit) {
+    if (pendingResult === 'inplay' && onInplayCommit) {
       onInplayCommit();
     }
   };
