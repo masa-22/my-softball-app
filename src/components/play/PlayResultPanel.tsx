@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
-  onRunnerMovement?: () => void; // 追加: ランナー動き入力画面へのコールバック
+  onRunnerMovement?: (battingResult: string, position: string) => void; // 修正: 打席結果を渡す
 }
 
 type BattingResult = 
@@ -98,7 +98,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
     } else {
       // 三振以外（ヒット・アウト・振り逃げ）はランナー動き入力画面へ
       if (onRunnerMovement) {
-        onRunnerMovement();
+        onRunnerMovement(result, position);
       }
     }
   };

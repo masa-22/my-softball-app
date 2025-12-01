@@ -31,8 +31,10 @@ const PlayRegister: React.FC = () => {
   
   // 追加: プレー結果入力モード
   const [showPlayResult, setShowPlayResult] = useState(false);
-  const [showRunnerMovement, setShowRunnerMovement] = useState(false); // 追加: ランナー動き入力画面表示フラグ
-  const [strikeoutType, setStrikeoutType] = useState<'swinging' | 'looking' | null>(null); // 追加
+  const [showRunnerMovement, setShowRunnerMovement] = useState(false);
+  const [strikeoutType, setStrikeoutType] = useState<'swinging' | 'looking' | null>(null);
+  const [battingResultForMovement, setBattingResultForMovement] = useState<string>(''); // 追加
+  const [positionForMovement, setPositionForMovement] = useState<string>(''); // 追加
 
   // 追加: サイドバー編集用 state（先攻/後攻）
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
@@ -44,6 +46,9 @@ const PlayRegister: React.FC = () => {
   const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
     '1': null, '2': null, '3': null,
   });
+
+  // 現在のBSO状態（追加）
+  const [currentBSO, setCurrentBSO] = useState({ b: 0, s: 0, o: 0 });
 
   // ランナー変更ハンドラ
   const handleRunnersChange = (newRunners: { '1': string | null; '2': string | null; '3': string | null }) => {
@@ -162,16 +167,33 @@ const PlayRegister: React.FC = () => {
     setShowPlayResult(true);
   };
 
-  // ランナー動き入力画面へ遷移（追加）
-  const handleRunnerMovement = () => {
+  // ランナー動き入力画面へ遷移（修正）
+  const handleRunnerMovement = (battingResult: string, position: string) => {
+    // ランナーがいない状態でアウトの場合はランナー入力をスキップ
+    const hasRunners = runners['1'] || runners['2'] || runners['3'];
+    const isOut = ['groundout', 'flyout'].includes(battingResult);
+    
+    if (!hasRunners && isOut) {
+      // ランナーがいない状態でのアウトはそのまま完了
+      setShowPlayResult(false);
+      setShowRunnerMovement(false);
+      setBattingResultForMovement('');
+      setPositionForMovement('');
+      return;
+    }
+
+    setBattingResultForMovement(battingResult);
+    setPositionForMovement(position);
     setShowPlayResult(false);
     setShowRunnerMovement(true);
   };
 
-  // フォアボール・デッドボール登録時のコールバック（追加）
+  // フォアボール・デッドボール登録時のコールバック（修正）
   const handleWalkCommit = () => {
     setStrikeoutType(null);
     setShowPlayResult(false);
+    setBattingResultForMovement('single'); // フォアボール・デッドボールは一塁扱い
+    setPositionForMovement('');
     setShowRunnerMovement(true);
   };
 
@@ -180,6 +202,8 @@ const PlayRegister: React.FC = () => {
     setShowPlayResult(false);
     setShowRunnerMovement(false);
     setStrikeoutType(null);
+    setBattingResultForMovement('');
+    setPositionForMovement('');
     // 必要に応じてカウント・打者をリセット等
   };
 
@@ -224,6 +248,10 @@ const PlayRegister: React.FC = () => {
             <RunnerMovementInput 
               onComplete={handlePlayResultComplete}
               onCancel={handlePlayResultComplete}
+              initialRunners={runners}
+              battingResult={battingResultForMovement}
+              batterId={currentBatter?.playerId}
+              initialOuts={currentBSO.o}
             />
           ) : !showPlayResult ? (
             <>
