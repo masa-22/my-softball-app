@@ -19,7 +19,9 @@ export interface RunnerAdvancement {
 export interface AdvanceReasonResult {
   runnerId: string;
   reason: PitchAdvanceReason | BattingAdvanceReason;
-  errorPosition?: string; // エラーした守備位置
+  errorDetail?: {
+    errorBy?: string; // エラーした守備位置
+  };
 }
 
 interface AdvanceReasonDialogProps {
@@ -114,17 +116,21 @@ const styles = {
   }),
   detailGroup: {
     marginTop: 12,
+    padding: 12,
+    background: '#e9ecef',
+    borderRadius: 8,
+    border: '1px solid #dee2e6',
   },
   detailLabel: {
     fontSize: 13,
     fontWeight: 600 as const,
-    marginBottom: 6,
+    marginBottom: 8,
     color: '#495057',
   },
   select: {
     padding: '8px 12px',
     borderRadius: 6,
-    border: '1px solid #dee2e6',
+    border: '1px solid #ced4da',
     fontSize: 13,
     color: '#495057',
     width: '100%',
@@ -132,18 +138,6 @@ const styles = {
     cursor: 'pointer',
   },
 };
-
-const positionOptions = [
-  { value: '1', label: '投手（P）' },
-  { value: '2', label: '捕手（C）' },
-  { value: '3', label: '一塁手（1B）' },
-  { value: '4', label: '二塁手（2B）' },
-  { value: '5', label: '三塁手（3B）' },
-  { value: '6', label: '遊撃手（SS）' },
-  { value: '7', label: '左翼手（LF）' },
-  { value: '8', label: '中堅手（CF）' },
-  { value: '9', label: '右翼手（RF）' },
-];
 
 const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
   advancements,
@@ -168,23 +162,38 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
     { value: 'passball', label: 'パスボール' },
   ];
 
+  const positionOptions = [
+    { value: 'P', label: '投手' },
+    { value: 'C', label: '捕手' },
+    { value: '1B', label: '一塁手' },
+    { value: '2B', label: '二塁手' },
+    { value: '3B', label: '三塁手' },
+    { value: 'SS', label: '遊撃手' },
+    { value: 'LF', label: '左翼手' },
+    { value: 'CF', label: '中堅手' },
+    { value: 'RF', label: '右翼手' },
+  ];
+
   const handleReasonSelect = (runnerId: string, reason: string) => {
     setResults(prev => ({
       ...prev,
       [runnerId]: {
         runnerId,
         reason: reason as any,
-        errorPosition: undefined, // リセット
+        errorDetail: {},
       },
     }));
   };
 
-  const handleErrorPositionChange = (runnerId: string, position: string) => {
+  const handleErrorDetailChange = (runnerId: string, field: string, value: string) => {
     setResults(prev => ({
       ...prev,
       [runnerId]: {
         ...prev[runnerId],
-        errorPosition: position,
+        errorDetail: {
+          ...prev[runnerId]?.errorDetail,
+          [field]: value,
+        },
       },
     }));
   };
@@ -198,10 +207,12 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
     return advancements.every(a => {
       const result = results[a.runnerId];
       if (!result) return false;
-      // エラーの場合はerrorPositionが必須
+      
+      // エラーの場合、守備位置が必須
       if (result.reason === 'error') {
-        return !!result.errorPosition;
+        return !!result.errorDetail?.errorBy;
       }
+      
       return true;
     });
   };
@@ -221,7 +232,7 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
 
         {advancements.map((advancement) => {
           const currentReason = results[advancement.runnerId]?.reason;
-          const errorPosition = results[advancement.runnerId]?.errorPosition;
+          const errorDetail = results[advancement.runnerId]?.errorDetail;
 
           return (
             <div key={advancement.runnerId} style={styles.advancementSection}>
@@ -250,8 +261,8 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
                 <div style={styles.detailGroup}>
                   <div style={styles.detailLabel}>エラーした守備位置 *</div>
                   <select
-                    value={errorPosition || ''}
-                    onChange={(e) => handleErrorPositionChange(advancement.runnerId, e.target.value)}
+                    value={errorDetail?.errorBy || ''}
+                    onChange={(e) => handleErrorDetailChange(advancement.runnerId, 'errorBy', e.target.value)}
                     style={styles.select}
                   >
                     <option value="">選択してください</option>

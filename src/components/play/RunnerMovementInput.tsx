@@ -258,7 +258,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       result['1'] = null;
       result['2'] = null;
       result['3'] = batterId;
-    } else if (battingResult === 'homerun') {
+    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
       result['1'] = null;
       result['2'] = null;
       result['3'] = null;
@@ -282,6 +282,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const [selectedTargetBase, setSelectedTargetBase] = useState<BaseKey | null>(null);
   const [candidateRunners, setCandidateRunners] = useState<Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }>>([]);
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
+  const [showFinalConfirm, setShowFinalConfirm] = useState(false); // 追加: 最終確認画面
 
   // 打席結果に応じた初期配置を計算
   const getInitialAfterRunners = () => {
@@ -322,8 +323,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       result['1'] = null;
       result['2'] = null;
       result['3'] = batterId;
-    } else if (battingResult === 'homerun') {
-      // ホームラン: 全員得点
+    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
+      // ホームラン・ランニングホームラン: 全員得点
       result['1'] = null;
       result['2'] = null;
       result['3'] = null;
@@ -509,23 +510,41 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     setShowRunnerSelectDialog(true);
   };
 
-  // プレー後のランナー配置を確定する前にダイアログを表示
-  const finalizeRunnerChanges = () => {
-    const { advancements, outs } = detectRunnerChanges(initialAfterRunners, afterRunners);
-    
-    console.log('進塁・アウト検出:', { advancements, outs, initialAfterRunners, afterRunners }); // デバッグ用
-    
-    if (advancements.length > 0) {
-      setPendingAdvancements(advancements);
-      setShowAdvanceDialog(true);
-      return false; // まだ完了しない
-    } else if (outs.length > 0) {
-      setPendingOuts(outs);
-      setShowOutDialog(true);
-      return false; // まだ完了しない
+  // プレー後のランナー配置を確定する前にダイアログを表示（削除して最終確認のみ使用）
+  const handleCompleteClick = () => {
+    // バリデーション
+    if (needOutDetails) {
+      const isValid = outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
+      if (!isValid) {
+        alert('アウト詳細をすべて入力してください');
+        return;
+      }
     }
     
-    return true; // 変更なし、完了可能
+    // 最終確認画面を表示
+    setShowFinalConfirm(true);
+  };
+
+  const handleFinalConfirm = () => {
+    console.log('最終確認:', {
+      beforeRunners,
+      afterRunners,
+      scoredRunners,
+      outsAfter,
+      outDetails,
+    });
+    
+    // TODO: playServiceに保存
+    
+    setShowFinalConfirm(false);
+    
+    if (onComplete) {
+      onComplete();
+    }
+  };
+
+  const handleFinalCancel = () => {
+    setShowFinalConfirm(false);
   };
 
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
@@ -560,8 +579,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   React.useEffect(() => {
     const scored: string[] = [];
     
-    // ホームランの場合、全員得点
-    if (battingResult === 'homerun') {
+    // ホームラン・ランニングホームランの場合、全員得点
+    if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
       if (batterId) scored.push(batterId);
       (['3', '2', '1'] as const).forEach(base => {
         if (beforeRunners[base]) scored.push(beforeRunners[base]!);
@@ -723,6 +742,124 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   return (
     <div style={styles.container}>
       <h3 style={styles.title}>ランナーの動き入力</h3>
+
+      {/* 最終確認ダイアログ */}
+      {showFinalConfirm && (
+        <>
+          <div style={styles.confirmOverlay} onClick={handleFinalCancel} />
+          <div style={styles.confirmDialog}>
+            <div style={styles.confirmTitle}>入力内容の確認</div>
+            
+            <div style={styles.confirmList}>
+              {/* アウトカウント */}
+              <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#495057', marginBottom: 8 }}>
+                  アウトカウント
+                </div>
+                <div style={{ fontSize: 14 }}>
+                  {initialOuts}アウト → {outsAfter}アウト
+                </div>
+              </div>
+
+              {/* 得点 */}
+              {scoredRunners.length > 0 && (
+                <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1c7ed6', marginBottom: 8 }}>
+                    得点 ({scoredRunners.length}点)
+                  </div>
+                  {scoredRunners.map((playerId, idx) => (
+                    <div key={idx} style={{ fontSize: 14, marginBottom: 4 }}>
+                      • {getPlayerName(playerId)}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ランナー状況 */}
+              <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#495057', marginBottom: 8 }}>
+                  ランナー状況
+                </div>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>プレー前</div>
+                    {(['1', '2', '3'] as const).map(base => {
+                      const playerId = beforeRunners[base];
+                      if (!playerId) return null;
+                      return (
+                        <div key={base} style={{ fontSize: 13, marginBottom: 2 }}>
+                          {base === '1' ? '一' : base === '2' ? '二' : '三'}塁: {getPlayerName(playerId)}
+                        </div>
+                      );
+                    })}
+                    {!beforeRunners['1'] && !beforeRunners['2'] && !beforeRunners['3'] && (
+                      <div style={{ fontSize: 13, color: '#6c757d' }}>なし</div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>プレー後</div>
+                    {(['1', '2', '3'] as const).map(base => {
+                      const playerId = afterRunners[base];
+                      if (!playerId) return null;
+                      return (
+                        <div key={base} style={{ fontSize: 13, marginBottom: 2 }}>
+                          {base === '1' ? '一' : base === '2' ? '二' : '三'}塁: {getPlayerName(playerId)}
+                        </div>
+                      );
+                    })}
+                    {!afterRunners['1'] && !afterRunners['2'] && !afterRunners['3'] && (
+                      <div style={{ fontSize: 13, color: '#6c757d' }}>なし</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* アウト詳細 */}
+              {needOutDetails && outDetails.some(d => d.runnerId) && (
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#856404', marginBottom: 8 }}>
+                    アウト詳細
+                  </div>
+                  {outDetails.filter(d => d.runnerId).map((detail, idx) => {
+                    const runner = possibleOutRunners.find(r => r.id === detail.runnerId);
+                    const baseLabel = baseOptions.find(b => b.value === detail.base)?.label;
+                    const caughtPos = positionOptions.find(p => p.value === detail.caughtPosition)?.label;
+                    const threwPos = detail.threwPosition ? positionOptions.find(p => p.value === detail.threwPosition)?.label : null;
+                    
+                    return (
+                      <div key={idx} style={{ fontSize: 13, marginBottom: 8, paddingLeft: 12 }}>
+                        • {runner?.label}: {runner?.name}<br />
+                        　{baseLabel}で{threwPos ? `${threwPos}から${caughtPos}` : caughtPos}がアウト
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: 14, color: '#6c757d', marginTop: 16, marginBottom: 20, textAlign: 'center' }}>
+              この内容で登録してもよろしいですか？
+            </div>
+
+            <div style={styles.confirmButtons}>
+              <button
+                type="button"
+                onClick={handleFinalCancel}
+                style={{ ...styles.button('cancel'), padding: '8px 20px' }}
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalConfirm}
+                style={{ ...styles.button('complete'), padding: '8px 20px' }}
+              >
+                登録する
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ランナー選択ダイアログ */}
       {showRunnerSelectDialog && (
@@ -1044,24 +1181,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => {
-            // バリデーション
-            if (needOutDetails) {
-              const isValid = outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
-              if (!isValid) {
-                alert('アウト詳細をすべて入力してください');
-                return;
-              }
-            }
-            
-            // ランナー変更をチェックしてダイアログ表示
-            if (!finalizeRunnerChanges()) {
-              return; // ダイアログが表示されるので待機
-            }
-            
-            // 変更なしの場合はそのまま完了
-            onComplete && onComplete();
-          }}
+          onClick={handleCompleteClick}
           style={styles.button('complete')}
         >
           完了
