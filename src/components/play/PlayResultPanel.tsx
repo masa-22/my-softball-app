@@ -15,18 +15,24 @@ type BattingResult =
   | 'double' 
   | 'triple' 
   | 'homerun' 
+  | 'runninghomerun' // 追加: ランニングホームラン
   | 'groundout' 
   | 'flyout' 
   | 'strikeout_swinging' // 追加
   | 'strikeout_looking' // 追加
   | 'droppedthird' // 振り逃げ（三振時のみ表示）
+  | 'error' // 追加: エラー
   | '';
 
 type FieldPosition = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '';
 
+// 追加: 外野方向の型
+type OutfieldDirection = 'left' | 'left-center' | 'center' | 'right-center' | 'right' | '';
+
 const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeoutType, onRunnerMovement }) => {
   const [result, setResult] = useState<BattingResult>('');
   const [position, setPosition] = useState<FieldPosition>('');
+  const [outfieldDirection, setOutfieldDirection] = useState<OutfieldDirection>(''); // 追加: 外野方向
   const [showConfirm, setShowConfirm] = useState(false); // 追加: 確認画面表示フラグ
 
   // 三振の場合の初期化
@@ -53,8 +59,10 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
         { value: 'double', label: 'ツーベースヒット' },
         { value: 'triple', label: 'スリーベースヒット' },
         { value: 'homerun', label: 'ホームラン' },
+        { value: 'runninghomerun', label: 'ランニングホームラン' },
         { value: 'groundout', label: 'ゴロアウト' },
         { value: 'flyout', label: 'フライアウト' },
+        { value: 'error', label: 'エラー' },
       ];
 
   const positionOptions: { value: FieldPosition; label: string }[] = [
@@ -69,21 +77,32 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
     { value: '9', label: '右翼手（RF）' },
   ];
 
-  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird'].includes(result);
+  // 追加: 外野方向の選択肢
+  const outfieldDirectionOptions: { value: OutfieldDirection; label: string }[] = [
+    { value: 'left', label: 'レフト' },
+    { value: 'left-center', label: '左中間' },
+    { value: 'center', label: 'センター' },
+    { value: 'right-center', label: '右中間' },
+    { value: 'right', label: 'ライト' },
+  ];
+
+  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error'].includes(result);
+  const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun'].includes(result); // 追加: 外野方向が必要な結果
 
   const handleSubmit = () => {
     if (!result) return;
     if (needsPosition && !position) return;
+    if (needsOutfieldDirection && !outfieldDirection) return; // 追加: 外野方向のバリデーション
 
     // 確認画面を表示
     setShowConfirm(true);
   };
 
   const handleConfirm = () => {
-    console.log('プレー結果:', { result, position });
+    console.log('プレー結果:', { result, position, outfieldDirection });
     
     // TODO: playServiceに保存処理を追加
-    // savePlay(matchId, { result, position, ... });
+    // savePlay(matchId, { result, position, outfieldDirection, ... });
 
     setShowConfirm(false);
 
@@ -118,7 +137,14 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
     return option ? option.label : '';
   };
 
-  const isFormValid = result && (!needsPosition || position);
+  // 追加: 外野方向のラベル取得
+  const getOutfieldDirectionLabel = () => {
+    if (!outfieldDirection) return '';
+    const option = outfieldDirectionOptions.find(opt => opt.value === outfieldDirection);
+    return option ? option.label : '';
+  };
+
+  const isFormValid = result && (!needsPosition || position) && (!needsOutfieldDirection || outfieldDirection);
 
   // 確認画面表示
   if (showConfirm) {
@@ -153,9 +179,16 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
           </div>
           
           {needsPosition && position && (
-            <div>
+            <div style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>打球方向</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>{getPositionLabel()}</div>
+            </div>
+          )}
+
+          {needsOutfieldDirection && outfieldDirection && (
+            <div>
+              <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>打球方向（外野）</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>{getOutfieldDirectionLabel()}</div>
             </div>
           )}
         </div>
@@ -247,8 +280,11 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
               type="button"
               onClick={() => {
                 setResult(option.value);
-                if (!['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird'].includes(option.value)) {
+                if (!needsPosition) {
                   setPosition('');
+                }
+                if (!['triple', 'homerun', 'runninghomerun'].includes(option.value)) {
+                  setOutfieldDirection('');
                 }
               }}
               style={{
@@ -299,6 +335,47 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
                   borderRadius: 6,
                   cursor: 'pointer',
                   fontWeight: position === option.value ? 600 : 400,
+                  fontSize: 13,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 外野方向選択（ホームラン・スリーベース・ランニングホームランの場合のみ表示） */}
+      {needsOutfieldDirection && (
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: 8, 
+            fontWeight: 600, 
+            fontSize: 14,
+            color: '#495057',
+          }}>
+            打球方向（外野） <span style={{ color: '#e74c3c' }}>*</span>
+          </label>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(2, 1fr)', 
+            gap: 8,
+          }}>
+            {outfieldDirectionOptions.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setOutfieldDirection(option.value)}
+                style={{
+                  padding: '10px 12px',
+                  background: outfieldDirection === option.value ? '#1c7ed6' : '#f8f9fa',
+                  color: outfieldDirection === option.value ? '#fff' : '#495057',
+                  border: outfieldDirection === option.value ? '2px solid #1c7ed6' : '1px solid #dee2e6',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: outfieldDirection === option.value ? 600 : 400,
                   fontSize: 13,
                   transition: 'all 0.2s ease',
                 }}
