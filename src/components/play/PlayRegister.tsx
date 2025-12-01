@@ -9,6 +9,7 @@ import RunnerStatus from './RunnerStatus';
 import PitchCourseInput from './PitchCourseInput';
 import PlayResultPanel from './PlayResultPanel';
 import LineupPanel from './LineupPanel';
+import RunnerMovementInput from './RunnerMovementInput';
 import { getMatches } from '../../services/matchService';
 import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
@@ -30,6 +31,8 @@ const PlayRegister: React.FC = () => {
   
   // 追加: プレー結果入力モード
   const [showPlayResult, setShowPlayResult] = useState(false);
+  const [showRunnerMovement, setShowRunnerMovement] = useState(false); // 追加: ランナー動き入力画面表示フラグ
+  const [strikeoutType, setStrikeoutType] = useState<'swinging' | 'looking' | null>(null); // 追加
 
   // 追加: サイドバー編集用 state（先攻/後攻）
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
@@ -149,12 +152,34 @@ const PlayRegister: React.FC = () => {
 
   // インプレイ登録時のコールバック
   const handleInplayCommit = () => {
+    setStrikeoutType(null);
     setShowPlayResult(true);
+  };
+
+  // 三振登録時のコールバック（追加）
+  const handleStrikeoutCommit = (isSwinging: boolean) => {
+    setStrikeoutType(isSwinging ? 'swinging' : 'looking');
+    setShowPlayResult(true);
+  };
+
+  // ランナー動き入力画面へ遷移（追加）
+  const handleRunnerMovement = () => {
+    setShowPlayResult(false);
+    setShowRunnerMovement(true);
+  };
+
+  // フォアボール・デッドボール登録時のコールバック（追加）
+  const handleWalkCommit = () => {
+    setStrikeoutType(null);
+    setShowPlayResult(false);
+    setShowRunnerMovement(true);
   };
 
   // プレー結果入力完了時のコールバック
   const handlePlayResultComplete = () => {
     setShowPlayResult(false);
+    setShowRunnerMovement(false);
+    setStrikeoutType(null);
     // 必要に応じてカウント・打者をリセット等
   };
 
@@ -193,9 +218,14 @@ const PlayRegister: React.FC = () => {
           </div>
         </div>
 
-        {/* 中央: タブ or プレー結果入力 */}
+        {/* 中央: タブ or プレー結果入力 or ランナー動き入力 */}
         <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          {!showPlayResult ? (
+          {showRunnerMovement ? (
+            <RunnerMovementInput 
+              onComplete={handlePlayResultComplete}
+              onCancel={handlePlayResultComplete}
+            />
+          ) : !showPlayResult ? (
             <>
               {/* タブ切り替え */}
               <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid #dee2e6', marginBottom: 16 }}>
@@ -237,14 +267,22 @@ const PlayRegister: React.FC = () => {
 
               <div>
                 {activeTab === 'pitch' ? (
-                  <PitchCourseInput onInplayCommit={handleInplayCommit} />
+                  <PitchCourseInput 
+                    onInplayCommit={handleInplayCommit} 
+                    onStrikeoutCommit={handleStrikeoutCommit}
+                    onWalkCommit={handleWalkCommit}
+                  />
                 ) : activeTab === 'runner' ? (
                   <RunnerStatus onChange={handleRunnersChange} />
                 ) : null}
               </div>
             </>
           ) : (
-            <PlayResultPanel onComplete={handlePlayResultComplete} />
+            <PlayResultPanel 
+              onComplete={handlePlayResultComplete} 
+              strikeoutType={strikeoutType}
+              onRunnerMovement={handleRunnerMovement}
+            />
           )}
         </div>
 
