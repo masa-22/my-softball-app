@@ -111,7 +111,7 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
         <div style={styles.bsoLabel}>B</div>
         <div>
           {[...Array(3)].map((_, i) => (
-            <span key={i} style={styles.dot('#3498db', i < bso.b)} />
+            <span key={i} style={styles.dot('#27ae60', i < bso.b)} />
           ))}
         </div>
       </div>

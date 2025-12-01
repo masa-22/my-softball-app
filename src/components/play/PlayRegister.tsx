@@ -8,6 +8,7 @@ import ScoreBoard from './ScoreBoard';
 import RunnerStatus from './RunnerStatus';
 import PitchCourseInput from './PitchCourseInput';
 import PlayResultPanel from './PlayResultPanel';
+import LineupPanel from './LineupPanel';
 import { getMatches } from '../../services/matchService';
 import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
@@ -138,89 +139,12 @@ const PlayRegister: React.FC = () => {
     side === 'home' ? setHomeLineup(list) : setAwayLineup(list);
   };
 
-  const getUsedPositions = (side: 'home' | 'away'): Set<string> => {
-    const list = side === 'home' ? homeLineup : awayLineup;
-    const used = new Set<string>();
-    list.forEach(e => { if (e.position) used.add(e.position); });
-    return used;
-  };
-
-  const handleSidebarSave = () => {
+  const handleSidebarSave = (side: 'home' | 'away') => {
     if (!matchId) return;
-    saveLineup(matchId, { home: homeLineup, away: awayLineup });
-  };
-
-  const renderEditableLineupTable = (side: 'home' | 'away', list: any[], players: any[]) => {
-    const used = getUsedPositions(side);
-    return (
-      <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 8, background: '#fff' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ background:'#f5f5f5' }}>
-              <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>打順</th>
-              <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>守備</th>
-              <th style={{ border:'1px solid #ccc', padding:6 }}>選手</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((entry, idx) => {
-              const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
-
-              // 強調条件
-              const isCurrentPitcher = !!currentPitcher && entry.playerId === currentPitcher.playerId;
-              const isCurrentBatter = !!currentBatter && entry.playerId === currentBatter.playerId;
-              const isRunner = Object.values(runners).includes(entry.playerId);
-
-              // 行背景色（投手: ピンク / 打者: 薄緑 / ランナー: 薄いオレンジ）
-              let rowBg = 'transparent';
-              if (isCurrentBatter) {
-                rowBg = '#e8f7e8'; // 打者: 薄緑
-              } else if (isCurrentPitcher) {
-                rowBg = '#ffe3ea'; // 投手: ピンク
-              } else if (isRunner) {
-                rowBg = '#fff4e6'; // ランナー: 薄いオレンジ
-              }
-
-              return (
-                <tr key={idx} style={{ backgroundColor: rowBg }}>
-                  <td style={{ border:'1px solid #ccc', padding:6, textAlign:'center', width:50 }}>{displayOrder}</td>
-                  <td style={{ border:'1px solid #ccc', padding:6, width:50 }}>
-                    <select
-                      value={entry.position || ''}
-                      onChange={(e)=>handlePositionChange(side, idx, e.target.value)}
-                      style={{ width:'100%' }}
-                    >
-                      <option value="">選択</option>
-                      {POSITIONS.map(pos => {
-                        const disable = used.has(pos) && pos !== entry.position;
-                        return <option key={pos} value={pos} disabled={disable}>{pos}</option>;
-                      })}
-                    </select>
-                  </td>
-                  <td style={{ border:'1px solid #ccc', padding:6 }}>
-                    <select
-                      value={entry.playerId || ''}
-                      onChange={(e)=>handlePlayerChange(side, idx, e.target.value)}
-                      style={{ width:'100%' }}
-                    >
-                      <option value="">選択</option>
-                      {players.map((p:any) => (
-                        <option key={p.playerId} value={p.playerId}>{p.familyName} {p.givenName}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <div style={{ textAlign:'right', marginTop:8 }}>
-          <button onClick={handleSidebarSave} style={{ padding:'6px 10px', background:'#27ae60', color:'#fff', border:'none', borderRadius:4 }}>
-            ラインナップを保存
-          </button>
-        </div>
-      </div>
-    );
+    const updatedLineup = side === 'home' 
+      ? { home: homeLineup, away: awayLineup }
+      : { home: homeLineup, away: awayLineup };
+    saveLineup(matchId, updatedLineup);
   };
 
   // インプレイ登録時のコールバック
@@ -243,8 +167,16 @@ const PlayRegister: React.FC = () => {
       <div style={{ display:'grid', gridTemplateColumns:'280px 1fr 280px', gap:16 }}>
         {/* 左（後攻） */}
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 16, color: '#212529' }}>{awayTeamName}</div>
-          {renderEditableLineupTable('away', awayLineup, awayPlayers)}
+          <LineupPanel
+            teamName={awayTeamName}
+            lineup={awayLineup}
+            players={awayPlayers}
+            currentPitcherId={currentPitcher?.playerId}
+            runners={runners}
+            onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
+            onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
+            onSave={() => handleSidebarSave('away')}
+          />
           
           {/* 投手情報 */}
           <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
@@ -318,8 +250,16 @@ const PlayRegister: React.FC = () => {
 
         {/* 右（先攻） */}
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 16, color: '#212529' }}>{homeTeamName}</div>
-          {renderEditableLineupTable('home', homeLineup, homePlayers)}
+          <LineupPanel
+            teamName={homeTeamName}
+            lineup={homeLineup}
+            players={homePlayers}
+            currentBatterId={currentBatter?.playerId}
+            runners={runners}
+            onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
+            onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
+            onSave={() => handleSidebarSave('home')}
+          />
           
           {/* 打者情報 */}
           <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
