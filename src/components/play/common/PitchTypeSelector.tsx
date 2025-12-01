@@ -10,7 +10,7 @@ interface PitchSymbolProps {
   type: PitchType;
   number?: number;
   size?: number;
-  result?: 'swing' | 'looking' | 'ball' | 'inplay';
+  result?: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball';
 }
 
 export const PitchSymbol: React.FC<PitchSymbolProps> = ({ type, number, size = 30, result }) => {
@@ -22,13 +22,16 @@ export const PitchSymbol: React.FC<PitchSymbolProps> = ({ type, number, size = 3
   let textColor = 'black';
   
   if (result === 'swing' || result === 'looking') {
-    fillColor = '#facc15';
+    fillColor = '#facc15'; // ストライク系: 黄色
     textColor = 'black';
   } else if (result === 'ball') {
-    fillColor = '#3498db';
+    fillColor = '#27ae60'; // ボール: 緑色
     textColor = 'white';
   } else if (result === 'inplay') {
-    fillColor = '#27ae60';
+    fillColor = '#3498db'; // インプレイ: 青色
+    textColor = 'white';
+  } else if (result === 'deadball') {
+    fillColor = '#e74c3c'; // デッドボール: 赤色
     textColor = 'white';
   }
 

@@ -17,7 +17,7 @@ interface PitchData {
   y: number;
   type: PitchType;
   order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay';
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball';
 }
 
 // スタイル変更（タイトル削除・任意座標プロット対応）
@@ -93,7 +93,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit }) =
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
   const [bso, setBso] = useState({ b: 0, s: 0, o: 0 });
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
-  const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | ''>('');
+  const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | ''>('');
   const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
     '1': null, '2': null, '3': null,
   });
@@ -120,13 +120,14 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit }) =
       if (pendingResult === 'ball') b = Math.min(3, b + 1);
       else if (pendingResult === 'swing' || pendingResult === 'looking') s = Math.min(2, s + 1);
       else if (pendingResult === 'inplay') o = Math.min(2, o + 1);
+      else if (pendingResult === 'deadball') b = 3; // デッドボールは四球扱い
       return { b, s, o };
     });
 
     setPendingPoint(null);
     setPendingResult('');
 
-    if (pendingResult === 'inplay' && onInplayCommit) {
+    if ((pendingResult === 'inplay' || pendingResult === 'deadball') && onInplayCommit) {
       onInplayCommit();
     }
   };

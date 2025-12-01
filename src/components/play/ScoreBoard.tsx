@@ -6,7 +6,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { computeScoreBoard, ScoreBoardData } from '../../services/playService';
+import { computeScoreBoard, getPlays, ScoreBoardData } from '../../services/playService';
 import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 
@@ -54,10 +54,10 @@ const ScoreBoard: React.FC = () => {
 
   const { innings, totals, current } = data;
 
-  // 表示用に 1..MAX_INNINGS の枠を用意
   const inningCols = Array.from({ length: MAX_INNINGS }, (_, i) => i + 1);
   const scoreTopByInning: Record<number, number> = {};
   const scoreBottomByInning: Record<number, number> = {};
+  
   inningCols.forEach(n => {
     const rec = innings.find(x => x.inning === n);
     scoreTopByInning[n] = rec ? rec.top : 0;
@@ -65,57 +65,145 @@ const ScoreBoard: React.FC = () => {
   });
 
   return (
-    <div style={{ padding: 12, background: '#fff', border: '1px solid #ddd', borderRadius: 6, marginBottom: 16 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <div style={{ 
+      background: '#fff', 
+      borderRadius: 12, 
+      padding: 16, 
+      marginBottom: 20, 
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)' 
+    }}>
+      <table style={{ 
+        width: '100%', 
+        borderCollapse: 'collapse', 
+        fontSize: 14 
+      }}>
         <thead>
-          <tr>
-            {/* チーム名列の幅を狭く */}
-            <th style={{ border: '1px solid #ccc', padding: 6, background: '#f7f7f7', textAlign: 'left', minWidth: 80 }}>　</th>
+          <tr style={{ background: '#f8f9fa' }}>
+            <th style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px', 
+              textAlign: 'left',
+              fontWeight: 600,
+              color: '#495057',
+            }}>
+              チーム
+            </th>
             {inningCols.map(n => {
               const highlight = n === current.inning;
               return (
                 <th
                   key={n}
                   style={{
-                    border: '1px solid #ccc',
-                    padding: 6,
-                    width: 70, // 各イニングの幅を広げる
-                    background: highlight ? '#fffbcc' : '#f7f7f7',
+                    border: '1px solid #dee2e6',
+                    padding: '10px 8px',
+                    textAlign: 'center',
+                    fontWeight: highlight ? 700 : 600,
+                    backgroundColor: highlight ? '#fff3cd' : 'transparent',
+                    color: highlight ? '#856404' : '#495057',
                   }}
                 >
                   {n}
                 </th>
               );
             })}
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 70, background: '#f0f0f0' }}>計</th>
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 60, background: '#f0f0f0' }}>安</th>
-            <th style={{ border: '1px solid #ccc', padding: 6, width: 60, background: '#f0f0f0' }}>失</th>
+            <th style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px', 
+              textAlign: 'center',
+              fontWeight: 700,
+              background: '#e7f5ff',
+              color: '#1c7ed6',
+            }}>
+              計
+            </th>
           </tr>
         </thead>
         <tbody>
-          {/* 先攻（表）＝ home */}
           <tr>
-            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left', minWidth: 80 }}>{homeName}</th>
-            {inningCols.map(n => (
-              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 70 }}>
-                {scoreTopByInning[n] || 0}
-              </td>
-            ))}
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold', width: 70 }}>{totals.home}</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
+            <td style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px',
+              fontWeight: 600,
+              color: '#212529',
+            }}>
+              {homeName}
+            </td>
+            {inningCols.map(n => {
+              const isCurrentInning = n === current.inning;
+              const isAttacking = isCurrentInning && current.half === 'top';
+              const score = n > current.inning ? '-' : 
+                           (n === current.inning && current.half === 'top') ? scoreTopByInning[n] || 0 :
+                           scoreTopByInning[n] || 0;
+              
+              return (
+                <td 
+                  key={n} 
+                  style={{ 
+                    border: '1px solid #dee2e6', 
+                    padding: '10px 8px', 
+                    textAlign: 'center',
+                    fontWeight: isAttacking ? 700 : 400,
+                    backgroundColor: isAttacking ? '#d1ecf1' : 'transparent',
+                    color: isAttacking ? '#0c5460' : '#212529',
+                  }}
+                >
+                  {score}
+                </td>
+              );
+            })}
+            <td style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px', 
+              textAlign: 'center',
+              fontWeight: 700,
+              fontSize: 16,
+              color: '#212529',
+            }}>
+              {totals.home}
+            </td>
           </tr>
-          {/* 後攻（裏）＝ away */}
           <tr>
-            <th style={{ border: '1px solid #ccc', padding: 6, textAlign: 'left', minWidth: 80 }}>{awayName}</th>
-            {inningCols.map(n => (
-              <td key={n} style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 70 }}>
-                {scoreBottomByInning[n] || 0}
-              </td>
-            ))}
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', fontWeight: 'bold', width: 70 }}>{totals.away}</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
-            <td style={{ border: '1px solid #ccc', padding: 6, textAlign: 'center', width: 60 }}>0</td>
+            <td style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px',
+              fontWeight: 600,
+              color: '#212529',
+            }}>
+              {awayName}
+            </td>
+            {inningCols.map(n => {
+              const isCurrentInning = n === current.inning;
+              const isAttacking = isCurrentInning && current.half === 'bottom';
+              const score = n > current.inning ? '-' : 
+                           (n === current.inning && current.half === 'top') ? '-' :
+                           scoreBottomByInning[n] || 0;
+              
+              return (
+                <td 
+                  key={n} 
+                  style={{ 
+                    border: '1px solid #dee2e6', 
+                    padding: '10px 8px', 
+                    textAlign: 'center',
+                    fontWeight: isAttacking ? 700 : 400,
+                    backgroundColor: isAttacking ? '#d1ecf1' : 'transparent',
+                    color: isAttacking ? '#0c5460' : '#212529',
+                  }}
+                >
+                  {score}
+                </td>
+              );
+            })}
+            <td style={{ 
+              border: '1px solid #dee2e6', 
+              padding: '10px 12px', 
+              textAlign: 'center',
+              fontWeight: 700,
+              fontSize: 16,
+              color: '#212529',
+            }}>
+              {totals.away}
+            </td>
           </tr>
         </tbody>
       </table>

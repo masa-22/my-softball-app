@@ -1,6 +1,6 @@
 /**
  * 投球結果選択パネル
- * スイング・見逃し・ボール・インプレイを選択
+ * スイング・見逃し・ボール・インプレイ・デッドボールを選択
  */
 import React from 'react';
 import { PitchType } from '../common/PitchTypeSelector';
@@ -8,8 +8,8 @@ import { PitchType } from '../common/PitchTypeSelector';
 interface PitchResultSelectorProps {
   selectedPitchType: PitchType;
   pitchTypeName: string;
-  selectedResult: 'swing' | 'looking' | 'ball' | 'inplay' | '';
-  onSelectResult: (result: 'swing' | 'looking' | 'ball' | 'inplay') => void;
+  selectedResult: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | '';
+  onSelectResult: (result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball') => void;
   onCommit: () => void;
   onCancel: () => void;
 }
@@ -91,10 +91,11 @@ const PitchResultSelector: React.FC<PitchResultSelectorProps> = ({
   onCommit,
   onCancel,
 }) => {
-  const results: Array<{ key: 'swing' | 'looking' | 'ball' | 'inplay'; label: string }> = [
+  const results: Array<{ key: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball'; label: string }> = [
     { key: 'swing', label: 'スイング' },
     { key: 'looking', label: '見逃し' },
     { key: 'ball', label: 'ボール' },
+    { key: 'deadball', label: 'デッドボール' },
     { key: 'inplay', label: 'インプレイ' },
   ];
 
