@@ -310,6 +310,8 @@ const PlayRegister: React.FC = () => {
               onComplete={handlePlayResultComplete} 
               strikeoutType={strikeoutType}
               onRunnerMovement={handleRunnerMovement}
+              currentRunners={runners}
+              currentOuts={currentBSO.o}
             />
           )}
         </div>

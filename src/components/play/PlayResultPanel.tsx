@@ -2,12 +2,14 @@
  * 1プレーの結果入力・表示用コンポーネント。
  * - 打撃結果や進塁、アウト、得点などを入力・表示する。
  */
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 
 interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
-  onRunnerMovement?: (battingResult: string, position: string) => void; // 修正: 打席結果を渡す
+  onRunnerMovement?: (battingResult: string, position: string) => void;
+  currentRunners?: { '1': string | null; '2': string | null; '3': string | null }; // 追加: 現在のランナー状況
+  currentOuts?: number; // 追加: 現在のアウトカウント
 }
 
 type BattingResult = 
@@ -15,13 +17,16 @@ type BattingResult =
   | 'double' 
   | 'triple' 
   | 'homerun' 
-  | 'runninghomerun' // 追加: ランニングホームラン
+  | 'runninghomerun'
   | 'groundout' 
   | 'flyout' 
-  | 'strikeout_swinging' // 追加
-  | 'strikeout_looking' // 追加
-  | 'droppedthird' // 振り逃げ（三振時のみ表示）
-  | 'error' // 追加: エラー
+  | 'strikeout_swinging'
+  | 'strikeout_looking'
+  | 'droppedthird'
+  | 'error'
+  | 'sacrifice_bunt' // 追加: 犠打（バント）
+  | 'sacrifice_fly' // 追加: 犠牲フライ
+  | 'bunt_out' // 追加: バント失敗
   | '';
 
 type FieldPosition = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '';
@@ -29,11 +34,19 @@ type FieldPosition = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '';
 // 追加: 外野方向の型
 type OutfieldDirection = 'left' | 'left-center' | 'center' | 'right-center' | 'right' | '';
 
-const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeoutType, onRunnerMovement }) => {
+const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ 
+  onComplete, 
+  strikeoutType, 
+  onRunnerMovement,
+  currentRunners = { '1': null, '2': null, '3': null },
+  currentOuts = 0,
+}) => {
   const [result, setResult] = useState<BattingResult>('');
   const [position, setPosition] = useState<FieldPosition>('');
-  const [outfieldDirection, setOutfieldDirection] = useState<OutfieldDirection>(''); // 追加: 外野方向
-  const [showConfirm, setShowConfirm] = useState(false); // 追加: 確認画面表示フラグ
+  const [outfieldDirection, setOutfieldDirection] = useState<OutfieldDirection>('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showSafetyBuntDialog, setShowSafetyBuntDialog] = useState(false); // 追加: セーフティバント確認ダイアログ
+  const [isSafetyBunt, setIsSafetyBunt] = useState(false); // 追加: セーフティバントフラグ
 
   // 三振の場合の初期化
   React.useEffect(() => {
@@ -44,7 +57,25 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
     }
   }, [strikeoutType]);
 
-  const resultOptions: { value: BattingResult; label: string }[] = strikeoutType 
+  // 犠打（バント）が選択可能かどうか
+  const canSelectSacrificeBunt = useMemo(() => {
+    // ランナーが3塁以外の塁（一塁または二塁）に一人でもいる
+    const hasRunnerNot3rd = currentRunners['1'] || currentRunners['2'];
+    // 0アウトまたは1アウト
+    const isLessThan2Outs = currentOuts < 2;
+    return hasRunnerNot3rd && isLessThan2Outs;
+  }, [currentRunners, currentOuts]);
+
+  // 犠牲フライが選択可能かどうか
+  const canSelectSacrificeFly = useMemo(() => {
+    // ランナーが3塁にいる
+    const hasRunner3rd = !!currentRunners['3'];
+    // 0アウトまたは1アウト
+    const isLessThan2Outs = currentOuts < 2;
+    return hasRunner3rd && isLessThan2Outs;
+  }, [currentRunners, currentOuts]);
+
+  const resultOptions: { value: BattingResult; label: string; disabled?: boolean }[] = strikeoutType 
     ? [
         // 三振時は三振と振り逃げのみ表示
         { 
@@ -62,6 +93,9 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
         { value: 'runninghomerun', label: 'ランニングホームラン' },
         { value: 'groundout', label: 'ゴロアウト' },
         { value: 'flyout', label: 'フライアウト' },
+        { value: 'bunt_out', label: 'バント失敗' }, // 追加
+        { value: 'sacrifice_bunt', label: '犠打（バント）', disabled: !canSelectSacrificeBunt },
+        { value: 'sacrifice_fly', label: '犠牲フライ', disabled: !canSelectSacrificeFly },
         { value: 'error', label: 'エラー' },
       ];
 
@@ -86,15 +120,27 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
     { value: 'right', label: 'ライト' },
   ];
 
-  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error'].includes(result);
-  const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun'].includes(result); // 追加: 外野方向が必要な結果
+  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
+  const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(result); // 追加: 外野方向が必要な結果
 
   const handleSubmit = () => {
     if (!result) return;
     if (needsPosition && !position) return;
-    if (needsOutfieldDirection && !outfieldDirection) return; // 追加: 外野方向のバリデーション
+    if (needsOutfieldDirection && !outfieldDirection) return;
+
+    // シングルヒットで特定の内野手が処理した場合、セーフティバントか確認
+    if (result === 'single' && ['1', '2', '3', '5'].includes(position)) {
+      setShowSafetyBuntDialog(true);
+      return;
+    }
 
     // 確認画面を表示
+    setShowConfirm(true);
+  };
+
+  const handleSafetyBuntResponse = (isBunt: boolean) => {
+    setIsSafetyBunt(isBunt);
+    setShowSafetyBuntDialog(false);
     setShowConfirm(true);
   };
 
@@ -128,7 +174,14 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
 
   const getResultLabel = () => {
     const option = resultOptions.find(opt => opt.value === result);
-    return option ? option.label : '';
+    let label = option ? option.label : '';
+    
+    // セーフティバントの場合、ラベルに追加
+    if (result === 'single' && isSafetyBunt) {
+      label += '（セーフティバント）';
+    }
+    
+    return label;
   };
 
   const getPositionLabel = () => {
@@ -145,6 +198,84 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
   };
 
   const isFormValid = result && (!needsPosition || position) && (!needsOutfieldDirection || outfieldDirection);
+
+  // セーフティバント確認ダイアログ
+  if (showSafetyBuntDialog) {
+    return (
+      <div style={{ 
+        padding: 20, 
+        background: '#fff', 
+        border: '1px solid #dee2e6', 
+        borderRadius: 8,
+        maxWidth: 600,
+        margin: '0 auto',
+      }}>
+        <h3 style={{ 
+          marginBottom: 20, 
+          fontSize: 18, 
+          fontWeight: 600, 
+          color: '#212529',
+          textAlign: 'center',
+        }}>
+          セーフティバントの確認
+        </h3>
+
+        <div style={{ 
+          background: '#fff3cd', 
+          padding: 16, 
+          borderRadius: 8,
+          marginBottom: 20,
+          border: '1px solid #ffc107',
+        }}>
+          <div style={{ fontSize: 14, color: '#856404', textAlign: 'center', marginBottom: 12 }}>
+            {getPositionLabel()}が処理したシングルヒットです。
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#212529', textAlign: 'center' }}>
+            これはセーフティバントですか？
+          </div>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          gap: 12, 
+          justifyContent: 'center',
+        }}>
+          <button
+            type="button"
+            onClick={() => handleSafetyBuntResponse(false)}
+            style={{ 
+              padding: '10px 24px', 
+              background: '#6c757d', 
+              color: '#fff', 
+              border: 'none', 
+              borderRadius: 6, 
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            いいえ（通常のヒット）
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSafetyBuntResponse(true)}
+            style={{
+              padding: '10px 24px',
+              background: '#4c6ef5',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+            }}
+          >
+            はい（セーフティバント）
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // 確認画面表示
   if (showConfirm) {
@@ -175,7 +306,9 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
         }}>
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>打席結果</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>{getResultLabel()}</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>
+              {getResultLabel()}
+            </div>
           </div>
           
           {needsPosition && position && (
@@ -279,24 +412,27 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({ onComplete, strikeout
               key={option.value}
               type="button"
               onClick={() => {
+                if (option.disabled) return;
                 setResult(option.value);
                 if (!needsPosition) {
                   setPosition('');
                 }
-                if (!['triple', 'homerun', 'runninghomerun'].includes(option.value)) {
+                if (!['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(option.value)) {
                   setOutfieldDirection('');
                 }
               }}
+              disabled={option.disabled}
               style={{
                 padding: '12px 16px',
-                background: result === option.value ? '#4c6ef5' : '#f8f9fa',
-                color: result === option.value ? '#fff' : '#495057',
+                background: result === option.value ? '#4c6ef5' : option.disabled ? '#e9ecef' : '#f8f9fa',
+                color: result === option.value ? '#fff' : option.disabled ? '#adb5bd' : '#495057',
                 border: result === option.value ? '2px solid #4c6ef5' : '1px solid #dee2e6',
                 borderRadius: 6,
-                cursor: 'pointer',
+                cursor: option.disabled ? 'not-allowed' : 'pointer',
                 fontWeight: result === option.value ? 600 : 400,
                 fontSize: 14,
                 transition: 'all 0.2s ease',
+                opacity: option.disabled ? 0.6 : 1,
               }}
             >
               {option.label}
