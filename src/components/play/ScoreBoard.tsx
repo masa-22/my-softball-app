@@ -1,22 +1,19 @@
 /**
  * 横型スコアボード
- * - 先攻（home）、後攻（away）のチーム名を表示
- * - 各イニングの得点を横並びで表示（簡易：得点のみ）
- * - 現在イニングの列を強調表示
  */
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { computeScoreBoard, getPlays, ScoreBoardData } from '../../services/playService';
 import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
+import { getGameState } from '../../services/gameStateService';
 
 const MAX_INNINGS = 7;
 
 const ScoreBoard: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
-  const [data, setData] = useState<ScoreBoardData | null>(null);
   const [homeName, setHomeName] = useState<string>('先攻');
   const [awayName, setAwayName] = useState<string>('後攻');
+  const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
 
   useEffect(() => {
     if (!matchId) return;
@@ -30,11 +27,13 @@ const ScoreBoard: React.FC = () => {
       if (away) setAwayName(away.teamName);
     }
 
-    setData(computeScoreBoard(matchId));
-    const t = setInterval(() => setData(computeScoreBoard(matchId)), 1000);
+    const update = () => setState(getGameState(matchId));
+    update();
+
+    const t = setInterval(update, 500);
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'plays') setData(computeScoreBoard(matchId));
+      if (e.key === 'game_states') update();
     };
     window.addEventListener('storage', onStorage);
 
@@ -44,7 +43,7 @@ const ScoreBoard: React.FC = () => {
     };
   }, [matchId]);
 
-  if (!data) {
+  if (!state) {
     return (
       <div style={{ padding: 8, background: '#fafafa', border: '1px solid #eee', marginBottom: 12 }}>
         スコアボード（読み込み中）
@@ -52,16 +51,17 @@ const ScoreBoard: React.FC = () => {
     );
   }
 
-  const { innings, totals, current } = data;
+  const current = { inning: state.current_inning, half: state.top_bottom };
+  const totals = { home: state.scores.top_total, away: state.scores.bottom_total };
 
   const inningCols = Array.from({ length: MAX_INNINGS }, (_, i) => i + 1);
-  const scoreTopByInning: Record<number, number> = {};
-  const scoreBottomByInning: Record<number, number> = {};
-  
+  const scoreTopByInning: Record<number, number | '-' | null> = {};
+  const scoreBottomByInning: Record<number, number | '-' | null> = {};
+
   inningCols.forEach(n => {
-    const rec = innings.find(x => x.inning === n);
-    scoreTopByInning[n] = rec ? rec.top : 0;
-    scoreBottomByInning[n] = rec ? rec.bottom : 0;
+    const rec = state.scores.innings[String(n)];
+    scoreTopByInning[n] = rec ? (rec.top ?? 0) : 0;
+    scoreBottomByInning[n] = rec ? (rec.bottom ?? (n === current.inning && current.half === 'bottom' ? null : 0)) : 0;
   });
 
   return (

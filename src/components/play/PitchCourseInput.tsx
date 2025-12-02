@@ -9,6 +9,7 @@ import PitchResultSelector from './pitch/PitchResultSelector';
 import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 import { getPlays } from '../../services/playService';
+import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../../services/gameStateService';
 
 // --- 型定義 ---
 interface PitchData {
@@ -100,6 +101,22 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onS
     '1': null, '2': null, '3': null,
   });
 
+  // ▼ 追加: gameState のランナー購読（リアルタイム）
+  React.useEffect(() => {
+    if (!matchId) return;
+    const update = () => {
+      const gs = getGameState(matchId);
+      if (gs) {
+        setRunners({ '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] });
+      }
+    };
+    update();
+    const t = window.setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+  }, [matchId]);
+
   const handleZoneClick = (x: number, y: number) => {
     setPendingPoint({ x, y });
     setPendingResult('');
@@ -127,41 +144,42 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onS
       else if (pendingResult === 'swing' || pendingResult === 'looking') s = Math.min(2, s + 1);
       else if (pendingResult === 'inplay') o = Math.min(2, o + 1);
       else if (pendingResult === 'deadball') b = 3;
-      
+
+      // 逐次 gameState 更新
+      if (matchId) {
+        updateCountsRealtime(matchId, { b, s, o });
+      }
+
       // デッドボールは即座にランナー動き入力画面へ
       if (pendingResult === 'deadball') {
         setTimeout(() => {
-          if (onWalkCommit) {
-            onWalkCommit();
-          }
+          if (onWalkCommit) onWalkCommit();
         }, 0);
         setPendingPoint(null);
         setPendingResult('');
-        return prev; // カウントリセット前に遷移
+        return prev; // 遷移優先
       }
 
-      // 4ボール目（3→4になる時）はフォアボールでランナー動き入力画面へ
+      // 4ボール目（3→4）はフォアボール遷移
       if (currentBalls === 3 && pendingResult === 'ball') {
         setTimeout(() => {
-          if (onWalkCommit) {
-            onWalkCommit();
-          }
+          if (onWalkCommit) onWalkCommit();
         }, 0);
         setPendingPoint(null);
         setPendingResult('');
-        return prev; // カウントリセット前に遷移
+        return prev;
       }
-      
-      // 3ストライク目（2→3になる時）のみ三振画面へ遷移
+
+      // 3ストライク目で三振遷移
       if (currentStrikes === 2 && (pendingResult === 'swing' || pendingResult === 'looking')) {
         const isSwinging = pendingResult === 'swing';
         setTimeout(() => {
-          if (onStrikeoutCommit) {
-            onStrikeoutCommit(isSwinging);
-          }
+          if (onStrikeoutCommit) onStrikeoutCommit(isSwinging);
         }, 0);
+        // 打席終了後、B/Sをリセット（Oは別管理）
+        if (matchId) resetCountsRealtime(matchId);
       }
-      
+
       return { b, s, o };
     });
 
