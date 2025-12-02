@@ -11,6 +11,8 @@ import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
 import { getMatches } from '../../services/matchService';
 import { getPlays } from '../../services/playService';
+// 追加
+import { updateRunnersRealtime, addRunsRealtime, updateCountsRealtime, closeHalfInningRealtime } from '../../services/gameStateService';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -591,14 +593,36 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       outsAfter,
       outDetails,
     });
-    
-    // TODO: playServiceに保存
-    
-    setShowFinalConfirm(false);
-    
-    if (onComplete) {
-      onComplete();
+
+    // gameState へ反映
+    if (matchId) {
+      // ランナー配置
+      updateRunnersRealtime(matchId, {
+        '1b': afterRunners['1'],
+        '2b': afterRunners['2'],
+        '3b': afterRunners['3'],
+      });
+
+      // 得点
+      if (scoredRunners.length > 0) {
+        // 現在の攻撃側（top/bottom）は gameState に依存するため、ここでは両方の可能性を考慮しない簡易仕様:
+        // addRunsRealtime は現在の half に加算する前提のため、RunnerMovementInput起動側の half と一致している前提
+        // より厳密にするなら getGameState(matchId)?.top_bottom を参照
+        const half = getPlays(matchId).length && currentInningInfo.half ? currentInningInfo.half : 'top';
+        addRunsRealtime(matchId, half, scoredRunners.length);
+      }
+
+      // アウト更新（0〜3）
+      updateCountsRealtime(matchId, { o: outsAfter });
+
+      // 3アウトでイニング進行
+      if (outsAfter >= 3) {
+        closeHalfInningRealtime(matchId);
+      }
     }
+
+    setShowFinalConfirm(false);
+    if (onComplete) onComplete();
   };
 
   const handleFinalCancel = () => {

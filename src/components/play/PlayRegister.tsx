@@ -15,6 +15,7 @@ import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
 import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
+import { getGameState } from '../../services/gameStateService';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
 
@@ -46,6 +47,22 @@ const PlayRegister: React.FC = () => {
   const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
     '1': null, '2': null, '3': null,
   });
+
+  // ▼ 追加: gameState のランナー購読（リアルタイム）
+  React.useEffect(() => {
+    if (!matchId) return;
+    const update = () => {
+      const gs = getGameState(matchId);
+      if (gs) {
+        setRunners({ '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] });
+      }
+    };
+    update();
+    const t = window.setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+  }, [matchId]);
 
   // 現在のBSO状態（追加）
   const [currentBSO, setCurrentBSO] = useState({ b: 0, s: 0, o: 0 });

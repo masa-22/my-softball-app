@@ -16,6 +16,7 @@ import { getTeams } from '../../services/teamService';
 import { getPlays } from '../../services/playService';
 import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
+import { getGameState, updateRunnersRealtime } from '../../services/gameStateService';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -200,6 +201,24 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
     return { advancements, outs };
   };
 
+  // ▼ 追加: gameState のランナー購読（リアルタイム）
+  React.useEffect(() => {
+    if (!matchId) return;
+    const update = () => {
+      const gs = getGameState(matchId);
+      if (gs) {
+        const next = { '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] } as const;
+        setRunners(next);
+        setPreviousRunners(next);
+      }
+    };
+    update();
+    const t = window.setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+  }, [matchId]);
+
   const commitRunner = () => {
     if (!selectedBase || selectedBase === 'home' || !selectedPlayerId) return;
     const next = { ...runners, [selectedBase]: selectedPlayerId } as typeof runners;
@@ -210,23 +229,29 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
     if (advancements.length > 0) {
       setPendingAdvancements(advancements);
       setShowAdvanceDialog(true);
-      setPreviousRunners(next); // 変更を記録
+      setPreviousRunners(next);
     } else if (outs.length > 0) {
       setPendingOuts(outs);
       setShowOutDialog(true);
-      setPreviousRunners(next); // 変更を記録
+      setPreviousRunners(next);
     } else {
       // 変更なし、そのまま確定
       setRunners(next);
       setPreviousRunners(next);
       setSelectedBase(null);
       setSelectedPlayerId(null);
+
+      // ▼ 追加: gameState へ反映
+      if (matchId) {
+        updateRunnersRealtime(matchId, {
+          '1b': next['1'],
+          '2b': next['2'],
+          '3b': next['3'],
+        });
+      }
+
       if (onChange) {
-        try {
-          onChange(next);
-        } catch (error) {
-          console.error('onChange実行エラー:', error);
-        }
+        try { onChange(next); } catch (error) { console.error('onChange実行エラー:', error); }
       }
     }
   };

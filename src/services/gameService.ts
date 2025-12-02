@@ -46,6 +46,23 @@ export interface Game {
   };
 }
 
+// ========== GameState (リアルタイム最小情報) ==========
+// ここは別ファイルに切り出し済み。インポートに置換。
+import {
+  GameRealtimeStatus,
+  GameState,
+  initGameState,
+  getGameState,
+  updateGameStateStatus,
+  setInningAndHalf,
+  updateCountsRealtime,
+  resetCountsRealtime,
+  updateRunnersRealtime,
+  updateMatchupRealtime,
+  addRunsRealtime,
+  closeHalfInningRealtime,
+} from './gameStateService';
+
 let games: Record<string, Game> = {};
 
 const load = () => {
@@ -70,6 +87,7 @@ const persist = () => {
   }
 };
 
+// モジュールロード時に初期データ復帰
 load();
 
 /**

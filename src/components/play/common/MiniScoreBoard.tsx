@@ -2,11 +2,11 @@
  * ミニスコアボードコンポーネント
  * イニング情報・チームスコア・BSO情報を表示
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { getMatches } from '../../../services/matchService';
 import { getTeams } from '../../../services/teamService';
-import { getPlays } from '../../../services/playService';
+import { getGameState } from '../../../services/gameStateService';
 
 interface MiniScoreBoardProps {
   bso: {
@@ -71,13 +71,27 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
   const { matchId } = useParams<{ matchId: string }>();
   const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
 
-  const currentInningInfo = useMemo(() => {
-    if (!matchId) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const plays = getPlays(matchId);
-    if (!plays.length) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const last = plays[plays.length - 1];
-    return { inning: last.inning, half: last.topOrBottom };
+  // ▼ 追加: gameState をリアルタイム購読
+  const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
+  useEffect(() => {
+    if (!matchId) return;
+    const update = () => setState(getGameState(matchId));
+    update();
+    const t = setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'game_states') update();
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('storage', onStorage);
+    };
   }, [matchId]);
+
+  const currentInningInfo = useMemo(() => {
+    if (!state) return { inning: 1, half: 'top' as 'top' | 'bottom' };
+    return { inning: state.current_inning, half: state.top_bottom };
+  }, [state]);
 
   const teamNames = useMemo(() => {
     if (!match) return { home: '先攻', away: '後攻' };
@@ -89,6 +103,9 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
 
   const isTopInning = currentInningInfo.half === 'top';
 
+  // ▼ 追加: BSOは gameState 優先、未取得時は props を使用
+  const counts = state?.counts || bso;
+
   return (
     <div style={styles.container}>
       {/* イニング表示 */}
@@ -99,19 +116,19 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
       {/* チームスコア */}
       <div style={styles.teamScore(isTopInning)}>
         <span>{teamNames.home}</span>
-        <span>0</span>
+        <span>{state?.scores.top_total ?? 0}</span>
       </div>
       <div style={styles.teamScore(!isTopInning)}>
         <span>{teamNames.away}</span>
-        <span>0</span>
+        <span>{state?.scores.bottom_total ?? 0}</span>
       </div>
 
-      {/* BSO */}
+      {/* BSO（gameStateからリアルタイム取得） */}
       <div style={styles.bsoContainer}>
         <div style={styles.bsoLabel}>B</div>
         <div>
           {[...Array(3)].map((_, i) => (
-            <span key={i} style={styles.dot('#27ae60', i < bso.b)} />
+            <span key={i} style={styles.dot('#27ae60', i < counts.b)} />
           ))}
         </div>
       </div>
@@ -120,7 +137,7 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
         <div style={styles.bsoLabel}>S</div>
         <div>
           {[...Array(2)].map((_, i) => (
-            <span key={i} style={styles.dot('#facc15', i < bso.s)} />
+            <span key={i} style={styles.dot('#facc15', i < counts.s)} />
           ))}
         </div>
       </div>
@@ -129,7 +146,7 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
         <div style={styles.bsoLabel}>O</div>
         <div>
           {[...Array(2)].map((_, i) => (
-            <span key={i} style={styles.dot('#e74c3c', i < bso.o)} />
+            <span key={i} style={styles.dot('#e74c3c', i < counts.o)} />
           ))}
         </div>
       </div>
