@@ -223,7 +223,8 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
         return !!result.outDetail?.tagoutBy;
       }
       if (result.reason === 'leftbase') {
-        return !!result.outDetail?.leftbaseBy;
+        // 離塁アウトは守備位置の入力不要
+        return true;
       }
 
       return false;
@@ -367,21 +368,9 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
                     </div>
                   )}
 
-                  {currentReason === 'leftbase' && (
-                    <div>
-                      <div style={styles.detailLabel}>離塁アウトにした守備位置 *</div>
-                      <select
-                        value={outDetail?.leftbaseBy || ''}
-                        onChange={(e) => handleOutDetailChange(out.runnerId, 'leftbaseBy', e.target.value)}
-                        style={styles.select}
-                      >
-                        <option value="">選択してください</option>
-                        {positionOptions.map(pos => (
-                          <option key={pos.value} value={pos.value}>{pos.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                  {/* 離塁アウトは守備位置の入力不要 */}
+                  {/* currentReason === 'leftbase' の入力UIは表示しません */}
+
                 </div>
               )}
             </div>

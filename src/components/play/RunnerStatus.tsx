@@ -17,6 +17,9 @@ import { getPlays } from '../../services/playService';
 import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
 import { getGameState, updateRunnersRealtime } from '../../services/gameStateService';
+import { addRunsRealtime } from '../../services/gameStateService';
+// 追加: アウト・イニング進行のリアルタイム更新
+import { updateCountsRealtime, closeHalfInningRealtime } from '../../services/gameStateService';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -76,6 +79,23 @@ const styles = {
     zIndex: 10,
     boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
     minWidth: 320,
+    maxHeight: '80%',
+    overflow: 'auto',
+  },
+  // 追加: アウト追加ダイアログ用スタイル
+  addOutDialog: {
+    position: 'fixed' as const,
+    top: '50%',
+    left: '50%',
+    transform: 'translate(-50%, -50%)',
+    background: '#fff',
+    border: '1px solid #dee2e6',
+    borderRadius: 12,
+    padding: 20,
+    zIndex: 1000,
+    boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+    minWidth: 320,
+    maxWidth: 400,
     maxHeight: '80%',
     overflow: 'auto',
   },
@@ -154,8 +174,30 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
   const [showOutDialog, setShowOutDialog] = useState(false);
   const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
   const [pendingOuts, setPendingOuts] = useState<RunnerOut[]>([]);
+  // 追加: アウト追加ダイアログ（単一選択）
+  const [showAddOutDialog, setShowAddOutDialog] = useState(false);
+  const [selectedOutRunner, setSelectedOutRunner] = useState<{ runnerId: string; fromBase: '1' | '2' | '3' } | null>(null);
 
-  // ランナー変更を検出して適切なダイアログを表示
+  // 追加: 同一タブ内リアルタイム同期用カスタムイベント
+  const notifyGameStatesUpdated = () => {
+    try {
+      window.dispatchEvent(new Event('game_states_updated'));
+    } catch {
+      // noop
+    }
+  };
+
+  const updateRunners = () => {
+    if (!matchId) return;
+    const gs = getGameState(matchId);
+    if (gs) {
+      const next = { '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] } as const;
+      setRunners(next);
+      setPreviousRunners(next);
+    }
+  };
+
+  // ▼ 追加: ランナー変更を検出（進塁/アウト）
   const detectRunnerChanges = (
     before: { '1': string | null; '2': string | null; '3': string | null },
     after: { '1': string | null; '2': string | null; '3': string | null }
@@ -163,17 +205,14 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
     const advancements: RunnerAdvancement[] = [];
     const outs: RunnerOut[] = [];
 
-    // 各ベースをチェック
     (['1', '2', '3'] as const).forEach(base => {
       const beforePlayer = before[base];
       if (!beforePlayer) return;
 
-      // プレー後にそのランナーがどこにいるか探す
       const afterBases = ['1', '2', '3', 'home'] as const;
       const foundBase = afterBases.find(b => after[b as '1' | '2' | '3'] === beforePlayer);
 
       if (foundBase && foundBase !== base) {
-        // 進塁した
         const player = selectablePlayers.find(p => p.playerId === beforePlayer);
         if (player) {
           advancements.push({
@@ -184,15 +223,13 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
           });
         }
       } else if (!foundBase) {
-        // ランナーが消えた（アウトまたは得点）
-        // 本塁への移動は得点なのでアウト扱いしない
         const player = selectablePlayers.find(p => p.playerId === beforePlayer);
         if (player) {
           outs.push({
             runnerId: beforePlayer,
             runnerName: `${player.familyName} ${player.givenName}`.trim(),
             fromBase: base,
-            outAtBase: base, // とりあえず元の塁でアウト
+            outAtBase: base,
           });
         }
       }
@@ -204,107 +241,301 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
   // ▼ 追加: gameState のランナー購読（リアルタイム）
   React.useEffect(() => {
     if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
-      if (gs) {
-        const next = { '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] } as const;
-        setRunners(next);
-        setPreviousRunners(next);
-      }
-    };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    updateRunners();
+    const t = window.setInterval(updateRunners, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') updateRunners(); };
     window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+    // 追加: 同一タブ内の更新通知を購読
+    const onLocalUpdate = () => updateRunners();
+    window.addEventListener('game_states_updated', onLocalUpdate);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('game_states_updated', onLocalUpdate);
+    };
   }, [matchId]);
 
+  // ベース名ラベル
+  const baseLabel = (b: BaseKey) => (b === 'home' ? 'ホーム' : b === '1' ? '一塁' : b === '2' ? '二塁' : '三塁');
+
+  // 走者氏名取得
+  const getRunnerName = (playerId: string | null) => {
+    if (!playerId) return '';
+    // selectablePlayers だと打者/FP等が除外され名前解決できない場合があるため、チーム全員から取得
+    const p = offensePlayers.find(sp => sp.playerId === playerId);
+    return p ? `${p.familyName} ${p.givenName}`.trim() : '';
+  };
+
+  // 直前の塁にいる最も近い走者を探す（targetより手前の最大の塁）
+  const findNearestPriorRunner = (target: '2' | '3'): { fromBase: '1' | '2'; runnerId: string } | null => {
+    if (target === '2') {
+      if (runners['1']) return { fromBase: '1', runnerId: runners['1']! };
+      return null;
+    }
+    // target === '3'
+    if (runners['2']) return { fromBase: '2', runnerId: runners['2']! };
+    if (runners['1']) return { fromBase: '1', runnerId: runners['1']! };
+    return null;
+  };
+
+  // クリック時の挙動:
+  // - 既に走者がいる塁をクリック → 確認 → アウト理由ダイアログ
+  // - 本塁クリック → 三塁走者がいれば確認 → 得点として進塁理由ダイアログ
+  // - 空き塁クリック → その塁より手前にいる最も近い走者をその塁へ進塁として扱う（いなければ何もしない）
+  const handleBaseClick = (base: BaseKey) => {
+    if (!matchId) return;
+
+    // 本塁（得点処理）
+    if (base === 'home') {
+      const thirdRunner = runners['3'];
+      if (!thirdRunner) return; // 三塁走者がいないなら何もしない
+      const name = getRunnerName(thirdRunner) || '三塁走者';
+      const ok = window.confirm(`${name}の得点を記録しますか？`);
+      if (!ok) return;
+
+      // 次状態（3塁を空に）
+      const next = { ...runners, '3': null };
+
+      // 進塁理由ダイアログを準備（3→Home）
+      setPendingAdvancements([{
+        runnerId: thirdRunner,
+        runnerName: name,
+        fromBase: '3',
+        toBase: 'home',
+      }]);
+      setPreviousRunners(next);
+      setShowAdvanceDialog(true);
+      return;
+    }
+
+    // 既に走者がいる塁 → アウト確認（'1' | '2' | '3' に限定して参照）
+    if (base === '1' || base === '2' || base === '3') {
+      const currentRunnerId = runners[base];
+      if (currentRunnerId) {
+        const name = getRunnerName(currentRunnerId) || '走者';
+        const ok = window.confirm(`${baseLabel(base)}のランナー「${name}」をアウトにしますか？`);
+        if (!ok) return;
+
+        // 次状態（該当塁を空に）
+        const next = { ...runners, [base]: null } as typeof runners;
+        setPreviousRunners(next);
+
+        setPendingOuts([{
+          runnerId: currentRunnerId,
+          runnerName: name,
+          fromBase: base,
+          outAtBase: base,
+        }]);
+        setShowOutDialog(true);
+        return;
+      }
+    }
+
+    // 空き塁クリック時：新規登録はしない。手前の塁の既存走者を進塁扱い
+    if (base === '2' || base === '3') {
+      const prior = findNearestPriorRunner(base);
+      if (!prior) return; // 手前に走者がいないなら何もしない
+
+      const name = getRunnerName(prior.runnerId) || (prior.fromBase === '1' ? '一塁走者' : '二塁走者');
+      const ok = window.confirm(`${name}を${baseLabel(base)}へ進塁として記録しますか？`);
+      if (!ok) return;
+
+      // 次状態: from を空にし、target に配置
+      const next = { ...runners } as typeof runners;
+      next[prior.fromBase] = null;
+      next[base] = prior.runnerId;
+
+      // 進塁理由ダイアログ（from→to）
+      setPendingAdvancements([{
+        runnerId: prior.runnerId,
+        runnerName: name,
+        fromBase: prior.fromBase,
+        toBase: base,
+      }]);
+      setPreviousRunners(next);
+      setShowAdvanceDialog(true);
+      return;
+    }
+
+    // 一塁クリック（手前の塁が存在しないため、何もしない）
+    return;
+  };
+
+  // commitRunner は新規登録用だが、今回は使用しない（残置）
   const commitRunner = () => {
     if (!selectedBase || selectedBase === 'home' || !selectedPlayerId) return;
-    const next = { ...runners, [selectedBase]: selectedPlayerId } as typeof runners;
-    
+
+    // 同一選手の以前の塁をクリアしてから配置（重複防止）
+    const next = { ...runners } as typeof runners;
+    (['1','2','3'] as const).forEach(b => {
+      if (next[b] === selectedPlayerId) next[b] = null;
+    });
+    next[selectedBase] = selectedPlayerId;
+
     // 変更を検出
     const { advancements, outs } = detectRunnerChanges(previousRunners, next);
-    
+
     if (advancements.length > 0) {
+      // 進塁理由ダイアログ
       setPendingAdvancements(advancements);
       setShowAdvanceDialog(true);
-      setPreviousRunners(next);
+      setPreviousRunners(next); // 確定時に適用する次状態を保持
     } else if (outs.length > 0) {
+      // 理論上ここには来ない（選手移動でアウトにはならない）が保険
       setPendingOuts(outs);
       setShowOutDialog(true);
       setPreviousRunners(next);
     } else {
-      // 変更なし、そのまま確定
+      // 変更なし
       setRunners(next);
       setPreviousRunners(next);
       setSelectedBase(null);
       setSelectedPlayerId(null);
 
-      // ▼ 追加: gameState へ反映
       if (matchId) {
-        updateRunnersRealtime(matchId, {
-          '1b': next['1'],
-          '2b': next['2'],
-          '3b': next['3'],
-        });
+        updateRunnersRealtime(matchId, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
       }
-
       if (onChange) {
-        try { onChange(next); } catch (error) { console.error('onChange実行エラー:', error); }
+        try { onChange(next); } catch (e) { console.error(e); }
       }
     }
   };
 
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     console.log('進塁理由:', results);
-    // TODO: playServiceに保存
+
+    // 進塁イベントの記録用に保持（ダイアログクローズ前に退避）
+    const advs = [...pendingAdvancements];
+
+    // 直前に保持した次状態を適用
+    const next = { ...previousRunners };
     
-    const next = { ...runners };
+    // 明示的に進塁処理：元の塁を null、進んだ塁に選手IDを設定
+    advs.forEach(adv => {
+      // 元の塁を null に
+      if (adv.fromBase === '1' || adv.fromBase === '2' || adv.fromBase === '3') {
+        next[adv.fromBase] = null;
+      }
+      // 進んだ塁に選手IDを設定（ホームは除く）
+      if (adv.toBase === '1' || adv.toBase === '2' || adv.toBase === '3') {
+        next[adv.toBase] = adv.runnerId;
+      }
+      // ホームへの進塁の場合は null のまま（得点）
+    });
+    
     setRunners(next);
     setSelectedBase(null);
     setSelectedPlayerId(null);
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
-    
-    if (onChange) {
-      try {
-        onChange(next);
-      } catch (error) {
-        console.error('onChange実行エラー:', error);
+
+    // 反映（得点含む）
+    if (matchId) {
+      // runners を game_states に保存
+      console.log('Updating runners to game_states (advance):', next);
+      updateRunnersRealtime(matchId, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
+
+      // 3→Home の進塁が含まれる場合は1点加算
+      const scoredCount =
+        advs.filter(a => a.toBase === 'home').length ||
+        results.filter(r => r && advs.some(a => a.runnerId === r.runnerId && a.toBase === 'home')).length;
+      if (scoredCount > 0) {
+        const half = getGameState(matchId)?.top_bottom || 'top';
+        addRunsRealtime(matchId, half, scoredCount);
       }
+      // 同一タブ内にも即時通知
+      notifyGameStatesUpdated();
+    }
+
+    if (onChange) {
+      try { onChange(next); } catch (e) { console.error(e); }
     }
   };
 
   const handleOutConfirm = (results: OutReasonResult[]) => {
     console.log('アウト理由:', results);
-    // TODO: playServiceに保存
+
+    // 記録用に保持
+    const outs = [...pendingOuts];
+
+    // 直前に保持した次状態（アウトで走者を消した状態）を適用
+    const next = { ...previousRunners };
     
-    const next = { ...runners };
+    // 明示的にアウトになった走者の塁を null に設定
+    outs.forEach(out => {
+      if (out.fromBase === '1' || out.fromBase === '2' || out.fromBase === '3') {
+        next[out.fromBase] = null;
+      }
+    });
+    
     setRunners(next);
     setSelectedBase(null);
     setSelectedPlayerId(null);
     setShowOutDialog(false);
     setPendingOuts([]);
-    
-    if (onChange) {
-      try {
-        onChange(next);
-      } catch (error) {
-        console.error('onChange実行エラー:', error);
+
+    if (matchId) {
+      // runners を game_states に保存（アウトになった塁は null）
+      console.log('Updating runners to game_states:', next);
+      updateRunnersRealtime(matchId, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
+
+      // BSOのOを加算（複数対応）。3到達でイニング進行
+      const gs = getGameState(matchId);
+      const currentO = gs?.counts.o ?? 0;
+      const addO = outs.length;
+      const newO = Math.min(3, currentO + addO);
+      updateCountsRealtime(matchId, { o: newO });
+
+      if (newO >= 3) {
+        closeHalfInningRealtime(matchId);
       }
+      // 同一タブ内にも即時通知
+      notifyGameStatesUpdated();
     }
-  };
+
+    if (onChange) {
+      try { onChange(next); } catch (e) { console.error(e); }
+    }
+  }; // ← 追加: handleOutConfirm の閉じカッコ
 
   const handleDialogCancel = () => {
-    // キャンセル時は変更を戻す
-    setRunners(previousRunners);
     setShowAdvanceDialog(false);
     setShowOutDialog(false);
     setPendingAdvancements([]);
     setPendingOuts([]);
-    setSelectedBase(null);
-    setSelectedPlayerId(null);
+  };
+
+  // 追加: アウト追加ボタンクリック
+  const handleAddOutClick = () => {
+    setShowAddOutDialog(true);
+  };
+
+  // 追加: アウト追加ダイアログで走者選択確定
+  const handleAddOutConfirm = () => {
+    if (!selectedOutRunner) return;
+    
+    const { runnerId, fromBase } = selectedOutRunner;
+    const name = getRunnerName(runnerId) || '走者';
+    
+    const next = { ...runners, [fromBase]: null } as typeof runners;
+    setPreviousRunners(next);
+
+    setPendingOuts([{
+      runnerId,
+      runnerName: name,
+      fromBase,
+      outAtBase: fromBase,
+    }]);
+    
+    setShowAddOutDialog(false);
+    setSelectedOutRunner(null);
+    setShowOutDialog(true);
+  };
+
+  // 追加: アウト追加ダイアログキャンセル
+  const handleAddOutCancel = () => {
+    setShowAddOutDialog(false);
+    setSelectedOutRunner(null);
   };
 
   return (
@@ -329,6 +560,129 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
         />
       )}
 
+      {/* 追加: アウト追加ダイアログ */}
+      {showAddOutDialog && (
+        <>
+          <div 
+            style={{ 
+              position: 'fixed', 
+              top: 0, 
+              left: 0, 
+              right: 0, 
+              bottom: 0, 
+              background: 'rgba(0,0,0,0.5)', 
+              zIndex: 999 
+            }} 
+            onClick={handleAddOutCancel} 
+          />
+          <div 
+            style={styles.addOutDialog}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 'bold', marginBottom: 12, textAlign: 'center', fontSize: 16 }}>
+              アウトになった走者を選択
+            </div>
+            <div style={{ maxHeight: 240, overflow: 'auto', borderTop: '1px solid #eee', paddingTop: 8 }}>
+              {(['1', '2', '3'] as const).map(base => {
+                const runnerId = runners[base];
+                if (!runnerId) return null;
+                const isSelected = selectedOutRunner?.runnerId === runnerId && selectedOutRunner?.fromBase === base;
+                const name = getRunnerName(runnerId);
+                return (
+                  <div 
+                    key={base} 
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      background: isSelected ? '#e74c3c' : '#fff',
+                      color: isSelected ? '#fff' : '#212529',
+                      border: `1px solid ${isSelected ? '#e74c3c' : '#dee2e6'}`,
+                      marginBottom: 8,
+                      transition: 'all 0.2s ease',
+                      fontWeight: isSelected ? 600 : 400,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOutRunner({ runnerId, fromBase: base });
+                    }}
+                  >
+                    <span>{baseLabel(base)}: {name}</span>
+                    <div 
+                      style={{ 
+                        width: 18, 
+                        height: 18, 
+                        borderRadius: '50%',
+                        border: `2px solid ${isSelected ? '#fff' : '#dee2e6'}`,
+                        background: isSelected ? '#fff' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {isSelected && (
+                        <div style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: '#e74c3c',
+                        }} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {!runners['1'] && !runners['2'] && !runners['3'] && (
+                <div style={{ color: '#999', textAlign: 'center', padding: 16 }}>走者がいません</div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddOutConfirm();
+                }}
+                disabled={!selectedOutRunner}
+                style={{
+                  padding: '8px 16px', 
+                  background: '#e74c3c',
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: 6, 
+                  cursor: selectedOutRunner ? 'pointer' : 'not-allowed', 
+                  fontWeight: 'bold',
+                  opacity: selectedOutRunner ? 1 : 0.5,
+                }}
+              >
+                確定
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddOutCancel();
+                }}
+                style={{ 
+                  padding: '8px 16px', 
+                  background: '#6c757d', 
+                  color: '#fff', 
+                  border: 'none', 
+                  borderRadius: 6, 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold' 
+                }}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       <div style={styles.mainLayout}>
         <div style={styles.leftColumn}>
           <MiniScoreBoard bso={bso} />
@@ -341,71 +695,39 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({ onChange }) => {
               <DiamondField 
                 runners={runners} 
                 selectedBase={selectedBase} 
-                onBaseClick={setSelectedBase} 
+                onBaseClick={handleBaseClick} 
               />
             </div>
 
-            {selectedBase && selectedBase !== 'home' && (
-              <div style={styles.pickerOverlay}>
-                <div style={{ fontWeight: 'bold', marginBottom: 8, textAlign: 'center' }}>
-                  {`${selectedBase === '1' ? '一' : selectedBase === '2' ? '二' : '三'}塁のランナー選択`}
-                </div>
-                <div style={{ marginBottom: 8, color: '#666', fontSize: 12, textAlign: 'center' }}>
-                  攻撃側: {currentInningInfo.half === 'top' ? teamNames.home : teamNames.away}
-                </div>
-                <div style={{ maxHeight: 240, overflow: 'auto', borderTop: '1px solid #eee', paddingTop: 8 }}>
-                  {selectablePlayers.length ? (
-                    selectablePlayers.map(p => {
-                      const name = `${p.familyName || ''} ${p.givenName || ''}`.trim();
-                      const selected = selectedPlayerId === p.playerId;
-                      const isOnBase = Object.values(runners).includes(p.playerId);
-                      return (
-                        <div 
-                          key={p.playerId} 
-                          style={{
-                            ...styles.playerItem(!!selected),
-                            backgroundColor: selected ? '#3498db' : isOnBase ? '#ffe6e6' : '#fff',
-                          }} 
-                          onClick={() => setSelectedPlayerId(p.playerId)}
-                        >
-                          <span>{name}</span>
-                          {isOnBase && <span style={{ fontSize: 10, color: '#e74c3c' }}>★</span>}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div style={{ color: '#999', textAlign: 'center' }}>選手データがありません</div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={commitRunner}
-                    disabled={!selectedPlayerId}
-                    style={{
-                      padding: '8px 16px', background: selectedPlayerId ? '#27ae60' : '#ccc',
-                      color: '#fff', border: 'none', borderRadius: 6, cursor: selectedPlayerId ? 'pointer' : 'not-allowed', fontWeight: 'bold',
-                    }}
-                  >
-                    確定
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setSelectedBase(null); setSelectedPlayerId(null); }}
-                    style={{ padding: '8px 16px', background: '#e74c3c', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    キャンセル
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* 追加: アウトを追加ボタン */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={handleAddOutClick}
+                style={{
+                  padding: '10px 20px',
+                  background: '#e74c3c',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  fontSize: 14,
+                }}
+              >
+                アウトを追加
+              </button>
+            </div>
+
+            {/* 選手選択オーバーレイは新規登録用途のため表示しません（selectedBaseを設定しない） */}
 
             <div style={{ marginTop: 0, paddingLeft: 12, paddingRight: 12 }}>
               <div style={{ fontWeight: 'bold', marginBottom: 6, fontSize: 12, color: '#495057' }}>現在のランナー</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
                 {(['1','2','3'] as const).map(b => {
                   const pid = runners[b];
-                  const player = selectablePlayers.find(p => p.playerId === pid);
+                  // 名前は offensePlayers から自動で取得
+                  const player = offensePlayers.find(p => p.playerId === pid);
                   const name = player ? `${player.familyName || ''} ${player.givenName || ''}`.trim() : '-';
                   return (
                     <div key={b} style={{ 

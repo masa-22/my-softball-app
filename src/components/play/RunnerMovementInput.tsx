@@ -585,6 +585,10 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     setShowFinalConfirm(true);
   };
 
+  const notifyGameStatesUpdated = () => {
+    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
+  };
+
   const handleFinalConfirm = () => {
     console.log('最終確認:', {
       beforeRunners,
@@ -605,9 +609,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
       // 得点
       if (scoredRunners.length > 0) {
-        // 現在の攻撃側（top/bottom）は gameState に依存するため、ここでは両方の可能性を考慮しない簡易仕様:
-        // addRunsRealtime は現在の half に加算する前提のため、RunnerMovementInput起動側の half と一致している前提
-        // より厳密にするなら getGameState(matchId)?.top_bottom を参照
         const half = getPlays(matchId).length && currentInningInfo.half ? currentInningInfo.half : 'top';
         addRunsRealtime(matchId, half, scoredRunners.length);
       }
@@ -619,6 +620,9 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       if (outsAfter >= 3) {
         closeHalfInningRealtime(matchId);
       }
+
+      // 追加: 同一タブ内にも即時通知
+      notifyGameStatesUpdated();
     }
 
     setShowFinalConfirm(false);

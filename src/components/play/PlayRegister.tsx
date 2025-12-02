@@ -67,6 +67,22 @@ const PlayRegister: React.FC = () => {
   // 現在のBSO状態（追加）
   const [currentBSO, setCurrentBSO] = useState({ b: 0, s: 0, o: 0 });
 
+  // 追加: gameState のBSOを購読（リアルタイム）
+  React.useEffect(() => {
+    if (!matchId) return;
+    const update = () => {
+      const gs = getGameState(matchId);
+      if (gs) {
+        setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
+      }
+    };
+    update();
+    const t = window.setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+  }, [matchId]);
+
   // ランナー変更ハンドラ
   const handleRunnersChange = (newRunners: { '1': string | null; '2': string | null; '3': string | null }) => {
     console.log('ランナー変更:', newRunners); // デバッグ用
