@@ -236,62 +236,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     if (!batterId) return result;
     
     if (['single', 'droppedthird'].includes(battingResult)) {
-      if (initialRunners['3']) result['3'] = null;
-      if (initialRunners['2']) {
-        result['3'] = initialRunners['2'];
-        result['2'] = null;
-      }
-      if (initialRunners['1']) {
-        result['2'] = initialRunners['1'];
-        result['1'] = null;
-      }
-      result['1'] = batterId;
-    } else if (battingResult === 'double') {
-      if (initialRunners['3']) result['3'] = null;
-      if (initialRunners['2']) result['2'] = null;
-      if (initialRunners['1']) {
-        result['3'] = initialRunners['1'];
-        result['1'] = null;
-      }
-      result['2'] = batterId;
-    } else if (battingResult === 'triple') {
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = batterId;
-    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = null;
-    } else {
-      result['1'] = batterId;
-    }
-    
-    return result;
-  });
-  
-  const [scoredRunners, setScoredRunners] = useState<string[]>([]);
-  const [showScoreConfirm, setShowScoreConfirm] = useState(false);
-  const [pendingScores, setPendingScores] = useState<string[]>([]);
-
-  // ダイアログ表示用state
-  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
-  const [showOutDialog, setShowOutDialog] = useState(false);
-  const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
-  const [pendingOuts, setPendingOuts] = useState<RunnerOut[]>([]);
-  const [showRunnerSelectDialog, setShowRunnerSelectDialog] = useState(false);
-  const [selectedTargetBase, setSelectedTargetBase] = useState<BaseKey | null>(null);
-  const [candidateRunners, setCandidateRunners] = useState<Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }>>([]);
-  const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
-  const [showFinalConfirm, setShowFinalConfirm] = useState(false); // 追加: 最終確認画面
-
-  // 打席結果に応じた初期配置を計算
-  const getInitialAfterRunners = () => {
-    const result = { ...initialRunners };
-    
-    if (!batterId) return result;
-    
-    // ヒット系の場合、既存ランナーを自動進塁
-    if (['single', 'droppedthird'].includes(battingResult)) {
       // シングルヒット: 各ランナーは1つ進塁
       if (initialRunners['3']) {
         result['3'] = null; // 三塁→得点候補（後で確認）
@@ -328,8 +272,118 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       result['1'] = null;
       result['2'] = null;
       result['3'] = null;
+    } else if (battingResult === 'sacrifice_bunt') {
+      // 犠打（バント）: 各ランナーは1つ進塁
+      if (initialRunners['3']) {
+        result['3'] = null; // 三塁→得点
+      }
+      if (initialRunners['2']) {
+        result['3'] = initialRunners['2'];
+        result['2'] = null;
+      }
+      if (initialRunners['1']) {
+        result['2'] = initialRunners['1'];
+        result['1'] = null;
+      }
+      // 打者はアウト（塁に出ない）
+    } else if (battingResult === 'sacrifice_fly') {
+      // 犠牲フライ: 三塁ランナーのみ得点
+      if (initialRunners['3']) {
+        result['3'] = null; // 三塁→得点
+      }
+      // 他のランナーはそのまま
+      // 打者はアウト（塁に出ない）
+    } else if (battingResult === 'bunt_out') {
+      // バント失敗: ランナーはそのまま、打者はアウト
+      // ランナーは進塁しない
     } else {
-      // その他の結果は打者を配置
+      result['1'] = batterId;
+    }
+    
+    return result;
+  });
+  
+  const [scoredRunners, setScoredRunners] = useState<string[]>([]);
+  const [showScoreConfirm, setShowScoreConfirm] = useState(false);
+  const [pendingScores, setPendingScores] = useState<string[]>([]);
+
+  // ダイアログ表示用state
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+  const [showOutDialog, setShowOutDialog] = useState(false);
+  const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
+  const [pendingOuts, setPendingOuts] = useState<RunnerOut[]>([]);
+  const [showRunnerSelectDialog, setShowRunnerSelectDialog] = useState(false);
+  const [selectedTargetBase, setSelectedTargetBase] = useState<BaseKey | null>(null);
+  const [candidateRunners, setCandidateRunners] = useState<Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }>>([]);
+  const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
+  const [showFinalConfirm, setShowFinalConfirm] = useState(false); // 追加: 最終確認画面
+
+  // 打席結果に応じた初期配置を計算
+  const getInitialAfterRunners = () => {
+    const result = { ...initialRunners };
+    
+    if (!batterId) return result;
+    
+    // ヒット系の場合、既存ランナーを自動進塁
+    if (['single', 'droppedthird'].includes(battingResult)) {
+      // シングルヒット: 各ランナーは1つ進塁
+      if (initialRunners['3']) {
+        result['3'] = null; // 三塁→得点
+      }
+      if (initialRunners['2']) {
+        result['3'] = initialRunners['2'];
+        result['2'] = null; // 元の位置をクリア
+      }
+      if (initialRunners['1']) {
+        result['2'] = initialRunners['1'];
+        result['1'] = null; // 元の位置をクリア
+      }
+      result['1'] = batterId;
+    } else if (battingResult === 'double') {
+      // ツーベースヒット: 一塁ランナーは三塁へ、二塁・三塁ランナーは得点候補
+      if (initialRunners['3']) {
+        result['3'] = null; // 得点候補
+      }
+      if (initialRunners['2']) {
+        result['2'] = null; // 得点候補
+      }
+      if (initialRunners['1']) {
+        result['3'] = initialRunners['1'];
+        result['1'] = null; // 元の位置をクリア
+      }
+      result['2'] = batterId;
+    } else if (battingResult === 'triple') {
+      // スリーベースヒット: 全ランナー得点候補
+      result['1'] = null;
+      result['2'] = null;
+      result['3'] = batterId;
+    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
+      // ホームラン・ランニングホームラン: 全員得点
+      result['1'] = null;
+      result['2'] = null;
+      result['3'] = null;
+    } else if (battingResult === 'sacrifice_bunt') {
+      // 犠打（バント）: 各ランナーは1つ進塁
+      if (initialRunners['3']) {
+        result['3'] = null;
+      }
+      if (initialRunners['2']) {
+        result['3'] = initialRunners['2'];
+        result['2'] = null;
+      }
+      if (initialRunners['1']) {
+        result['2'] = initialRunners['1'];
+        result['1'] = null;
+      }
+    } else if (battingResult === 'sacrifice_fly') {
+      // 犠牲フライ: 三塁ランナーのみ得点
+      if (initialRunners['3']) {
+        result['3'] = null;
+      }
+    } else if (battingResult === 'bunt_out') {
+      // バント失敗: ランナーはそのまま
+      // 打者はアウト（塁に出ない）
+    } else {
       result['1'] = batterId;
     }
     
@@ -514,7 +568,11 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const handleCompleteClick = () => {
     // バリデーション
     if (needOutDetails) {
-      const isValid = outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
+      // バント失敗の場合は処理した選手も必須
+      const isValid = battingResult === 'bunt_out'
+        ? outDetails.every(d => d.runnerId && d.base && d.threwPosition && d.caughtPosition)
+        : outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
+      
       if (!isValid) {
         alert('アウト詳細をすべて入力してください');
         return;
@@ -579,12 +637,25 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   React.useEffect(() => {
     const scored: string[] = [];
     
-    // ホームラン・ランニングホームランの場合、全員得点
     if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
+      // ホームラン・ランニングホームランの場合、全員得点
       if (batterId) scored.push(batterId);
       (['3', '2', '1'] as const).forEach(base => {
         if (beforeRunners[base]) scored.push(beforeRunners[base]!);
       });
+    } else if (battingResult === 'sacrifice_bunt') {
+      // 犠打（バント）: 三塁ランナーがいれば得点
+      if (beforeRunners['3']) {
+        scored.push(beforeRunners['3']);
+      }
+    } else if (battingResult === 'sacrifice_fly') {
+      // 犠牲フライ: 三塁ランナーが得点
+      if (beforeRunners['3']) {
+        scored.push(beforeRunners['3']);
+      }
+    } else if (battingResult === 'bunt_out') {
+      // バント失敗: 得点なし
+      // 何もしない
     } else {
       // プレー前のランナーで、プレー後にいない選手は得点候補
       (['1', '2', '3'] as const).forEach(base => {
@@ -829,7 +900,12 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
                     return (
                       <div key={idx} style={{ fontSize: 13, marginBottom: 8, paddingLeft: 12 }}>
                         • {runner?.label}: {runner?.name}<br />
-                        　{baseLabel}で{threwPos ? `${threwPos}から${caughtPos}` : caughtPos}がアウト
+                        　{baseLabel}で
+                        {battingResult === 'bunt_out' && threwPos
+                          ? `${threwPos}が処理し、${caughtPos}がアウト`
+                          : threwPos
+                            ? `${threwPos}から${caughtPos}がアウト`
+                            : `${caughtPos}がアウト`}
                       </div>
                     );
                   })}
@@ -1054,14 +1130,17 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
                 </select>
               </div>
 
+              {/* バント失敗の場合は処理した選手を必須で選択 */}
               <div style={styles.formGroup}>
-                <label style={styles.label}>送球した選手（任意）</label>
+                <label style={styles.label}>
+                  {battingResult === 'bunt_out' ? '処理した選手 *' : '送球した選手（任意）'}
+                </label>
                 <select
                   value={detail.threwPosition}
                   onChange={(e) => handleOutDetailChange(idx, 'threwPosition', e.target.value)}
                   style={styles.select}
                 >
-                  <option value="">なし</option>
+                  <option value="">{battingResult === 'bunt_out' ? '選択してください' : 'なし'}</option>
                   {positionOptions.map(pos => (
                     <option key={pos.value} value={pos.value}>
                       {pos.label}
