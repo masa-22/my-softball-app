@@ -140,14 +140,14 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     const hasRunners = !!(currentRunners['1'] || currentRunners['2'] || currentRunners['3']);
 
     if (isStrikeout) {
-      // 三振はRunnerMovementに遷移せず、その場で完了
+      // 三振はRunnerMovementに遷移せず、その場で完了（親でアウト+1処理）
       if (onComplete) onComplete();
       return;
     }
 
-    // アウト結果かつランナー不在ならRunnerMovementへ遷移せず完了
+    // アウト結果かつランナー不在でも RunnerMovement 経由で親に通知し、親でアウト加算を行う
     if (isOutResult && !hasRunners) {
-      if (onComplete) onComplete();
+      if (onRunnerMovement) onRunnerMovement(result, position);
       return;
     }
 

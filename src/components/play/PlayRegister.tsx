@@ -251,6 +251,22 @@ const PlayRegister: React.FC = () => {
     }
   }, [currentHalf, lineup, homeBatIndex, awayBatIndex, homePlayers, awayPlayers]);
 
+  // 追加: half 切替時に現在投手を更新（攻守交替対応）
+  useEffect(() => {
+    if (!lineup) return;
+    if (currentHalf === 'top') {
+      // 表：home攻撃 → awayが守備（投手はawayの「1」）
+      const pitcherEntry = lineup.away.find((e: any) => e.position === '1');
+      const pitcher = awayPlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
+      setCurrentPitcher(pitcher);
+    } else {
+      // 裏：away攻撃 → homeが守備（投手はhomeの「1」）
+      const pitcherEntry = lineup.home.find((e: any) => e.position === '1');
+      const pitcher = homePlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
+      setCurrentPitcher(pitcher);
+    }
+  }, [currentHalf, lineup, homePlayers, awayPlayers]);
+
   // 打順を1つ進める（半イニングの攻撃側に応じて）
   const advanceBattingOrder = () => {
     if (!lineup) return;
@@ -307,6 +323,8 @@ const PlayRegister: React.FC = () => {
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
           closeHalfInningRealtime(matchId);
+          // 追加: UI側ランナーも即時クリア（攻守交替可視化）
+          setRunners({ '1': null, '2': null, '3': null });
         }
       }
       // 打順前進（結果確定タイミング）
@@ -335,14 +353,13 @@ const PlayRegister: React.FC = () => {
     if (matchId) {
       const gs = getGameState(matchId);
       const currentO = gs?.counts.o ?? 0;
-
-      // BSを0に（アウトは維持または加算後の値）
-      // strikeout の場合のみアウト+1してから BS リセット
       if (pendingOutcome?.kind === 'strikeout') {
         const newO = Math.min(3, currentO + 1);
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
           closeHalfInningRealtime(matchId);
+          // 追加: UI側ランナーも即時クリア
+          setRunners({ '1': null, '2': null, '3': null });
         }
       } else {
         updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
@@ -371,11 +388,13 @@ const PlayRegister: React.FC = () => {
     return { inning: last.inning, half: last.topOrBottom };
   }, [matchId]);
 
+  // 修正: offenseTeamId は gameState の currentHalf を使用して決定
   const offenseTeamId = useMemo(() => {
     if (!match) return null;
-    return currentInningInfo.half === 'top' ? match.homeTeamId : match.awayTeamId;
-  }, [match, currentInningInfo]);
+    return currentHalf === 'top' ? match.homeTeamId : match.awayTeamId;
+  }, [match, currentHalf]);
 
+  // 修正: offensePlayers は offenseTeamId（= currentHalfに連動）で取得
   const offensePlayers = useMemo(() => {
     if (offenseTeamId == null) return [];
     return getPlayers(offenseTeamId);
@@ -503,7 +522,11 @@ const PlayRegister: React.FC = () => {
     const addO = outs.length;
     const newO = Math.min(3, currentO + addO);
     updateCountsRealtime(matchId!, { o: newO });
-    if (newO >= 3) closeHalfInningRealtime(matchId!);
+    if (newO >= 3) {
+      closeHalfInningRealtime(matchId!);
+      // 追加: UI側ランナーも即時クリア
+      setRunners({ '1': null, '2': null, '3': null });
+    }
 
     setRunners(next);
     setShowOutDialog(false);
@@ -555,6 +578,8 @@ const PlayRegister: React.FC = () => {
           onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
           onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
           onSave={() => handleSidebarSave('away')}
+          // 追加: 左サイドにも現在打者IDを渡す（攻撃側がawayのときハイライト）
+          currentBatterId={currentBatter?.playerId}
         />
         <CenterPanel
           activeTab={activeTab}
@@ -603,6 +628,8 @@ const PlayRegister: React.FC = () => {
           onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
           onSave={() => handleSidebarSave('home')}
           currentBattingOrder={currentBattingOrder}
+          // 追加: 右サイドにも現在投手IDを渡す（守備側がhomeのときハイライト）
+          currentPitcherId={currentPitcher?.playerId}
         />
       </div>
     </div>
