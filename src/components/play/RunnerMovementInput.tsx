@@ -797,34 +797,37 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       }
     });
     
-    // 新しい位置に配置
-    if (selectedTargetBase === 'home') {
-      // 本塁への移動は得点なのでafterRunnersからは削除
-      // 得点確認ダイアログで処理される
-    } else {
+    // 新しい位置に配置（ホームは得点として扱うため盤面には置かない）
+    if (selectedTargetBase !== 'home') {
       next[selectedTargetBase] = selectedRunnerId;
     }
-    
     setAfterRunners(next);
-    
+
     // ランナー選択ダイアログを閉じる
     setShowRunnerSelectDialog(false);
-    
+
     // 進塁理由ダイアログを表示
     const player = offensePlayers.find(p => p.playerId === selectedRunnerId);
-    if (player) {
-      const fromBase = candidateRunners.find(r => r.id === selectedRunnerId)?.fromBase;
-      if (fromBase) {
-        setPendingAdvancements([{
-          runnerId: selectedRunnerId,
-          runnerName: `${player.familyName} ${player.givenName}`.trim(),
-          fromBase: fromBase,
-          toBase: selectedTargetBase,
-        }]);
-        setShowAdvanceDialog(true);
-      }
+    const fromBase = candidateRunners.find(r => r.id === selectedRunnerId)?.fromBase;
+    if (player && fromBase) {
+      setPendingAdvancements([{
+        runnerId: selectedRunnerId,
+        runnerName: `${player.familyName} ${player.givenName}`.trim(),
+        fromBase,
+        toBase: selectedTargetBase,
+      }]);
+      setShowAdvanceDialog(true);
     }
-    
+
+    // ホームインの場合は得点確認ダイアログを準備
+    if (selectedTargetBase === 'home') {
+      setPendingScores(prev => {
+        const merged = prev.includes(selectedRunnerId) ? prev : [...prev, selectedRunnerId];
+        return merged;
+      });
+      setShowScoreConfirm(true);
+    }
+
     // 状態をクリア
     setSelectedTargetBase(null);
     setSelectedRunnerId(null);
