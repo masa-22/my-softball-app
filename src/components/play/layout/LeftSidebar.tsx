@@ -11,6 +11,7 @@ interface LeftSidebarProps {
   onPositionChange: (idx: number, val: string) => void;
   onPlayerChange: (idx: number, val: string) => void;
   onSave: () => void;
+  currentBatterId?: string | null;
 }
 
 const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -23,6 +24,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onPositionChange,
   onPlayerChange,
   onSave,
+  currentBatterId,
 }) => {
   return (
     <div>
@@ -31,6 +33,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
         lineup={lineup}
         players={players}
         currentPitcherId={currentPitcher?.playerId}
+        currentBatterId={currentBatterId}
         runners={runners}
         onPositionChange={onPositionChange}
         onPlayerChange={onPlayerChange}

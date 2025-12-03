@@ -12,6 +12,7 @@ interface RightSidebarProps {
   onPlayerChange: (idx: number, val: string) => void;
   onSave: () => void;
   currentBattingOrder: string;
+  currentPitcherId?: string | null;
 }
 
 const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -25,6 +26,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
   onPlayerChange,
   onSave,
   currentBattingOrder,
+  currentPitcherId,
 }) => {
   return (
     <div>
@@ -37,6 +39,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         onPositionChange={onPositionChange}
         onPlayerChange={onPlayerChange}
         onSave={onSave}
+        currentPitcherId={currentPitcherId}
       />
       <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
         <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の打者</div>

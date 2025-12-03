@@ -13,8 +13,14 @@ import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
 import { getMatches } from '../../services/matchService';
 import { getPlays } from '../../services/playService';
-// 追加
-import { updateRunnersRealtime, addRunsRealtime, updateCountsRealtime, closeHalfInningRealtime } from '../../services/gameStateService';
+// 追加: 攻守の現在 half を gameState から取得
+import { 
+  getGameState,
+  updateRunnersRealtime,
+  addRunsRealtime,
+  updateCountsRealtime,
+  closeHalfInningRealtime
+} from '../../services/gameStateService';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -338,6 +344,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
 
+  // 既存の currentInningInfo は保持（回数表示などに使用）
   const currentInningInfo = useMemo(() => {
     if (!matchId) return { inning: 1, half: 'top' as 'top' | 'bottom' };
     const plays = getPlays(matchId);
@@ -346,10 +353,13 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     return { inning: last.inning, half: last.topOrBottom };
   }, [matchId]);
 
+  // 修正: 攻撃側チームIDは gameState の half を使用
   const offenseTeamId = useMemo(() => {
-    if (!match) return null;
-    return currentInningInfo.half === 'top' ? match.homeTeamId : match.awayTeamId;
-  }, [match, currentInningInfo]);
+    if (!match || !matchId) return null;
+    const gs = getGameState(matchId);
+    const half = gs?.top_bottom ?? 'top';
+    return half === 'top' ? match.homeTeamId : match.awayTeamId;
+  }, [match, matchId]);
 
   const offensePlayers = useMemo(() => {
     if (offenseTeamId == null) return [];
