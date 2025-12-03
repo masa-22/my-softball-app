@@ -7,6 +7,8 @@ import { useParams } from 'react-router-dom';
 import DiamondField from './runner/DiamondField';
 import AdvanceReasonDialog, { RunnerAdvancement, AdvanceReasonResult } from './runner/AdvanceReasonDialog';
 import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonDialog';
+import FinalConfirmDialog from './runner/FinalConfirmDialog';
+import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
 import { getMatches } from '../../services/matchService';
@@ -231,78 +233,72 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 }) => {
   const { matchId } = useParams<{ matchId: string }>();
   const [beforeRunners] = useState(initialRunners);
-  const [initialAfterRunners] = useState(() => {
-    // 初期配置を記録しておく
-    const result = { ...initialRunners };
-    
-    if (!batterId) return result;
-    
-    if (['single', 'droppedthird'].includes(battingResult)) {
-      // シングルヒット: 各ランナーは1つ進塁
-      if (initialRunners['3']) {
-        result['3'] = null; // 三塁→得点候補（後で確認）
-      }
-      if (initialRunners['2']) {
-        result['3'] = initialRunners['2'];
-        result['2'] = null; // 元の位置をクリア
-      }
-      if (initialRunners['1']) {
-        result['2'] = initialRunners['1'];
-        result['1'] = null; // 元の位置をクリア
-      }
-      result['1'] = batterId;
-    } else if (battingResult === 'double') {
-      // ツーベースヒット: 一塁ランナーは三塁へ、二塁・三塁ランナーは得点候補
-      if (initialRunners['3']) {
-        result['3'] = null; // 得点候補
-      }
-      if (initialRunners['2']) {
-        result['2'] = null; // 得点候補
-      }
-      if (initialRunners['1']) {
-        result['3'] = initialRunners['1'];
-        result['1'] = null; // 元の位置をクリア
-      }
-      result['2'] = batterId;
-    } else if (battingResult === 'triple') {
-      // スリーベースヒット: 全ランナー得点候補
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = batterId;
-    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
-      // ホームラン・ランニングホームラン: 全員得点
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = null;
-    } else if (battingResult === 'sacrifice_bunt') {
-      // 犠打（バント）: 各ランナーは1つ進塁
-      if (initialRunners['3']) {
-        result['3'] = null; // 三塁→得点
-      }
-      if (initialRunners['2']) {
-        result['3'] = initialRunners['2'];
-        result['2'] = null;
-      }
-      if (initialRunners['1']) {
-        result['2'] = initialRunners['1'];
-        result['1'] = null;
-      }
-      // 打者はアウト（塁に出ない）
-    } else if (battingResult === 'sacrifice_fly') {
-      // 犠牲フライ: 三塁ランナーのみ得点
-      if (initialRunners['3']) {
-        result['3'] = null; // 三塁→得点
-      }
-      // 他のランナーはそのまま
-      // 打者はアウト（塁に出ない）
-    } else if (battingResult === 'bunt_out') {
-      // バント失敗: ランナーはそのまま、打者はアウト
-      // ランナーは進塁しない
-    } else {
-      result['1'] = batterId;
+  // 追加: 打席結果→進塁数のマッピング（打者・既存ランナーともに同じ距離）
+  const getAdvanceDistance = (result: string) => {
+    switch (result) {
+      case 'single':
+      case 'droppedthird':
+      case 'error':
+      case 'walk': // 将来的に明示的に渡す場合のため
+      case 'deadball': // 将来的に明示的に渡す場合のため
+        return 1;
+      case 'double':
+        return 2;
+      case 'triple':
+        return 3;
+      case 'homerun':
+      case 'runninghomerun':
+        return 4;
+      default:
+        return 0;
     }
-    
-    return result;
+  };
+
+  // 追加: 共通進塁関数（n塁進む。ホーム到達は盤面から外れて得点候補）
+  const advanceRunnersBy = (
+    before: { '1': string | null; '2': string | null; '3': string | null },
+    batterId: string | null,
+    n: number
+  ) => {
+    const after: { '1': string | null; '2': string | null; '3': string | null } = { '1': null, '2': null, '3': null };
+    const scored: string[] = [];
+
+    const bases = ['1', '2', '3'] as const;
+    // 既存ランナーは現在の塁番号(1/2/3)から n だけ進塁
+    for (let i = bases.length - 1; i >= 0; i--) {
+      const base = bases[i];
+      const runner = before[base];
+      if (!runner) continue;
+      const startIndex = i + 1; // 1→1, 2→2, 3→3
+      const targetIndex = startIndex + n;
+      if (targetIndex >= 4) {
+        scored.push(runner);
+      } else {
+        const targetBase = String(targetIndex) as '1' | '2' | '3';
+        after[targetBase] = runner;
+      }
+    }
+
+    // 打者の進塁（スタートは0塁）
+    if (batterId) {
+      const batterTarget = n; // 0塁（ホーム）から n だけ進塁
+      if (batterTarget >= 4) {
+        scored.push(batterId);
+      } else if (batterTarget > 0) {
+        const targetBase = String(batterTarget) as '1' | '2' | '3';
+        if (!after[targetBase]) after[targetBase] = batterId;
+      }
+    }
+
+    return { after, scored };
+  };
+
+  // 変更: 初期配置（自動進塁）計算を共通関数で
+  const [initialAfterRunners] = useState(() => {
+    const n = getAdvanceDistance(battingResult);
+    if (!batterId || n === 0) return { ...initialRunners };
+    const { after } = advanceRunnersBy(initialRunners, batterId, n);
+    return after;
   });
   
   const [scoredRunners, setScoredRunners] = useState<string[]>([]);
@@ -322,74 +318,10 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   // 打席結果に応じた初期配置を計算
   const getInitialAfterRunners = () => {
-    const result = { ...initialRunners };
-    
-    if (!batterId) return result;
-    
-    // ヒット系の場合、既存ランナーを自動進塁
-    if (['single', 'droppedthird'].includes(battingResult)) {
-      // シングルヒット: 各ランナーは1つ進塁
-      if (initialRunners['3']) {
-        result['3'] = null; // 三塁→得点
-      }
-      if (initialRunners['2']) {
-        result['3'] = initialRunners['2'];
-        result['2'] = null; // 元の位置をクリア
-      }
-      if (initialRunners['1']) {
-        result['2'] = initialRunners['1'];
-        result['1'] = null; // 元の位置をクリア
-      }
-      result['1'] = batterId;
-    } else if (battingResult === 'double') {
-      // ツーベースヒット: 一塁ランナーは三塁へ、二塁・三塁ランナーは得点候補
-      if (initialRunners['3']) {
-        result['3'] = null; // 得点候補
-      }
-      if (initialRunners['2']) {
-        result['2'] = null; // 得点候補
-      }
-      if (initialRunners['1']) {
-        result['3'] = initialRunners['1'];
-        result['1'] = null; // 元の位置をクリア
-      }
-      result['2'] = batterId;
-    } else if (battingResult === 'triple') {
-      // スリーベースヒット: 全ランナー得点候補
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = batterId;
-    } else if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
-      // ホームラン・ランニングホームラン: 全員得点
-      result['1'] = null;
-      result['2'] = null;
-      result['3'] = null;
-    } else if (battingResult === 'sacrifice_bunt') {
-      // 犠打（バント）: 各ランナーは1つ進塁
-      if (initialRunners['3']) {
-        result['3'] = null;
-      }
-      if (initialRunners['2']) {
-        result['3'] = initialRunners['2'];
-        result['2'] = null;
-      }
-      if (initialRunners['1']) {
-        result['2'] = initialRunners['1'];
-        result['1'] = null;
-      }
-    } else if (battingResult === 'sacrifice_fly') {
-      // 犠牲フライ: 三塁ランナーのみ得点
-      if (initialRunners['3']) {
-        result['3'] = null;
-      }
-    } else if (battingResult === 'bunt_out') {
-      // バント失敗: ランナーはそのまま
-      // 打者はアウト（塁に出ない）
-    } else {
-      result['1'] = batterId;
-    }
-    
-    return result;
+    const n = getAdvanceDistance(battingResult);
+    if (!batterId || n === 0) return { ...initialRunners };
+    const { after } = advanceRunnersBy(initialRunners, batterId, n);
+    return after;
   };
 
   const [afterRunners, setAfterRunners] = useState(getInitialAfterRunners());
@@ -661,48 +593,38 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     setPendingOuts([]);
   };
 
-  // 得点した選手を計算
+  // 得点した選手を計算（自動進塁でホーム到達した候補も拾う）
   React.useEffect(() => {
     const scored: string[] = [];
-    
-    if (battingResult === 'homerun' || battingResult === 'runninghomerun') {
-      // ホームラン・ランニングホームランの場合、全員得点
-      if (batterId) scored.push(batterId);
-      (['3', '2', '1'] as const).forEach(base => {
-        if (beforeRunners[base]) scored.push(beforeRunners[base]!);
-      });
-    } else if (battingResult === 'sacrifice_bunt') {
-      // 犠打（バント）: 三塁ランナーがいれば得点
-      if (beforeRunners['3']) {
-        scored.push(beforeRunners['3']);
-      }
-    } else if (battingResult === 'sacrifice_fly') {
-      // 犠牲フライ: 三塁ランナーが得点
-      if (beforeRunners['3']) {
-        scored.push(beforeRunners['3']);
-      }
-    } else if (battingResult === 'bunt_out') {
-      // バント失敗: 得点なし
-      // 何もしない
-    } else {
-      // プレー前のランナーで、プレー後にいない選手は得点候補
+
+    const n = getAdvanceDistance(battingResult);
+    if (n > 0) {
+      // 自動進塁の計算結果からホーム到達を算出（before→afterの差分も許容）
       (['1', '2', '3'] as const).forEach(base => {
-        const playerId = beforeRunners[base];
-        if (playerId) {
-          const stillOnBase = Object.values(afterRunners).includes(playerId);
-          if (!stillOnBase) {
-            scored.push(playerId);
-          }
+        const pid = beforeRunners[base];
+        if (!pid) return;
+        const stillOnBase = Object.values(afterRunners).includes(pid);
+        if (!stillOnBase) {
+          // 盤面にいなければ「得点候補 or アウト」だが、打撃イベント進塁では基本は得点候補とみなす
+          scored.push(pid);
         }
       });
+      // 打者のホーム到達（afterにいなければ候補）
+      if (batterId && !Object.values(afterRunners).includes(batterId)) {
+        scored.push(batterId);
+      }
+    } else if (battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
+      // 既存の犠打・犠飛の取り扱いを維持
+      if (beforeRunners['3']) scored.push(beforeRunners['3']!);
     }
-    
+    // バント失敗などは得点なし
+
     if (scored.length > 0 && !showScoreConfirm && scoredRunners.length === 0) {
       setPendingScores(scored);
       setShowScoreConfirm(true);
     }
   }, [beforeRunners, afterRunners, battingResult, batterId]);
-
+  
   const handleConfirmScores = () => {
     setScoredRunners(pendingScores);
     setShowScoreConfirm(false);
@@ -785,6 +707,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     setOutDetails(newDetails);
   };
 
+  // ダイアログハンドラ（置換用）
   const handleRunnerSelectConfirm = () => {
     if (!selectedTargetBase || !selectedRunnerId) return;
     
@@ -848,178 +771,37 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       {/* 最終確認ダイアログ */}
       {showFinalConfirm && (
         <>
-          <div style={styles.confirmOverlay} onClick={handleFinalCancel} />
-          <div style={styles.confirmDialog}>
-            <div style={styles.confirmTitle}>入力内容の確認</div>
-            
-            <div style={styles.confirmList}>
-              {/* アウトカウント */}
-              <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#495057', marginBottom: 8 }}>
-                  アウトカウント
-                </div>
-                <div style={{ fontSize: 14 }}>
-                  {initialOuts}アウト → {outsAfter}アウト
-                </div>
-              </div>
-
-              {/* 得点 */}
-              {scoredRunners.length > 0 && (
-                <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1c7ed6', marginBottom: 8 }}>
-                    得点 ({scoredRunners.length}点)
-                  </div>
-                  {scoredRunners.map((playerId, idx) => (
-                    <div key={idx} style={{ fontSize: 14, marginBottom: 4 }}>
-                      • {getPlayerName(playerId)}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ランナー状況 */}
-              <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #dee2e6' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#495057', marginBottom: 8 }}>
-                  ランナー状況
-                </div>
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>プレー前</div>
-                    {(['1', '2', '3'] as const).map(base => {
-                      const playerId = beforeRunners[base];
-                      if (!playerId) return null;
-                      return (
-                        <div key={base} style={{ fontSize: 13, marginBottom: 2 }}>
-                          {base === '1' ? '一' : base === '2' ? '二' : '三'}塁: {getPlayerName(playerId)}
-                        </div>
-                      );
-                    })}
-                    {!beforeRunners['1'] && !beforeRunners['2'] && !beforeRunners['3'] && (
-                      <div style={{ fontSize: 13, color: '#6c757d' }}>なし</div>
-                    )}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, color: '#6c757d', marginBottom: 4 }}>プレー後</div>
-                    {(['1', '2', '3'] as const).map(base => {
-                      const playerId = afterRunners[base];
-                      if (!playerId) return null;
-                      return (
-                        <div key={base} style={{ fontSize: 13, marginBottom: 2 }}>
-                          {base === '1' ? '一' : base === '2' ? '二' : '三'}塁: {getPlayerName(playerId)}
-                        </div>
-                      );
-                    })}
-                    {!afterRunners['1'] && !afterRunners['2'] && !afterRunners['3'] && (
-                      <div style={{ fontSize: 13, color: '#6c757d' }}>なし</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* アウト詳細 */}
-              {needOutDetails && outDetails.some(d => d.runnerId) && (
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#856404', marginBottom: 8 }}>
-                    アウト詳細
-                  </div>
-                  {outDetails.filter(d => d.runnerId).map((detail, idx) => {
-                    const runner = possibleOutRunners.find(r => r.id === detail.runnerId);
-                    const baseLabel = baseOptions.find(b => b.value === detail.base)?.label;
-                    const caughtPos = positionOptions.find(p => p.value === detail.caughtPosition)?.label;
-                    const threwPos = detail.threwPosition ? positionOptions.find(p => p.value === detail.threwPosition)?.label : null;
-                    
-                    return (
-                      <div key={idx} style={{ fontSize: 13, marginBottom: 8, paddingLeft: 12 }}>
-                        • {runner?.label}: {runner?.name}<br />
-                        　{baseLabel}で
-                        {battingResult === 'bunt_out' && threwPos
-                          ? `${threwPos}が処理し、${caughtPos}がアウト`
-                          : threwPos
-                            ? `${threwPos}から${caughtPos}がアウト`
-                            : `${caughtPos}がアウト`}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 14, color: '#6c757d', marginTop: 16, marginBottom: 20, textAlign: 'center' }}>
-              この内容で登録してもよろしいですか？
-            </div>
-
-            <div style={styles.confirmButtons}>
-              <button
-                type="button"
-                onClick={handleFinalCancel}
-                style={{ ...styles.button('cancel'), padding: '8px 20px' }}
-              >
-                戻る
-              </button>
-              <button
-                type="button"
-                onClick={handleFinalConfirm}
-                style={{ ...styles.button('complete'), padding: '8px 20px' }}
-              >
-                登録する
-              </button>
-            </div>
-          </div>
+          {/* 既存の overlay はコンポーネント内に内包するため削除 */}
+          <FinalConfirmDialog
+            initialOuts={initialOuts}
+            outsAfter={outsAfter}
+            scoredRunners={scoredRunners}
+            beforeRunners={beforeRunners}
+            afterRunners={afterRunners}
+            getPlayerName={getPlayerName}
+            needOutDetails={needOutDetails}
+            outDetails={outDetails}
+            positionOptions={positionOptions}
+            baseOptions={baseOptions}
+            battingResult={battingResult}
+            onCancel={handleFinalCancel}
+            onConfirm={handleFinalConfirm}
+          />
         </>
       )}
 
       {/* ランナー選択ダイアログ */}
       {showRunnerSelectDialog && (
         <>
-          <div style={styles.confirmOverlay} onClick={handleRunnerSelectCancel} />
-          <div style={styles.confirmDialog}>
-            <div style={styles.confirmTitle}>
-              {selectedTargetBase === 'home' 
-                ? 'ホームに進むランナーを選択' 
-                : `${selectedTargetBase === '1' ? '一' : selectedTargetBase === '2' ? '二' : '三'}塁に進むランナーを選択`}
-            </div>
-            <div style={styles.confirmList}>
-              {candidateRunners.map((runner) => (
-                <div 
-                  key={runner.id} 
-                  style={{ 
-                    padding: '12px', 
-                    marginBottom: 8,
-                    background: selectedRunnerId === runner.id ? '#4c6ef5' : '#f8f9fa',
-                    color: selectedRunnerId === runner.id ? '#fff' : '#212529',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    fontWeight: selectedRunnerId === runner.id ? 600 : 400,
-                  }}
-                  onClick={() => setSelectedRunnerId(runner.id)}
-                >
-                  {runner.name}
-                </div>
-              ))}
-            </div>
-            <div style={styles.confirmButtons}>
-              <button
-                type="button"
-                onClick={handleRunnerSelectCancel}
-                style={{ ...styles.button('cancel'), padding: '8px 20px' }}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={handleRunnerSelectConfirm}
-                disabled={!selectedRunnerId}
-                style={{ 
-                  ...styles.button('complete'), 
-                  padding: '8px 20px',
-                  opacity: selectedRunnerId ? 1 : 0.5,
-                  cursor: selectedRunnerId ? 'pointer' : 'not-allowed',
-                }}
-              >
-                確定
-              </button>
-            </div>
-          </div>
+          {/* 既存の overlay はコンポーネント内に内包するため削除 */}
+          <RunnerSelectDialog
+            selectedTargetBase={selectedTargetBase}
+            candidates={candidateRunners}
+            selectedRunnerId={selectedRunnerId}
+            setSelectedRunnerId={setSelectedRunnerId}
+            onCancel={handleRunnerSelectCancel}
+            onConfirm={handleRunnerSelectConfirm}
+          />
         </>
       )}
 
@@ -1046,6 +828,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       {/* 得点確認ダイアログ */}
       {showScoreConfirm && (
         <>
+          {/* 既存の overlay は維持 */}
           <div style={styles.confirmOverlay} onClick={handleCancelScores} />
           <div style={styles.confirmDialog}>
             <div style={styles.confirmTitle}>
