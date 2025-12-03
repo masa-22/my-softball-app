@@ -1,15 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState } from 'react';
 import MiniScoreBoard from './common/MiniScoreBoard';
 import MiniDiamondField from './pitch/MiniDiamondField';
 import PitchTypeSelector, { PitchType } from './common/PitchTypeSelector';
 import StrikeZoneGrid from './pitch/StrikeZoneGrid';
 import PitchResultSelector from './pitch/PitchResultSelector';
-
-import { getMatches } from '../../services/matchService';
-import { getTeams } from '../../services/teamService';
-import { getPlays } from '../../services/playService';
-import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../../services/gameStateService';
 
 // --- 型定義 ---
 interface PitchData {
@@ -67,55 +61,27 @@ const styles = {
 interface PitchCourseInputProps {
   onInplayCommit?: () => void;
   onStrikeoutCommit?: (isSwinging: boolean) => void;
-  onWalkCommit?: () => void; // 追加: フォアボール・デッドボール時のコールバック
+  onWalkCommit?: () => void;
+  // 追加: 親から受け取る表示用状態と更新コールバック
+  bso: { b: number; s: number; o: number };
+  runners: { '1': string | null; '2': string | null; '3': string | null };
+  onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
+  onCountsReset: () => void;
 }
 
-const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onStrikeoutCommit, onWalkCommit }) => {
-  const { matchId } = useParams<{ matchId: string }>();
-  const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
-
-  // スコアボードのチーム名は略称（teamAbbr）
-  const teamNames = useMemo(() => {
-    if (!match) return { home: '先攻', away: '後攻' };
-    const teams = getTeams();
-    const home = teams.find(t => String(t.id) === String(match.homeTeamId));
-    const away = teams.find(t => String(t.id) === String(match.awayTeamId));
-    return { home: home?.teamAbbr || '先攻', away: away?.teamAbbr || '後攻' };
-  }, [match]);
-
-  // 現在イニング（playsから推定）
-  const currentInningInfo = useMemo(() => {
-    if (!matchId) return { inning: 1, halfLabel: '表' };
-    const plays = getPlays(matchId);
-    if (!plays.length) return { inning: 1, halfLabel: '表' };
-    const last = plays[plays.length - 1];
-    return { inning: last.inning, halfLabel: last.topOrBottom === 'top' ? '表' : '裏' };
-  }, [matchId]);
-
+const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
+  onInplayCommit,
+  onStrikeoutCommit,
+  onWalkCommit,
+  bso,
+  runners,
+  onCountsChange,
+  onCountsReset,
+}) => {
   const [pitches, setPitches] = useState<PitchData[]>([]);
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
-  const [bso, setBso] = useState({ b: 0, s: 0, o: 0 });
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
   const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | ''>('');
-  const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
-    '1': null, '2': null, '3': null,
-  });
-
-  // ▼ 追加: gameState のランナー購読（リアルタイム）
-  React.useEffect(() => {
-    if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
-      if (gs) {
-        setRunners({ '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] });
-      }
-    };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
-  }, [matchId]);
 
   const handleZoneClick = (x: number, y: number) => {
     setPendingPoint({ x, y });
@@ -132,67 +98,49 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onS
       order: pitches.length + 1,
       result: pendingResult,
     };
-    setPitches([...pitches, newPitch]);
+    setPitches(prev => [...prev, newPitch]);
 
-    // 現在のカウントを取得
+    // 子はロジックを持たず、次のカウント更新を親へ委譲
     const currentBalls = bso.b;
     const currentStrikes = bso.s;
 
-    setBso(prev => {
-      let { b, s, o } = prev;
-      if (pendingResult === 'ball') b = Math.min(3, b + 1);
-      else if (pendingResult === 'swing' || pendingResult === 'looking') s = Math.min(2, s + 1);
-      else if (pendingResult === 'inplay') o = Math.min(2, o + 1);
-      else if (pendingResult === 'deadball') b = 3;
+    // デッドボールは即座に親へ通知（フォアボール同様）
+    if (pendingResult === 'deadball') {
+      onWalkCommit && onWalkCommit();
+      setPendingPoint(null);
+      setPendingResult('');
+      return;
+    }
 
-      // 逐次 gameState 更新
-      if (matchId) {
-        updateCountsRealtime(matchId, { b, s, o });
-      }
-
-      // デッドボールは即座にランナー動き入力画面へ
-      if (pendingResult === 'deadball') {
-        setTimeout(() => {
-          if (onWalkCommit) onWalkCommit();
-        }, 0);
+    // カウントの増分は親へ提示（親がgame_statesへ反映）
+    if (pendingResult === 'ball') {
+      onCountsChange({ b: Math.min(3, bso.b + 1) });
+      // 4球到達（3→4）は親へフォアボール遷移依頼
+      if (currentBalls === 3) {
+        onWalkCommit && onWalkCommit();
         setPendingPoint(null);
         setPendingResult('');
-        return prev; // 遷移優先
+        return;
       }
-
-      // 4ボール目（3→4）はフォアボール遷移
-      if (currentBalls === 3 && pendingResult === 'ball') {
-        setTimeout(() => {
-          if (onWalkCommit) onWalkCommit();
-        }, 0);
-        setPendingPoint(null);
-        setPendingResult('');
-        return prev;
-      }
-
-      // 3ストライク目で三振遷移
-      if (currentStrikes === 2 && (pendingResult === 'swing' || pendingResult === 'looking')) {
+    } else if (pendingResult === 'swing' || pendingResult === 'looking') {
+      onCountsChange({ s: Math.min(2, bso.s + 1) });
+      // 3ストライク到達（2→3）は親へ三振遷移依頼＋カウントリセット依頼
+      if (currentStrikes === 2) {
         const isSwinging = pendingResult === 'swing';
-        setTimeout(() => {
-          if (onStrikeoutCommit) onStrikeoutCommit(isSwinging);
-        }, 0);
-        // 打席終了後、B/Sをリセット（Oは別管理）
-        if (matchId) resetCountsRealtime(matchId);
+        onStrikeoutCommit && onStrikeoutCommit(isSwinging);
+        onCountsReset && onCountsReset();
       }
-
-      return { b, s, o };
-    });
+    } else if (pendingResult === 'inplay') {
+      // インプレイ後の詳細は親が扱う
+      onInplayCommit && onInplayCommit();
+    }
 
     setPendingPoint(null);
     setPendingResult('');
-
-    if (pendingResult === 'inplay' && onInplayCommit) {
-      onInplayCommit();
-    }
   };
 
   const getPitchTypeName = (type: PitchType): string => {
-    const pitchTypesList: { type: PitchType; label: string }[] = [
+    return [
       { type: 'rise', label: 'ライズ' },
       { type: 'drop', label: 'ドロップ' },
       { type: 'cut', label: 'カット' },
@@ -200,8 +148,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({ onInplayCommit, onS
       { type: 'chenrai', label: 'チェンライ' },
       { type: 'slider', label: 'スライダー' },
       { type: 'unknown', label: '不明' },
-    ];
-    return pitchTypesList.find(p => p.type === type)?.label || '不明';
+    ].find(p => p.type === type)?.label || '不明';
   };
 
   return (

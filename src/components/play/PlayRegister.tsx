@@ -5,17 +5,15 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import ScoreBoard from './ScoreBoard';
-import RunnerStatus from './RunnerStatus';
-import PitchCourseInput from './PitchCourseInput';
-import PlayResultPanel from './PlayResultPanel';
-import LineupPanel from './LineupPanel';
-import RunnerMovementInput from './RunnerMovementInput';
 import { getMatches } from '../../services/matchService';
 import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
 import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
-import { getGameState } from '../../services/gameStateService';
+import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../../services/gameStateService';
+import LeftSidebar from './layout/LeftSidebar.tsx';
+import CenterPanel from './layout/CenterPanel.tsx';
+import RightSidebar from './layout/RightSidebar.tsx';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
 
@@ -87,6 +85,28 @@ const PlayRegister: React.FC = () => {
   const handleRunnersChange = (newRunners: { '1': string | null; '2': string | null; '3': string | null }) => {
     console.log('ランナー変更:', newRunners); // デバッグ用
     setRunners(newRunners);
+  };
+
+  // 追加: PitchCourseInputからのカウント更新要求を親で処理
+  const handleCountsChange = (partial: { b?: number; s?: number; o?: number }) => {
+    if (!matchId) return;
+    // 現在値に部分更新を適用
+    const next = { ...currentBSO, ...partial };
+    setCurrentBSO(next);
+    // DB反映は親で管理
+    updateCountsRealtime(matchId, next);
+  };
+
+  const handleCountsReset = () => {
+    if (!matchId) return;
+    resetCountsRealtime(matchId);
+    // ローカルも同期
+    const gs = getGameState(matchId);
+    if (gs) {
+      setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
+    } else {
+      setCurrentBSO({ b: 0, s: 0, o: 0 });
+    }
   };
 
   useEffect(() => {
@@ -242,151 +262,50 @@ const PlayRegister: React.FC = () => {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20, backgroundColor: '#f8f9fa' }}>
-      {/* スコアボード（常時上部） */}
       <ScoreBoard />
-
-      {/* 本体は3カラム: 左=後攻ラインナップ, 中央=入力UI, 右=先攻ラインナップ */}
       <div style={{ display:'grid', gridTemplateColumns:'280px 1fr 280px', gap:16 }}>
-        {/* 左（後攻） */}
-        <div>
-          <LineupPanel
-            teamName={awayTeamName}
-            lineup={awayLineup}
-            players={awayPlayers}
-            currentPitcherId={currentPitcher?.playerId}
-            runners={runners}
-            onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
-            onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
-            onSave={() => handleSidebarSave('away')}
-          />
-          
-          {/* 投手情報 */}
-          <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
-            <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の投手</div>
-            <div style={{ marginBottom: 6, fontSize: 15, fontWeight: 500 }}>
-              {currentPitcher ? `${currentPitcher.familyName} ${currentPitcher.givenName}` : '—'}
-            </div>
-            <div style={{ fontSize: 12, color: '#6c757d' }}>
-              {`投球回: ${pitcherStats.inningStr}回 / 球数: ${pitcherStats.total}球`}
-            </div>
-            <div style={{ fontSize: 12, color: '#6c757d' }}>
-              {`S:${pitcherStats.strikes} B:${pitcherStats.balls}`}
-            </div>
-          </div>
-        </div>
-
-        {/* 中央: タブ or プレー結果入力 or ランナー動き入力 */}
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          {showRunnerMovement ? (
-            <RunnerMovementInput 
-              onComplete={handlePlayResultComplete}
-              onCancel={handlePlayResultComplete}
-              initialRunners={runners}
-              battingResult={battingResultForMovement}
-              batterId={currentBatter?.playerId}
-              initialOuts={currentBSO.o}
-            />
-          ) : !showPlayResult ? (
-            <>
-              {/* タブ切り替え */}
-              <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid #dee2e6', marginBottom: 16 }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('pitch')}
-                  style={{ 
-                    padding: '12px 20px', 
-                    background: activeTab === 'pitch' ? '#4c6ef5' : 'transparent', 
-                    color: activeTab === 'pitch' ? '#fff' : '#495057', 
-                    border: 'none', 
-                    borderRadius: '8px 8px 0 0', 
-                    fontWeight: 600, 
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  コース・球種
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('runner')}
-                  style={{ 
-                    padding: '12px 20px', 
-                    background: activeTab === 'runner' ? '#4c6ef5' : 'transparent', 
-                    color: activeTab === 'runner' ? '#fff' : '#495057', 
-                    border: 'none', 
-                    borderRadius: '8px 8px 0 0', 
-                    fontWeight: 600, 
-                    cursor: 'pointer',
-                    fontSize: 15,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  ランナー
-                </button>
-              </div>
-
-              <div>
-                {activeTab === 'pitch' ? (
-                  <PitchCourseInput 
-                    onInplayCommit={handleInplayCommit} 
-                    onStrikeoutCommit={handleStrikeoutCommit}
-                    onWalkCommit={handleWalkCommit}
-                  />
-                ) : activeTab === 'runner' ? (
-                  <RunnerStatus onChange={handleRunnersChange} />
-                ) : null}
-              </div>
-            </>
-          ) : (
-            <PlayResultPanel 
-              onComplete={handlePlayResultComplete} 
-              strikeoutType={strikeoutType}
-              onRunnerMovement={handleRunnerMovement}
-              currentRunners={runners}
-              currentOuts={currentBSO.o}
-            />
-          )}
-        </div>
-
-        {/* 右（先攻） */}
-        <div>
-          <LineupPanel
-            teamName={homeTeamName}
-            lineup={homeLineup}
-            players={homePlayers}
-            currentBatterId={currentBatter?.playerId}
-            runners={runners}
-            onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
-            onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
-            onSave={() => handleSidebarSave('home')}
-          />
-          
-          {/* 打者情報 */}
-          <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
-            <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の打者</div>
-            <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {currentBattingOrder && <span style={{ fontWeight: 700, fontSize: 18, color: '#212529' }}>{currentBattingOrder}</span>}
-              <span style={{ fontSize: 15, fontWeight: 500 }}>
-                {currentBatter ? `${currentBatter.familyName} ${currentBatter.givenName}` : '—'}
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: '#6c757d' }}>
-              {recentBatterResults.length > 0 ? (
-                <div>
-                  直近打席:
-                  <ul style={{ margin: '4px 0 0 16px', paddingLeft: 0 }}>
-                    {recentBatterResults.map((r, i) => (
-                      <li key={i} style={{ fontSize: 11 }}>{`${r.inning}回${r.half === 'top' ? '表' : '裏'}: ${r.result}`}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <span>過去打席なし</span>
-              )}
-            </div>
-          </div>
-        </div>
+        <LeftSidebar
+          teamName={awayTeamName}
+          lineup={awayLineup}
+          players={awayPlayers}
+          currentPitcher={currentPitcher}
+          pitcherStats={pitcherStats}
+          runners={runners}
+          onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
+          onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
+          onSave={() => handleSidebarSave('away')}
+        />
+        <CenterPanel
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          showRunnerMovement={showRunnerMovement}
+          showPlayResult={showPlayResult}
+          currentBSO={currentBSO}
+          runners={runners}
+          currentBatterId={currentBatter?.playerId}
+          battingResultForMovement={battingResultForMovement}
+          onPlayResultComplete={handlePlayResultComplete}
+          onInplayCommit={handleInplayCommit}
+          onStrikeoutCommit={handleStrikeoutCommit}
+          onWalkCommit={handleWalkCommit}
+          onRunnerMovement={handleRunnerMovement}
+          onRunnersChange={handleRunnersChange}
+          onCountsChange={handleCountsChange}
+          onCountsReset={handleCountsReset}
+          strikeoutType={strikeoutType}
+        />
+        <RightSidebar
+          teamName={homeTeamName}
+          lineup={homeLineup}
+          players={homePlayers}
+          currentBatter={currentBatter}
+          recentBatterResults={recentBatterResults}
+          runners={runners}
+          onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
+          onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
+          onSave={() => handleSidebarSave('home')}
+          currentBattingOrder={currentBattingOrder}
+        />
       </div>
     </div>
   );
