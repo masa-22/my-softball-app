@@ -10,7 +10,7 @@ import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
 import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
-import { getGameState, updateCountsRealtime, resetCountsRealtime, updateRunnersRealtime, addRunsRealtime, closeHalfInningRealtime } from '../../services/gameStateService';
+import { getGameState, updateCountsRealtime, resetCountsRealtime, updateRunnersRealtime, addRunsRealtime, closeHalfInningRealtime, updateMatchupRealtime } from '../../services/gameStateService';
 import LeftSidebar from './layout/LeftSidebar';
 import CenterPanel from './layout/CenterPanel';
 import RightSidebar from './layout/RightSidebar';
@@ -210,16 +210,104 @@ const PlayRegister: React.FC = () => {
     saveLineup(matchId, updatedLineup);
   };
 
+  // 追加: 打順インデックス（homeが先攻）
+  const [homeBatIndex, setHomeBatIndex] = useState<number>(0);
+  const [awayBatIndex, setAwayBatIndex] = useState<number>(0);
+
+  // 追加: 現在の攻撃側 half を gameState からリアルタイム購読
+  const [currentHalf, setCurrentHalf] = useState<'top' | 'bottom'>('top');
+  useEffect(() => {
+    if (!matchId) return;
+    const update = () => {
+      const gs = getGameState(matchId);
+      if (gs) setCurrentHalf(gs.top_bottom);
+    };
+    update();
+    const t = window.setInterval(update, 500);
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
+    window.addEventListener('storage', onStorage);
+    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
+  }, [matchId]);
+
+  // 初期打者/投手設定時にインデックス初期化
+  useEffect(() => {
+    if (!lineup) return;
+    setHomeBatIndex(0);
+    setAwayBatIndex(0);
+  }, [lineup]);
+
+  // 追加: 現在の half と打順に応じて currentBatter を更新
+  useEffect(() => {
+    if (!lineup) return;
+    // top = home が攻撃
+    if (currentHalf === 'top') {
+      const entry = lineup.home[homeBatIndex % lineup.home.length];
+      const batter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
+      setCurrentBatter(batter);
+    } else {
+      const entry = lineup.away[awayBatIndex % lineup.away.length];
+      const batter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
+      setCurrentBatter(batter);
+    }
+  }, [currentHalf, lineup, homeBatIndex, awayBatIndex, homePlayers, awayPlayers]);
+
+  // 打順を1つ進める（半イニングの攻撃側に応じて）
+  const advanceBattingOrder = () => {
+    if (!lineup) return;
+    if (currentHalf === 'top') {
+      setHomeBatIndex(idx => (idx + 1) % lineup.home.length);
+    } else {
+      setAwayBatIndex(idx => (idx + 1) % lineup.away.length);
+    }
+  };
+
   // インプレイ登録時のコールバック
   const handleInplayCommit = () => {
     setStrikeoutType(null);
     setShowPlayResult(true);
+    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
+    if (matchId) {
+      const gs = getGameState(matchId);
+      const currentO = gs?.counts.o ?? 0;
+      updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
+    }
+    // 追加: 打順前進
+    advanceBattingOrder();
   };
 
   // 三振登録時のコールバック（追加）
   const handleStrikeoutCommit = (isSwinging: boolean) => {
     setStrikeoutType(isSwinging ? 'swinging' : 'looking');
     setShowPlayResult(true);
+    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
+    if (matchId) {
+      const gs = getGameState(matchId);
+      const currentO = gs?.counts.o ?? 0;
+      const newO = Math.min(3, currentO + 1);
+      updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
+      if (newO >= 3) {
+        closeHalfInningRealtime(matchId);
+      }
+    }
+    // 追加: 三振で打席終了なので打順前進
+    advanceBattingOrder();
+  };
+
+  // フォアボール・デッドボール登録時のコールバック（修正）
+  const handleWalkCommit = () => {
+    setStrikeoutType(null);
+    setShowPlayResult(false);
+    setBattingResultForMovement('single');
+    setPositionForMovement('');
+    setShowRunnerMovement(true);
+    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
+    if (matchId) {
+      const gs = getGameState(matchId);
+      const currentO = gs?.counts.o ?? 0;
+      updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
+    }
+    // 追加: 打順前進
+    advanceBattingOrder();
   };
 
   // ランナー動き入力画面へ遷移（修正）
@@ -229,7 +317,17 @@ const PlayRegister: React.FC = () => {
     const isOut = ['groundout', 'flyout'].includes(battingResult);
     
     if (!hasRunners && isOut) {
-      // ランナーがいない状態でのアウトはそのまま完了
+      // 追加: ランナー不在の打者アウトはアウト+1（最大3）、3到達で半イニング終了
+      if (matchId) {
+        const gs = getGameState(matchId);
+        const currentO = gs?.counts.o ?? 0;
+        const newO = Math.min(3, currentO + 1);
+        updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
+        if (newO >= 3) {
+          closeHalfInningRealtime(matchId);
+        }
+      }
+      // ランナー入力をスキップ
       setShowPlayResult(false);
       setShowRunnerMovement(false);
       setBattingResultForMovement('');
@@ -240,15 +338,6 @@ const PlayRegister: React.FC = () => {
     setBattingResultForMovement(battingResult);
     setPositionForMovement(position);
     setShowPlayResult(false);
-    setShowRunnerMovement(true);
-  };
-
-  // フォアボール・デッドボール登録時のコールバック（修正）
-  const handleWalkCommit = () => {
-    setStrikeoutType(null);
-    setShowPlayResult(false);
-    setBattingResultForMovement('single'); // フォアボール・デッドボールは一塁扱い
-    setPositionForMovement('');
     setShowRunnerMovement(true);
   };
 
@@ -425,6 +514,21 @@ const PlayRegister: React.FC = () => {
     setSelectedOutRunner(null);
     setShowOutDialog(true);
   };
+
+  // ▼ 追加: 現在の打者・投手表示に合わせて game_states.matchup を常に更新
+  useEffect(() => {
+    if (!matchId) return;
+    // 現在表示されている打者/投手を game_states.matchup に反映
+    const batterId = currentBatter?.playerId ?? null;
+    const pitcherId = currentPitcher?.playerId ?? null;
+    // どちらかが存在する場合のみ更新
+    if (batterId !== null || pitcherId !== null) {
+      updateMatchupRealtime(matchId, {
+        batter_id: batterId,
+        pitcher_id: pitcherId,
+      });
+    }
+  }, [matchId, currentBatter, currentPitcher]);
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20, backgroundColor: '#f8f9fa' }}>
