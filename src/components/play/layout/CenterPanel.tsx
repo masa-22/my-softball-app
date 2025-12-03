@@ -22,6 +22,24 @@ interface CenterPanelProps {
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;
   strikeoutType: 'swinging' | 'looking' | null;
+  offensePlayers: any[]; // 追加: 親で計算した攻撃側選手
+  // RunnerStatus制御用（親から）
+  baseLabel: (b: '1' | '2' | '3' | 'home') => string;
+  getRunnerName: (playerId: string | null) => string;
+  onRunnerBaseClick: (base: '1' | '2' | '3' | 'home') => void;
+  onAddOutClick: () => void;
+  showAdvanceDialog: boolean;
+  pendingAdvancements: any[]; // RunnerAdvancement[]
+  onAdvanceConfirm: (results: any[]) => void; // AdvanceReasonResult[]
+  showOutDialog: boolean;
+  pendingOuts: any[]; // RunnerOut[]
+  onOutConfirm: (results: any[]) => void; // OutReasonResult[]
+  onDialogCancel: () => void;
+  showAddOutDialog: boolean;
+  selectedOutRunner: { runnerId: string; fromBase: '1' | '2' | '3' } | null;
+  onSelectOutRunner: (runnerId: string, fromBase: '1' | '2' | '3') => void;
+  onAddOutConfirm: () => void;
+  onAddOutCancel: () => void;
 }
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
@@ -42,6 +60,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onCountsChange,
   onCountsReset,
   strikeoutType,
+  offensePlayers,
+  baseLabel,
+  getRunnerName,
+  onRunnerBaseClick,
+  onAddOutClick,
+  showAdvanceDialog,
+  pendingAdvancements,
+  onAdvanceConfirm,
+  showOutDialog,
+  pendingOuts,
+  onOutConfirm,
+  onDialogCancel,
+  showAddOutDialog,
+  selectedOutRunner,
+  onSelectOutRunner,
+  onAddOutConfirm,
+  onAddOutCancel,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -104,7 +139,34 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 onCountsReset={onCountsReset}
               />
             ) : (
-              <RunnerStatus onChange={onRunnersChange} />
+              <RunnerStatus
+                // 表示用
+                bso={currentBSO}
+                runners={runners}
+                offensePlayers={offensePlayers}
+                // ラベル/名前解決
+                baseLabel={baseLabel}
+                getRunnerName={getRunnerName}
+                // イベント（親へ通知）
+                onBaseClick={onRunnerBaseClick}
+                onAddOutClick={onAddOutClick}
+                // 進塁理由ダイアログ
+                showAdvanceDialog={showAdvanceDialog}
+                pendingAdvancements={pendingAdvancements}
+                onAdvanceConfirm={onAdvanceConfirm}
+                // アウト理由ダイアログ
+                showOutDialog={showOutDialog}
+                pendingOuts={pendingOuts}
+                onOutConfirm={onOutConfirm}
+                // 共通キャンセル
+                onDialogCancel={onDialogCancel}
+                // アウト追加
+                showAddOutDialog={showAddOutDialog}
+                selectedOutRunner={selectedOutRunner}
+                onSelectOutRunner={onSelectOutRunner}
+                onAddOutConfirm={onAddOutConfirm}
+                onAddOutCancel={onAddOutCancel}
+              />
             )}
           </div>
         </>
