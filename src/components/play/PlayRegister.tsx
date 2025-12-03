@@ -261,63 +261,45 @@ const PlayRegister: React.FC = () => {
     }
   };
 
-  // インプレイ登録時のコールバック
+  // 追加: 打撃結果確定時の後処理を遅延実行するためのペンディング状態
+  // kind: 'inplay' | 'strikeout' | 'walk'
+  const [pendingOutcome, setPendingOutcome] = useState<{ kind: 'inplay' | 'strikeout' | 'walk'; battingResult?: string } | null>(null);
+
+  // インプレイ登録時のコールバック（結果選択画面へ遷移するだけ）
   const handleInplayCommit = () => {
     setStrikeoutType(null);
+    setPendingOutcome({ kind: 'inplay' });
     setShowPlayResult(true);
-    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
-    if (matchId) {
-      const gs = getGameState(matchId);
-      const currentO = gs?.counts.o ?? 0;
-      updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
-    }
-    // 追加: 打順前進
-    advanceBattingOrder();
+    // カウント/打順/アウトの更新は「確定時」に実施
   };
 
-  // 三振登録時のコールバック（追加）
+  // 三振登録時のコールバック（結果選択画面へ遷移するだけ）
   const handleStrikeoutCommit = (isSwinging: boolean) => {
     setStrikeoutType(isSwinging ? 'swinging' : 'looking');
+    setPendingOutcome({ kind: 'strikeout' });
     setShowPlayResult(true);
-    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
-    if (matchId) {
-      const gs = getGameState(matchId);
-      const currentO = gs?.counts.o ?? 0;
-      const newO = Math.min(3, currentO + 1);
-      updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
-      if (newO >= 3) {
-        closeHalfInningRealtime(matchId);
-      }
-    }
-    // 追加: 三振で打席終了なので打順前進
-    advanceBattingOrder();
+    // アウト加算・BSリセット・打順前進は「確定時」に実施
   };
 
-  // フォアボール・デッドボール登録時のコールバック（修正）
+  // フォアボール・デッドボール登録時のコールバック（進塁入力へ）
   const handleWalkCommit = () => {
     setStrikeoutType(null);
+    setPendingOutcome({ kind: 'walk' });
     setShowPlayResult(false);
-    setBattingResultForMovement('single');
+    setBattingResultForMovement('single'); // フォアボール・デッドボールは一塁扱い
     setPositionForMovement('');
     setShowRunnerMovement(true);
-    // 追加: 打撃結果入力後にBSを0へ（アウトは維持）
-    if (matchId) {
-      const gs = getGameState(matchId);
-      const currentO = gs?.counts.o ?? 0;
-      updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
-    }
-    // 追加: 打順前進
-    advanceBattingOrder();
+    // BSリセット・打順前進は「最終確定時」に実施
   };
 
-  // ランナー動き入力画面へ遷移（修正）
+  // ランナー動き入力画面へ遷移（結果確定後に呼ばれる）
   const handleRunnerMovement = (battingResult: string, position: string) => {
     // ランナーがいない状態でアウトの場合はランナー入力をスキップ
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout'].includes(battingResult);
     
     if (!hasRunners && isOut) {
-      // 追加: ランナー不在の打者アウトはアウト+1（最大3）、3到達で半イニング終了
+      // 打者アウト+ランナーなし → ここでアウト加算とBSリセット、打順前進も行い確定扱い
       if (matchId) {
         const gs = getGameState(matchId);
         const currentO = gs?.counts.o ?? 0;
@@ -327,7 +309,12 @@ const PlayRegister: React.FC = () => {
           closeHalfInningRealtime(matchId);
         }
       }
-      // ランナー入力をスキップ
+      // 打順前進（結果確定タイミング）
+      advanceBattingOrder();
+      // 状態クリア
+      setPendingOutcome(null);
+
+      // 進塁入力はスキップして閉じる
       setShowPlayResult(false);
       setShowRunnerMovement(false);
       setBattingResultForMovement('');
@@ -335,20 +322,44 @@ const PlayRegister: React.FC = () => {
       return;
     }
 
+    // ランナーあり → 進塁入力へ
     setBattingResultForMovement(battingResult);
     setPositionForMovement(position);
     setShowPlayResult(false);
     setShowRunnerMovement(true);
   };
 
-  // プレー結果入力完了時のコールバック
+  // プレー結果入力完了時のコールバック（打者更新・BSリセット・必要なアウト加算をここで実行）
   const handlePlayResultComplete = () => {
+    // 打撃結果確定後の共通処理
+    if (matchId) {
+      const gs = getGameState(matchId);
+      const currentO = gs?.counts.o ?? 0;
+
+      // BSを0に（アウトは維持または加算後の値）
+      // strikeout の場合のみアウト+1してから BS リセット
+      if (pendingOutcome?.kind === 'strikeout') {
+        const newO = Math.min(3, currentO + 1);
+        updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
+        if (newO >= 3) {
+          closeHalfInningRealtime(matchId);
+        }
+      } else {
+        updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
+      }
+    }
+
+    // 打順前進（確定タイミング）
+    advanceBattingOrder();
+
+    // 画面状態クリア
     setShowPlayResult(false);
     setShowRunnerMovement(false);
     setStrikeoutType(null);
     setBattingResultForMovement('');
     setPositionForMovement('');
-    // 必要に応じてカウント・打者をリセット等
+    setPendingOutcome(null);
+    // 必要に応じて他のリセット
   };
 
   // 追加: 攻撃側選手（親で計算）

@@ -134,11 +134,25 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     setShowConfirm(false);
 
     const isStrikeout = result === 'strikeout_swinging' || result === 'strikeout_looking';
+    const isOutResult = result === 'groundout' || result === 'flyout' || result === 'bunt_out';
+
+    // ランナー不在かどうか
+    const hasRunners = !!(currentRunners['1'] || currentRunners['2'] || currentRunners['3']);
+
     if (isStrikeout) {
+      // 三振はRunnerMovementに遷移せず、その場で完了
       if (onComplete) onComplete();
-    } else {
-      if (onRunnerMovement) onRunnerMovement(result, position);
+      return;
     }
+
+    // アウト結果かつランナー不在ならRunnerMovementへ遷移せず完了
+    if (isOutResult && !hasRunners) {
+      if (onComplete) onComplete();
+      return;
+    }
+
+    // それ以外（ヒット/エラー/振り逃げ/犠打/犠飛、またはアウトでもランナー有）はRunnerMovementへ
+    if (onRunnerMovement) onRunnerMovement(result, position);
   };
 
   const handleCancelConfirm = () => {
