@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import MiniScoreBoard from './common/MiniScoreBoard';
-import MiniDiamondField from './pitch/MiniDiamondField';
+// import MiniScoreBoard from './common/MiniScoreBoard';
+// import MiniDiamondField from './pitch/MiniDiamondField';
 import PitchTypeSelector, { PitchType } from './common/PitchTypeSelector';
-import StrikeZoneGrid from './pitch/StrikeZoneGrid';
-import PitchResultSelector from './pitch/PitchResultSelector';
+// import StrikeZoneGrid from './pitch/StrikeZoneGrid';
+// import PitchResultSelector from './pitch/PitchResultSelector';
+import PitchLeftColumn from './pitch/PitchLeftColumn.tsx';
+import StrikeZonePanel from './pitch/StrikeZonePanel.tsx';
 
 // --- 型定義 ---
 interface PitchData {
@@ -100,11 +102,9 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
     };
     setPitches(prev => [...prev, newPitch]);
 
-    // 子はロジックを持たず、次のカウント更新を親へ委譲
     const currentBalls = bso.b;
     const currentStrikes = bso.s;
 
-    // デッドボールは即座に親へ通知（フォアボール同様）
     if (pendingResult === 'deadball') {
       onWalkCommit && onWalkCommit();
       setPendingPoint(null);
@@ -112,10 +112,8 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
       return;
     }
 
-    // カウントの増分は親へ提示（親がgame_statesへ反映）
     if (pendingResult === 'ball') {
       onCountsChange({ b: Math.min(3, bso.b + 1) });
-      // 4球到達（3→4）は親へフォアボール遷移依頼
       if (currentBalls === 3) {
         onWalkCommit && onWalkCommit();
         setPendingPoint(null);
@@ -124,14 +122,12 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
       }
     } else if (pendingResult === 'swing' || pendingResult === 'looking') {
       onCountsChange({ s: Math.min(2, bso.s + 1) });
-      // 3ストライク到達（2→3）は親へ三振遷移依頼＋カウントリセット依頼
       if (currentStrikes === 2) {
         const isSwinging = pendingResult === 'swing';
         onStrikeoutCommit && onStrikeoutCommit(isSwinging);
         onCountsReset && onCountsReset();
       }
     } else if (pendingResult === 'inplay') {
-      // インプレイ後の詳細は親が扱う
       onInplayCommit && onInplayCommit();
     }
 
@@ -154,31 +150,26 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   return (
     <div style={styles.container}>
       <div style={styles.mainLayout}>
-        <div style={styles.leftColumn}>
-          <MiniScoreBoard bso={bso} />
-          <div style={styles.runnerDisplayGrid}>
-            <div style={styles.runnerTitle}>ランナー状況</div>
-            <MiniDiamondField runners={runners} />
-          </div>
-        </div>
+        {/* 左カラムを子化 */}
+        <PitchLeftColumn bso={bso} runners={runners} />
 
+        {/* 右カラム: ストライクゾーンパネル＋球種選択 */}
         <div style={styles.rightColumn}>
-          <StrikeZoneGrid pitches={pitches} onClickZone={handleZoneClick}>
-            {pendingPoint && (
-              <PitchResultSelector
-                selectedPitchType={selectedPitchType}
-                pitchTypeName={getPitchTypeName(selectedPitchType)}
-                selectedResult={pendingResult}
-                onSelectResult={setPendingResult}
-                onCommit={commitPitch}
-                onCancel={() => { setPendingPoint(null); setPendingResult(''); }}
-              />
-            )}
-          </StrikeZoneGrid>
+          <StrikeZonePanel
+            pitches={pitches}
+            pendingPoint={pendingPoint}
+            pendingResult={pendingResult}
+            selectedPitchType={selectedPitchType}
+            pitchTypeName={getPitchTypeName(selectedPitchType)}
+            onZoneClick={handleZoneClick}
+            onSelectResult={setPendingResult}
+            onCommit={commitPitch}
+            onCancel={() => { setPendingPoint(null); setPendingResult(''); }}
+          />
 
-          <PitchTypeSelector 
-            selectedType={selectedPitchType} 
-            onSelect={setSelectedPitchType} 
+          <PitchTypeSelector
+            selectedType={selectedPitchType}
+            onSelect={setSelectedPitchType}
           />
         </div>
       </div>

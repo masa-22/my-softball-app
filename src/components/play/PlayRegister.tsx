@@ -1,6 +1,6 @@
 /**
  * 1球・1プレー登録画面のメインコンポーネント
- * - スコアボード、打者・投手、コース入力、ランナー状況などを表示
+ * - 親としてgame_states購読・書き込み、ランナー進塁/アウト/得点のロジックを管理
  */
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
@@ -10,10 +10,12 @@ import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
 import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
-import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../../services/gameStateService';
-import LeftSidebar from './layout/LeftSidebar.tsx';
-import CenterPanel from './layout/CenterPanel.tsx';
-import RightSidebar from './layout/RightSidebar.tsx';
+import { getGameState, updateCountsRealtime, resetCountsRealtime, updateRunnersRealtime, addRunsRealtime, closeHalfInningRealtime } from '../../services/gameStateService';
+import LeftSidebar from './layout/LeftSidebar';
+import CenterPanel from './layout/CenterPanel';
+import RightSidebar from './layout/RightSidebar';
+import { RunnerAdvancement } from './runner/AdvanceReasonDialog';
+import { RunnerOut } from './runner/OutReasonDialog';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
 
@@ -260,6 +262,170 @@ const PlayRegister: React.FC = () => {
     // 必要に応じてカウント・打者をリセット等
   };
 
+  // 追加: 攻撃側選手（親で計算）
+  const currentInningInfo = useMemo(() => {
+    if (!matchId) return { inning: 1, half: 'top' as 'top' | 'bottom' };
+    const plays = getPlays(matchId);
+    if (!plays.length) return { inning: 1, half: 'top' as 'top' | 'bottom' };
+    const last = plays[plays.length - 1];
+    return { inning: last.inning, half: last.topOrBottom };
+  }, [matchId]);
+
+  const offenseTeamId = useMemo(() => {
+    if (!match) return null;
+    return currentInningInfo.half === 'top' ? match.homeTeamId : match.awayTeamId;
+  }, [match, currentInningInfo]);
+
+  const offensePlayers = useMemo(() => {
+    if (offenseTeamId == null) return [];
+    return getPlayers(offenseTeamId);
+  }, [offenseTeamId]);
+
+  // 追加: RunnerStatus制御用状態
+  const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
+  const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
+  const [showOutDialog, setShowOutDialog] = useState(false);
+  const [pendingOuts, setPendingOuts] = useState<RunnerOut[]>([]);
+  const [showAddOutDialog, setShowAddOutDialog] = useState(false);
+  const [selectedOutRunner, setSelectedOutRunner] = useState<{ runnerId: string; fromBase: '1' | '2' | '3' } | null>(null);
+  const [previousRunners, setPreviousRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({ '1': null, '2': null, '3': null });
+
+  // ラベル/名前解決（親提供）
+  const baseLabel = (b: '1' | '2' | '3' | 'home') => (b === 'home' ? 'ホーム' : b === '1' ? '一塁' : b === '2' ? '二塁' : '三塁');
+  const getRunnerName = (playerId: string | null) => {
+    if (!playerId) return '';
+    const p = offensePlayers.find(sp => sp.playerId === playerId);
+    return p ? `${p.familyName} ${p.givenName}`.trim() : '';
+  };
+
+  // 直前の塁にいる最も近い走者（親で処理）
+  const findNearestPriorRunner = (target: '2' | '3'): { fromBase: '1' | '2'; runnerId: string } | null => {
+    if (target === '2') {
+      if (runners['1']) return { fromBase: '1', runnerId: runners['1']! };
+      return null;
+    }
+    if (runners['2']) return { fromBase: '2', runnerId: runners['2']! };
+    if (runners['1']) return { fromBase: '1', runnerId: runners['1']! };
+    return null;
+  };
+
+  // ベースクリック（親でロジック）
+  const handleRunnerBaseClick = (base: '1' | '2' | '3' | 'home') => {
+    if (!matchId) return;
+
+    if (base === 'home') {
+      const thirdRunner = runners['3'];
+      if (!thirdRunner) return;
+      const name = getRunnerName(thirdRunner) || '三塁走者';
+      const ok = window.confirm(`${name}の得点を記録しますか？`);
+      if (!ok) return;
+      const next = { ...runners, '3': null };
+      setPreviousRunners(next);
+      setPendingAdvancements([{ runnerId: thirdRunner, runnerName: name, fromBase: '3', toBase: 'home' }]);
+      setShowAdvanceDialog(true);
+      return;
+    }
+
+    if (base === '1' || base === '2' || base === '3') {
+      const currentRunnerId = runners[base];
+      if (currentRunnerId) {
+        const name = getRunnerName(currentRunnerId) || '走者';
+        const ok = window.confirm(`${baseLabel(base)}のランナー「${name}」をアウトにしますか？`);
+        if (!ok) return;
+        const next = { ...runners, [base]: null } as typeof runners;
+        setPreviousRunners(next);
+        setPendingOuts([{ runnerId: currentRunnerId, runnerName: name, fromBase: base, outAtBase: base }]);
+        setShowOutDialog(true);
+        return;
+      }
+    }
+
+    if (base === '2' || base === '3') {
+      const prior = findNearestPriorRunner(base);
+      if (!prior) return;
+      const name = getRunnerName(prior.runnerId) || (prior.fromBase === '1' ? '一塁走者' : '二塁走者');
+      const ok = window.confirm(`${name}を${baseLabel(base)}へ進塁として記録しますか？`);
+      if (!ok) return;
+      const next = { ...runners } as typeof runners;
+      next[prior.fromBase] = null;
+      next[base] = prior.runnerId;
+      setPendingAdvancements([{ runnerId: prior.runnerId, runnerName: name, fromBase: prior.fromBase, toBase: base }]);
+      setPreviousRunners(next);
+      setShowAdvanceDialog(true);
+    }
+  };
+
+  const handleRunnerDialogCancel = () => {
+    setShowAdvanceDialog(false);
+    setShowOutDialog(false);
+    setPendingAdvancements([]);
+    setPendingOuts([]);
+  };
+
+  const handleRunnerAdvanceConfirm = (results: any[]) => {
+    const advs = [...pendingAdvancements];
+    const next = { ...previousRunners };
+    advs.forEach(adv => {
+      if (adv.fromBase === '1' || adv.fromBase === '2' || adv.fromBase === '3') next[adv.fromBase] = null;
+      if (adv.toBase === '1' || adv.toBase === '2' || adv.toBase === '3') next[adv.toBase] = adv.runnerId;
+    });
+
+    // ランナー更新
+    updateRunnersRealtime(matchId!, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
+
+    // 得点加算
+    const scoredCount = advs.filter(a => a.toBase === 'home').length;
+    if (scoredCount > 0) {
+      const half = getGameState(matchId!)?.top_bottom || 'top';
+      addRunsRealtime(matchId!, half, scoredCount);
+    }
+
+    // 同期・状態更新
+    setRunners(next);
+    setShowAdvanceDialog(false);
+    setPendingAdvancements([]);
+    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
+  };
+
+  const handleRunnerOutConfirm = (results: any[]) => {
+    const outs = [...pendingOuts];
+    const next = { ...previousRunners };
+    outs.forEach(out => {
+      if (out.fromBase === '1' || out.fromBase === '2' || out.fromBase === '3') next[out.fromBase] = null;
+    });
+
+    // ランナー更新
+    updateRunnersRealtime(matchId!, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
+
+    // アウト更新とイニング進行
+    const gs = getGameState(matchId!);
+    const currentO = gs?.counts.o ?? 0;
+    const addO = outs.length;
+    const newO = Math.min(3, currentO + addO);
+    updateCountsRealtime(matchId!, { o: newO });
+    if (newO >= 3) closeHalfInningRealtime(matchId!);
+
+    setRunners(next);
+    setShowOutDialog(false);
+    setPendingOuts([]);
+    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
+  };
+
+  const handleAddOutClick = () => setShowAddOutDialog(true);
+  const handleSelectOutRunner = (runnerId: string, fromBase: '1' | '2' | '3') => setSelectedOutRunner({ runnerId, fromBase });
+  const handleAddOutCancel = () => { setShowAddOutDialog(false); setSelectedOutRunner(null); };
+  const handleAddOutConfirm = () => {
+    if (!selectedOutRunner || !matchId) return;
+    const { runnerId, fromBase } = selectedOutRunner;
+    const name = getRunnerName(runnerId) || '走者';
+    const next = { ...runners, [fromBase]: null } as typeof runners;
+    setPreviousRunners(next);
+    setPendingOuts([{ runnerId, runnerName: name, fromBase, outAtBase: fromBase }]);
+    setShowAddOutDialog(false);
+    setSelectedOutRunner(null);
+    setShowOutDialog(true);
+  };
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20, backgroundColor: '#f8f9fa' }}>
       <ScoreBoard />
@@ -293,6 +459,23 @@ const PlayRegister: React.FC = () => {
           onCountsChange={handleCountsChange}
           onCountsReset={handleCountsReset}
           strikeoutType={strikeoutType}
+          offensePlayers={offensePlayers}
+          baseLabel={baseLabel}
+          getRunnerName={getRunnerName}
+          onRunnerBaseClick={handleRunnerBaseClick}
+          onAddOutClick={handleAddOutClick}
+          showAdvanceDialog={showAdvanceDialog}
+          pendingAdvancements={pendingAdvancements}
+          onAdvanceConfirm={handleRunnerAdvanceConfirm}
+          showOutDialog={showOutDialog}
+          pendingOuts={pendingOuts}
+          onOutConfirm={handleRunnerOutConfirm}
+          onDialogCancel={handleRunnerDialogCancel}
+          showAddOutDialog={showAddOutDialog}
+          selectedOutRunner={selectedOutRunner}
+          onSelectOutRunner={handleSelectOutRunner}
+          onAddOutConfirm={handleAddOutConfirm}
+          onAddOutCancel={handleAddOutCancel}
         />
         <RightSidebar
           teamName={homeTeamName}
