@@ -11,9 +11,8 @@ import FinalConfirmDialog from './runner/FinalConfirmDialog';
 import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
 import { getLineup } from '../../services/lineupService';
-import { getMatches } from '../../services/matchService';
+// import { getMatches } from '../../services/matchService';
 import { getPlays } from '../../services/playService';
-// 追加: 攻守の現在 half を gameState から取得
 import { 
   getGameState,
   updateRunnersRealtime,
@@ -21,6 +20,7 @@ import {
   updateCountsRealtime,
   closeHalfInningRealtime
 } from '../../services/gameStateService';
+import { getGame } from '../../services/gameService';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -342,7 +342,11 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     caughtPosition: string;
   }>>([]);
 
-  const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
+  const match = useMemo(() => {
+    if (!matchId) return null;
+    const g = getGame(matchId);
+    return g ? { id: g.gameId, homeTeamId: g.topTeam.id, awayTeamId: g.bottomTeam.id } : null;
+  }, [matchId]);
 
   // 既存の currentInningInfo は保持（回数表示などに使用）
   const currentInningInfo = useMemo(() => {

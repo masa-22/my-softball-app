@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
-import { searchMatches } from '../../services/matchService';
+import { getGames } from '../../services/gameService';
 import { getLineup } from '../../services/lineupService';
 
 const MatchSearch: React.FC = () => {
@@ -26,9 +26,21 @@ const MatchSearch: React.FC = () => {
     try {
       setError('');
       setLoading(true);
-      const res = await searchMatches({ tournamentId, date, teamName });
-      setResults(res);
-      if (res.length === 0) setError('検索結果が見つかりませんでした。');
+      const allGames = getGames();
+      const teamNameQ = (teamName || '').trim().toLowerCase();
+      const filtered = allGames.filter(g => {
+        const okTournament = tournamentId ? String(g.tournament.id) === String(tournamentId) : true;
+        const okDate = date ? g.date === date : true;
+        let okTeam = true;
+        if (teamNameQ) {
+          const homeStr = (g.topTeam.name || '').toLowerCase();
+          const awayStr = (g.bottomTeam.name || '').toLowerCase();
+          okTeam = homeStr.includes(teamNameQ) || awayStr.includes(teamNameQ);
+        }
+        return okTournament && okDate && okTeam;
+      }).sort((a,b) => a.date.localeCompare(b.date) || a.gameId.localeCompare(b.gameId));
+      setResults(filtered);
+      if (filtered.length === 0) setError('検索結果が見つかりませんでした。');
     } catch (err) {
       console.error(err);
       setError('検索に失敗しました。');
@@ -48,15 +60,14 @@ const MatchSearch: React.FC = () => {
   const findTournament = (id: string) => tournaments.find(t => String(t.id) === String(id));
   const findTeam = (id: string | number) => teams.find(t => String(t.id) === String(id));
 
-  const handleMatchClick = (matchId: string) => {
-    // スタメンが全て埋まっているか判定
-    const lineup = getLineup(matchId);
+  const handleMatchClick = (gameId: string) => {
+    const lineup = getLineup(gameId);
     const isHomeComplete = lineup.home.every(e => e.position && e.playerId);
     const isAwayComplete = lineup.away.every(e => e.position && e.playerId);
     if (isHomeComplete && isAwayComplete) {
-      navigate(`/match/${matchId}/play`);
+      navigate(`/game/${gameId}/play`);
     } else {
-      navigate(`/match/${matchId}/lineup`);
+      navigate(`/game/${gameId}/lineup`);
     }
   };
 
@@ -81,14 +92,14 @@ const MatchSearch: React.FC = () => {
       {error && <p style={{ color:'red' }}>{error}</p>}
 
       <div>
-        {results.map(m => {
-          const tour = findTournament(m.tournamentId);
-          const home = findTeam(m.homeTeamId);
-          const away = findTeam(m.awayTeamId);
+        {results.map((g: any) => {
+          const tour = findTournament(g.tournament.id);
+          const home = findTeam(g.topTeam.id);
+          const away = findTeam(g.bottomTeam.id);
           return (
             <div
-              key={m.id}
-              onClick={() => handleMatchClick(m.id)}
+              key={g.gameId}
+              onClick={() => handleMatchClick(g.gameId)}
               style={{
                 padding:12,
                 border:'1px solid #ddd',
@@ -101,9 +112,15 @@ const MatchSearch: React.FC = () => {
               onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
               onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
             >
-              <h3 style={{ margin:0 }}>{tour ? `${tour.year} ${tour.name}` : m.tournamentId} <small style={{ color:'#666' }}>[{m.id}]</small></h3>
-              <p style={{ margin:4 }}><strong>開催日:</strong> {m.date} <strong>開始:</strong> {m.startTime} / <strong>先攻:</strong> {home ? home.teamName : m.homeTeamId} / <strong>後攻:</strong> {away ? away.teamName : m.awayTeamId}</p>
-              <p style={{ margin:4, fontSize:12, color:'#666' }}><strong>登録日時:</strong> {m.createdAt || '—'}</p>
+              <h3 style={{ margin:0 }}>
+                {tour ? `${tour.year} ${tour.name}` : g.tournament.name}
+                <small style={{ color:'#666' }}>[{g.gameId}]</small>
+              </h3>
+              <p style={{ margin:4 }}>
+                <strong>開催日:</strong> {g.date} /
+                <strong> 先攻:</strong> {home ? home.teamName : g.topTeam.name} /
+                <strong> 後攻:</strong> {away ? away.teamName : g.bottomTeam.name}
+              </p>
             </div>
           );
         })}

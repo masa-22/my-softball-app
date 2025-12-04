@@ -5,17 +5,22 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import ScoreBoard from './ScoreBoard';
-import { getMatches } from '../../services/matchService';
+// import { getMatches } from '../../services/matchService';
 import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
 import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
 import { getGameState, updateCountsRealtime, resetCountsRealtime, updateRunnersRealtime, addRunsRealtime, closeHalfInningRealtime, updateMatchupRealtime } from '../../services/gameStateService';
+import { getGame } from '../../services/gameService';
 import LeftSidebar from './layout/LeftSidebar';
 import CenterPanel from './layout/CenterPanel';
 import RightSidebar from './layout/RightSidebar';
 import { RunnerAdvancement } from './runner/AdvanceReasonDialog';
 import { RunnerOut } from './runner/OutReasonDialog';
+// ▼ 追加: lineupServiceの参加記録連携API
+import { recordStartersFromLineup, applySubstitutionToLineup } from '../../services/lineupService';
+// ▼ 追加: 参加記録の存在確認
+import { getParticipations } from '../../services/participationService';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
 
@@ -113,15 +118,25 @@ const PlayRegister: React.FC = () => {
 
   useEffect(() => {
     if (!matchId) return;
-    const m = getMatches().find(x => x.id === matchId);
-    setMatch(m);
+    // ▼ gamesから試合取得
+    const g = getGame(matchId);
+    setMatch(g ? {
+      id: g.gameId,
+      homeTeamId: g.topTeam.id,
+      awayTeamId: g.bottomTeam.id,
+      date: g.date,
+      startTime: '', // Gameに時刻がないため空
+    } : null);
+
     const l = getLineup(matchId);
     setLineup(l);
-    if (m && l) {
-      const homePs = getPlayers(m.homeTeamId);
-      const awayPs = getPlayers(m.awayTeamId);
+
+    if (g && l) {
+      const homePs = getPlayers(g.topTeam.id);
+      const awayPs = getPlayers(g.bottomTeam.id);
       setHomePlayers(homePs);
       setAwayPlayers(awayPs);
+
       // 打者・投手（仮）
       const batterEntry = l.home[0];
       const pitcherEntry = l.away.find((e: any) => e.position === '1');
@@ -130,14 +145,14 @@ const PlayRegister: React.FC = () => {
       setCurrentBatter(batter);
       setCurrentPitcher(pitcher);
 
-      // 追加: サイドバー表示用ラインナップ
+      // サイドバー表示用ラインナップ
       setHomeLineup(l.home);
       setAwayLineup(l.away);
 
-      // チーム名: teamService から取得して設定
+      // チーム名
       const teams = getTeams();
-      const homeTeam = teams.find(t => String(t.id) === String(m.homeTeamId));
-      const awayTeam = teams.find(t => String(t.id) === String(m.awayTeamId));
+      const homeTeam = teams.find(t => String(t.id) === String(g.topTeam.id));
+      const awayTeam = teams.find(t => String(t.id) === String(g.bottomTeam.id));
       setHomeTeamName(homeTeam ? homeTeam.teamName : '先攻');
       setAwayTeamName(awayTeam ? awayTeam.teamName : '後攻');
     }
@@ -202,12 +217,61 @@ const PlayRegister: React.FC = () => {
     side === 'home' ? setHomeLineup(list) : setAwayLineup(list);
   };
 
-  const handleSidebarSave = (side: 'home' | 'away') => {
+  // ▼ 追加: 差分検出のため前回保存時のスナップショットを保持
+  const [prevHomeSnapshot, setPrevHomeSnapshot] = useState<any[]>([]);
+  const [prevAwaySnapshot, setPrevAwaySnapshot] = useState<any[]>([]);
+
+  const handleSidebarSave = async (side: 'home' | 'away') => {
     if (!matchId) return;
-    const updatedLineup = side === 'home' 
-      ? { home: homeLineup, away: awayLineup }
-      : { home: homeLineup, away: awayLineup };
+    const updatedLineup = { home: homeLineup, away: awayLineup };
+    // lineup保存
     saveLineup(matchId, updatedLineup);
+
+    // ▼ participation 同期
+    try {
+      // 参加記録未作成ならスタメンとして記録
+      const table = getParticipations(matchId);
+      const noStartersYet = (table.home.length === 0 && table.away.length === 0);
+      if (noStartersYet) {
+        await recordStartersFromLineup(matchId);
+      } else {
+        // 差分検出して交代を記録
+        const gs = getGameState(matchId);
+        const inning = gs?.current_inning ?? 1;
+        const kind: 'pinch_hitter' | 'pinch_runner' = 'pinch_hitter';
+
+        // 対象サイドの打順ごとに前回との差分をチェック
+        const currentList = side === 'home' ? homeLineup : awayLineup;
+        const prevList = side === 'home' ? prevHomeSnapshot : prevAwaySnapshot;
+
+        for (let i = 0; i < currentList.length; i++) {
+          const cur = currentList[i];
+          const prev = prevList[i];
+          if (!prev) continue;
+
+          // playerIdが変わった場合のみ交代として記録（空→選手、選手→別選手）
+          const changed = (cur.playerId || '') !== (prev.playerId || '');
+          const changedPos = (cur.position || '') !== (prev.position || '');
+          if (changed || changedPos) {
+            await applySubstitutionToLineup({
+              matchId,
+              side,
+              battingOrder: cur.battingOrder,
+              inPlayerId: cur.playerId,
+              inning,
+              kind,
+              position: cur.position,
+            });
+          }
+        }
+      }
+
+      // スナップショット更新
+      setPrevHomeSnapshot(JSON.parse(JSON.stringify(homeLineup)));
+      setPrevAwaySnapshot(JSON.parse(JSON.stringify(awayLineup)));
+    } catch (e) {
+      console.warn('participation sync error', e);
+    }
   };
 
   // 追加: 打順インデックス（homeが先攻）

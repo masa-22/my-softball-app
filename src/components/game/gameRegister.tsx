@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
-import { registerMatch } from '../../services/matchService';
+import { ensureGameCreated, type GameCreateInput } from '../../services/gameService';
 import Modal from '../common/Modal';
 
 const MatchRegister: React.FC = () => {
@@ -50,23 +50,42 @@ const MatchRegister: React.FC = () => {
     setError('');
     setMessage('');
     try {
-      const m = await registerMatch({
-        tournamentId: pending.tournamentId,
+      // 入力からgameIdを生成（重複回避のため簡易に組み立て）
+      const tid = String(pending.tournamentId);
+      const dateStr = String(pending.date).split('-').join(''); // replaceAllを回避
+      const homeId = String(pending.homeTeamId);
+      const awayId = String(pending.awayTeamId);
+      const gameId = `g_${tid}_${dateStr}_${homeId}_${awayId}`;
+
+      const tObj = getTournaments().find(t => String(t.id) === String(pending.tournamentId));
+      const home = getTeams().find(t => String(t.id) === String(pending.homeTeamId));
+      const away = getTeams().find(t => String(t.id) === String(pending.awayTeamId));
+
+      const input: GameCreateInput = {
+        gameId,
         date: pending.date,
-        startTime: pending.startTime,
-        homeTeamId: pending.homeTeamId,
-        awayTeamId: pending.awayTeamId,
-      });
-      setMessage(`試合を登録しました（ID: ${m.id}）`);
+        tournamentId: tid,
+        tournamentName: tObj ? `${tObj.year} ${tObj.name}` : tid,
+        topTeamId: homeId, // 先攻 = top
+        topTeamName: home ? home.teamName : homeId,
+        topTeamShortName: home ? home.teamAbbr : '',
+        bottomTeamId: awayId, // 後攻 = bottom
+        bottomTeamName: away ? away.teamName : awayId,
+        bottomTeamShortName: away ? away.teamAbbr : '',
+      };
+
+      const g = ensureGameCreated(input);
+
+      setMessage(`試合を登録しました（Game ID: ${g.gameId}）`);
       setTournamentId('');
       setDate('');
       setStartTime('');
       setHomeTeamId('');
       setAwayTeamId('');
 
-      // 登録後、スタメン登録画面へ遷移
+      // 登録後、スタメン登録画面へ遷移（gamesベース）
       setTimeout(() => {
-        navigate(`/match/${m.id}/lineup`);
+        navigate(`/game/${g.gameId}/lineup`);
       }, 1000);
     } catch (err: any) {
       console.error(err);
