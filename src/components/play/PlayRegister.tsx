@@ -497,7 +497,12 @@ const PlayRegister: React.FC = () => {
     setStrikeoutType(null);
     setPendingOutcome({ kind: 'walk' });
     setShowPlayResult(false);
-    setBattingResultForMovement('single'); // フォアボール・デッドボールは一塁扱い
+    
+    // フォアボール・デッドボールは明示的に 'walk' / 'deadball' として渡す
+    // ※ 'single' ではなく正しい結果を渡すことで、RunnerMovementInput側で押し出し判定を行えるようにする
+    const isDeadball = pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball';
+    setBattingResultForMovement(isDeadball ? 'deadball' : 'walk');
+    
     setPositionForMovement('');
     setShowRunnerMovement(true);
     // BSリセット・打順前進は「最終確定時」に実施
