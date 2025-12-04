@@ -555,7 +555,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
       // 得点
       if (scoredRunners.length > 0) {
-        const half = getPlays(matchId).length && currentInningInfo.half ? currentInningInfo.half : 'top';
+        // 修正: plays ではなく gameState の現在ハーフを使用
+        const half = getGameState(matchId)?.top_bottom || 'top';
         addRunsRealtime(matchId, half, scoredRunners.length);
       }
 
