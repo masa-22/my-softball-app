@@ -155,6 +155,9 @@ const PlayRegister: React.FC = () => {
   const [currentBatter, setCurrentBatter] = useState<any>(null);
   const [currentPitcher, setCurrentPitcher] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'pitch' | 'runner'>('pitch');
+  const [homeBatIndex, setHomeBatIndex] = useState<number>(0);
+  const [awayBatIndex, setAwayBatIndex] = useState<number>(0);
+  const [currentHalf, setCurrentHalf] = useState<'top' | 'bottom'>('top');
   
   // 追加: プレー結果入力モード
   const [showPlayResult, setShowPlayResult] = useState(false);
@@ -167,6 +170,8 @@ const PlayRegister: React.FC = () => {
   // 追加: サイドバー編集用 state（先攻/後攻）
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
   const [awayLineup, setAwayLineup] = useState<any[]>([]);
+  const [homeLineupDraft, setHomeLineupDraft] = useState<any[]>([]);
+  const [awayLineupDraft, setAwayLineupDraft] = useState<any[]>([]);
   const [homeTeamName, setHomeTeamName] = useState<string>('先攻');
   const [awayTeamName, setAwayTeamName] = useState<string>('後攻');
 
@@ -274,6 +279,10 @@ const PlayRegister: React.FC = () => {
       // サイドバー表示用ラインナップ
       setHomeLineup(l.home);
       setAwayLineup(l.away);
+      setHomeLineupDraft(l.home.map((entry: any) => ({ ...entry })));
+      setAwayLineupDraft(l.away.map((entry: any) => ({ ...entry })));
+      setPrevHomeSnapshot(l.home.map((entry: any) => ({ ...entry })));
+      setPrevAwaySnapshot(l.away.map((entry: any) => ({ ...entry })));
 
       // チーム名
       const teams = getTeams();
@@ -286,11 +295,13 @@ const PlayRegister: React.FC = () => {
 
   // 現在打者の打順（数字のみ）
   const currentBattingOrder = useMemo(() => {
-    if (!lineup || !currentBatter) return '';
-    const entry = lineup.home.find((e: any) => e.playerId === currentBatter.playerId);
+    if (!currentBatter) return '';
+    const battingSide = currentHalf === 'top' ? homeLineup : awayLineup;
+    if (!battingSide || battingSide.length === 0) return '';
+    const entry = battingSide.find((e: any) => e.playerId === currentBatter.playerId);
     if (!entry) return '';
     return entry.battingOrder === 10 ? '' : String(entry.battingOrder);
-  }, [lineup, currentBatter]);
+  }, [homeLineup, awayLineup, currentBatter, currentHalf]);
 
   // 現在打者の過去打席結果（直近から最大3件）
   const recentBatterResults = useMemo<RecentResultDisplay[]>(() => {
@@ -329,20 +340,16 @@ const PlayRegister: React.FC = () => {
     const inningRemainder = totalOuts % 3;
     const inningStr = `${inningWhole}.${inningRemainder}`;
 
-    // 現在の回と球数
+    // 現在の回
     const gs = getGameState(matchId);
     const currentInning = gs?.current_inning ?? 1;
     const currentHalf = gs?.top_bottom ?? 'top';
-
-    const thisInningAtBats = pitcherAtBats.filter(
-      a => a.inning === currentInning && a.topOrBottom === currentHalf
-    );
     
     let total = 0;
     let strikes = 0;
     let balls = 0;
     
-    thisInningAtBats.forEach(a => {
+    pitcherAtBats.forEach(a => {
         a.pitches.forEach(p => {
             total++;
             if (['swing', 'looking', 'foul', 'inplay'].includes(p.result)) strikes++;
@@ -362,15 +369,15 @@ const PlayRegister: React.FC = () => {
 
   // 追加: ラインナップ編集ハンドラ
   const handlePositionChange = (side: 'home' | 'away', index: number, value: string) => {
-    const list = side === 'home' ? [...homeLineup] : [...awayLineup];
-    list[index].position = value;
-    side === 'home' ? setHomeLineup(list) : setAwayLineup(list);
+    const list = side === 'home' ? [...homeLineupDraft] : [...awayLineupDraft];
+    list[index] = { ...list[index], position: value };
+    side === 'home' ? setHomeLineupDraft(list) : setAwayLineupDraft(list);
   };
 
   const handlePlayerChange = (side: 'home' | 'away', index: number, value: string) => {
-    const list = side === 'home' ? [...homeLineup] : [...awayLineup];
-    list[index].playerId = value;
-    side === 'home' ? setHomeLineup(list) : setAwayLineup(list);
+    const list = side === 'home' ? [...homeLineupDraft] : [...awayLineupDraft];
+    list[index] = { ...list[index], playerId: value };
+    side === 'home' ? setHomeLineupDraft(list) : setAwayLineupDraft(list);
   };
 
   // ▼ 追加: 差分検出のため前回保存時のスナップショットを保持
@@ -379,8 +386,13 @@ const PlayRegister: React.FC = () => {
 
   const handleSidebarSave = async (side: 'home' | 'away') => {
     if (!matchId) return;
-    const updatedLineup = { matchId, home: homeLineup, away: awayLineup };
+    const nextHome = homeLineupDraft.map(entry => ({ ...entry }));
+    const nextAway = awayLineupDraft.map(entry => ({ ...entry }));
+    const updatedLineup = { matchId, home: nextHome, away: nextAway };
     saveLineup(matchId, updatedLineup);
+    setHomeLineup(nextHome);
+    setAwayLineup(nextAway);
+    setLineup(updatedLineup);
 
     // ▼ participation 同期
     try {
@@ -396,7 +408,7 @@ const PlayRegister: React.FC = () => {
         const kind: 'pinch_hitter' | 'pinch_runner' = 'pinch_hitter';
 
         // 対象サイドの打順ごとに前回との差分をチェック
-        const currentList = side === 'home' ? homeLineup : awayLineup;
+        const currentList = side === 'home' ? homeLineupDraft : awayLineupDraft;
         const prevList = side === 'home' ? prevHomeSnapshot : prevAwaySnapshot;
 
         for (let i = 0; i < currentList.length; i++) {
@@ -422,8 +434,8 @@ const PlayRegister: React.FC = () => {
       }
 
       // スナップショット更新
-      setPrevHomeSnapshot(JSON.parse(JSON.stringify(homeLineup)));
-      setPrevAwaySnapshot(JSON.parse(JSON.stringify(awayLineup)));
+      setPrevHomeSnapshot(nextHome.map(entry => ({ ...entry })));
+      setPrevAwaySnapshot(nextAway.map(entry => ({ ...entry })));
     } catch (e) {
       console.warn('participation sync error', e);
     }
@@ -494,12 +506,7 @@ const PlayRegister: React.FC = () => {
     }
   };
 
-  // 追加: 打順インデックス（homeが先攻）
-  const [homeBatIndex, setHomeBatIndex] = useState<number>(0);
-  const [awayBatIndex, setAwayBatIndex] = useState<number>(0);
-
   // 追加: 現在の攻撃側 half を gameState からリアルタイム購読
-  const [currentHalf, setCurrentHalf] = useState<'top' | 'bottom'>('top');
   useEffect(() => {
     if (!matchId) return;
     const update = () => {
@@ -522,44 +529,35 @@ const PlayRegister: React.FC = () => {
 
   // 追加: 現在の half と打順に応じて currentBatter を更新
   useEffect(() => {
-    if (!lineup) return;
-    // top = home が攻撃
-    if (currentHalf === 'top') {
-      const entry = lineup.home[homeBatIndex % lineup.home.length];
-      const batter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
-      setCurrentBatter(batter);
-      setPitches([]); // 打者変更時にリセット
-    } else {
-      const entry = lineup.away[awayBatIndex % lineup.away.length];
-      const batter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
-      setCurrentBatter(batter);
-      setPitches([]); // 打者変更時にリセット
-    }
-  }, [currentHalf, lineup, homeBatIndex, awayBatIndex, homePlayers, awayPlayers]);
+    const battingList = currentHalf === 'top' ? homeLineup : awayLineup;
+    const battingIndex = currentHalf === 'top' ? homeBatIndex : awayBatIndex;
+    const battingPlayers = currentHalf === 'top' ? homePlayers : awayPlayers;
+
+    if (!battingList.length) return;
+    const entry = battingList[battingIndex % battingList.length];
+    const batter = battingPlayers.find(p => p.playerId === entry?.playerId) || null;
+    setCurrentBatter(batter);
+    setPitches([]); // 打者変更時にリセット
+  }, [currentHalf, homeLineup, awayLineup, homeBatIndex, awayBatIndex, homePlayers, awayPlayers]);
 
   // 追加: half 切替時に現在投手を更新（攻守交替対応）
   useEffect(() => {
-    if (!lineup) return;
-    if (currentHalf === 'top') {
-      // 表：home攻撃 → awayが守備（投手はawayの「1」）
-      const pitcherEntry = lineup.away.find((e: any) => e.position === '1');
-      const pitcher = awayPlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
-      setCurrentPitcher(pitcher);
-    } else {
-      // 裏：away攻撃 → homeが守備（投手はhomeの「1」）
-      const pitcherEntry = lineup.home.find((e: any) => e.position === '1');
-      const pitcher = homePlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
-      setCurrentPitcher(pitcher);
-    }
-  }, [currentHalf, lineup, homePlayers, awayPlayers]);
+    const defenseLineup = currentHalf === 'top' ? awayLineup : homeLineup;
+    const defensePlayers = currentHalf === 'top' ? awayPlayers : homePlayers;
+    if (!defenseLineup.length) return;
+    const pitcherEntry = defenseLineup.find((e: any) => e.position === '1');
+    const pitcher = defensePlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
+    setCurrentPitcher(pitcher);
+  }, [currentHalf, homeLineup, awayLineup, homePlayers, awayPlayers]);
 
   // 打順を1つ進める（半イニングの攻撃側に応じて）
   const advanceBattingOrder = () => {
-    if (!lineup) return;
     if (currentHalf === 'top') {
-      setHomeBatIndex(idx => (idx + 1) % lineup.home.length);
+      const length = homeLineup.length || 1;
+      setHomeBatIndex(idx => (idx + 1) % length);
     } else {
-      setAwayBatIndex(idx => (idx + 1) % lineup.away.length);
+      const length = awayLineup.length || 1;
+      setAwayBatIndex(idx => (idx + 1) % length);
     }
   };
 
@@ -1230,7 +1228,7 @@ const PlayRegister: React.FC = () => {
           <div className="area-left">
             <LeftSidebar
               teamName={awayTeamName}
-              lineup={awayLineup}
+              lineup={awayLineupDraft}
               players={awayPlayers}
               currentPitcher={currentPitcher}
               pitcherStats={pitcherStats}
@@ -1240,13 +1238,14 @@ const PlayRegister: React.FC = () => {
               onSave={() => handleSidebarSave('away')}
               // 追加: 左サイドにも現在打者IDを渡す（攻撃側がawayのときハイライト）
               currentBatterId={currentBatter?.playerId}
+              matchId={matchId || ''}
             />
           </div>
 
           <div className="area-right">
             <RightSidebar
               teamName={homeTeamName}
-              lineup={homeLineup}
+              lineup={homeLineupDraft}
               players={homePlayers}
               currentBatter={currentBatter}
               recentBatterResults={recentBatterResults}
@@ -1257,6 +1256,7 @@ const PlayRegister: React.FC = () => {
               currentBattingOrder={currentBattingOrder}
               // 追加: 右サイドにも現在投手IDを渡す（守備側がhomeのときハイライト）
               currentPitcherId={currentPitcher?.playerId}
+              matchId={matchId || ''}
             />
           </div>
         </div>
