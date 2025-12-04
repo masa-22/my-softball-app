@@ -75,7 +75,7 @@ const TeamRegister: React.FC = () => {
             ref={teamNameRef}
             required
             placeholder="例: 東京理科大学"
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -86,7 +86,7 @@ const TeamRegister: React.FC = () => {
             ref={teamAbbrRef}
             required
             placeholder="例: 理科大"
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -97,7 +97,7 @@ const TeamRegister: React.FC = () => {
             ref={prefectureRef}
             required
             placeholder="例: 千葉県"
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
           />
         </div>
 
@@ -106,7 +106,7 @@ const TeamRegister: React.FC = () => {
           <select
             ref={affiliationRef}
             required
-            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
           >
             <option value="">選択してください</option>
             <option value="大学">大学</option>

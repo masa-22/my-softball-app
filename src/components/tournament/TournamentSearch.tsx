@@ -35,13 +35,15 @@ const TournamentSearch: React.FC = () => {
     <div>
       <h2>大会検索</h2>
       <form onSubmit={handleSearch} style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-          <input value={year} onChange={(e)=>setYear(e.target.value)} placeholder="開催年（例: 2025）" style={{ width: 160, padding: 8 }} />
-          <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="大会名（部分一致）" style={{ flex: 1, padding: 8 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <input value={year} onChange={(e)=>setYear(e.target.value)} placeholder="開催年（例: 2025）" style={{ flex: '1 1 160px', padding: 8, boxSizing: 'border-box' }} />
+            <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="大会名（部分一致）" style={{ flex: '1 1 200px', padding: 8, boxSizing: 'border-box' }} />
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="submit" style={{ padding: '8px 16px', background:'#3498db', color:'#fff', border:'none' }}>{loading ? '検索中...' : '検索'}</button>
-          <button type="button" onClick={handleReset} style={{ padding:'8px 16px', border:'1px solid #ccc' }}>リセット</button>
+          <button type="submit" style={{ flex: 1, padding: '8px 16px', background:'#3498db', color:'#fff', border:'none', borderRadius: 4 }}>{loading ? '検索中...' : '検索'}</button>
+          <button type="button" onClick={handleReset} style={{ flex: 1, padding:'8px 16px', border:'1px solid #ccc', borderRadius: 4 }}>リセット</button>
         </div>
       </form>
 

@@ -113,6 +113,8 @@ const styles = {
     borderRadius: 8,
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
     width: '100%',
+    maxWidth: 260,
+    margin: '0 auto',
   },
   title: {
     fontWeight: 600,
@@ -122,7 +124,7 @@ const styles = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
+    gridTemplateColumns: 'repeat(3, minmax(70px, 1fr))',
     gap: '8px',
   },
   item: (selected: boolean) => ({

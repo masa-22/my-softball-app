@@ -87,7 +87,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ background:'#f5f5f5' }}>
-              <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>打順</th>
+              <th style={{ border:'1px solid #ccc', padding:6, width:36, minWidth:36 }}>打順</th>
               <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>守備</th>
               <th style={{ border:'1px solid #ccc', padding:6 }}>選手</th>
             </tr>
@@ -111,7 +111,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
 
               return (
                 <tr key={idx} style={{ backgroundColor: rowBg }}>
-                  <td style={{ border:'1px solid #ccc', padding:6, textAlign:'center', width:50 }}>
+                  <td style={{ border:'1px solid #ccc', padding:6, textAlign:'center', width:36, minWidth:36 }}>
                     {displayOrder}
                   </td>
                   <td style={{ border:'1px solid #ccc', padding:6, width:50 }}>

@@ -81,7 +81,7 @@ const PlayerRegister: React.FC = () => {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 12 }}>
           <label>チーム</label>
-          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ width:'100%', padding:8 }}>
+          <select value={teamId} onChange={(e) => setTeamId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
             <option value="">チームを選択</option>
             {teams.map(t => <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>)}
           </select>
@@ -90,27 +90,27 @@ const PlayerRegister: React.FC = () => {
         <div style={{ display:'flex', gap:0, marginBottom:12, alignItems: 'center' }}>
           <div style={{ flex:1 }}>
             <label>苗字</label>
-            <input value={familyName} onChange={(e)=>setFamilyName(e.target.value)} style={{ width:'100%', padding:8 }} />
+            <input value={familyName} onChange={(e)=>setFamilyName(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
           </div>
 
           <div aria-hidden="true" style={{ width: 24 }} />
 
           <div style={{ flex:1 }}>
             <label>名前</label>
-            <input value={givenName} onChange={(e)=>setGivenName(e.target.value)} style={{ width:'100%', padding:8 }} />
+            <input value={givenName} onChange={(e)=>setGivenName(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
           </div>
         </div>
 
         <div style={{ display:'flex', gap:10, marginBottom:12 }}>
           <div style={{ flex:1 }}>
             <label>利き手</label>
-            <select value={throwing} onChange={(e)=>setThrowing(e.target.value)} style={{ width:'100%', padding:8 }}>
+            <select value={throwing} onChange={(e)=>setThrowing(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
               <option>右</option><option>左</option><option>両</option>
             </select>
           </div>
           <div style={{ flex:1 }}>
             <label>利き打ち</label>
-            <select value={batting} onChange={(e)=>setBatting(e.target.value)} style={{ width:'100%', padding:8 }}>
+            <select value={batting} onChange={(e)=>setBatting(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
               <option>右</option><option>左</option><option>両</option>
             </select>
           </div>
@@ -119,11 +119,11 @@ const PlayerRegister: React.FC = () => {
         {selectedTeam && selectedTeam.affiliation === '大学' && (
           <div style={{ marginBottom: 12 }}>
             <label>入学年度</label>
-            <input value={entryYear} onChange={(e)=>setEntryYear(e.target.value)} placeholder="例: 2023" style={{ width:'100%', padding:8 }} />
+            <input value={entryYear} onChange={(e)=>setEntryYear(e.target.value)} placeholder="例: 2023" style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
           </div>
         )}
 
-        <button disabled={loading} type="submit" style={{ padding:'10px 16px', background:'#27ae60', color:'#fff', border:'none' }}>
+        <button disabled={loading} type="submit" style={{ width: '100%', padding:'12px', background:'#27ae60', color:'#fff', border:'none', borderRadius:'4px', fontWeight:'bold', cursor:'pointer' }}>
           {loading ? '登録中...' : '選手を登録'}
         </button>
       </form>
