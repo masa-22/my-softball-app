@@ -10,7 +10,8 @@ import PlayResultForm from './playresult/PlayResultForm.tsx';
 interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
-  onRunnerMovement?: (battingResult: string, position: string) => void;
+  // positionだけでなく詳細オブジェクトを渡すように変更
+  onRunnerMovement?: (battingResult: string, details: { position: string; batType: string }) => void;
   currentRunners?: { '1': string | null; '2': string | null; '3': string | null };
   currentOuts?: number;
 }
@@ -45,6 +46,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
   const [result, setResult] = useState<BattingResult>('');
   const [position, setPosition] = useState<FieldPosition>('');
   const [outfieldDirection, setOutfieldDirection] = useState<OutfieldDirection>('');
+  const [batType, setBatType] = useState<string>('ground'); // 追加
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSafetyBuntDialog, setShowSafetyBuntDialog] = useState(false);
   const [isSafetyBunt, setIsSafetyBunt] = useState(false);
@@ -88,6 +90,12 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         { value: 'error', label: 'エラー' },
       ];
 
+  const batTypeOptions = [
+    { value: 'ground', label: 'ゴロ' },
+    { value: 'fly', label: 'フライ/ライナー' },
+    { value: 'bunt', label: 'バント' },
+  ];
+
   const positionOptions = [
     { value: '1', label: '投手（P）' },
     { value: '2', label: '捕手（C）' },
@@ -110,11 +118,13 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
 
   const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
   const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(result);
+  const needsBatType = ['single', 'double', 'triple', 'groundout', 'flyout', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
 
   const handleSubmit = () => {
     if (!result) return;
     if (needsPosition && !position) return;
     if (needsOutfieldDirection && !outfieldDirection) return;
+    if (needsBatType && !batType) return;
 
     if (result === 'single' && ['1', '2', '3', '5'].includes(position)) {
       setShowSafetyBuntDialog(true);
@@ -145,14 +155,20 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
       return;
     }
 
+    // 詳細データ作成
+    const details = {
+      position: position,
+      batType: batType,
+    };
+
     // アウト結果かつランナー不在でも RunnerMovement 経由で親に通知し、親でアウト加算を行う
     if (isOutResult && !hasRunners) {
-      if (onRunnerMovement) onRunnerMovement(result, position);
+      if (onRunnerMovement) onRunnerMovement(result, details);
       return;
     }
 
     // それ以外（ヒット/エラー/振り逃げ/犠打/犠飛、またはアウトでもランナー有）はRunnerMovementへ
-    if (onRunnerMovement) onRunnerMovement(result, position);
+    if (onRunnerMovement) onRunnerMovement(result, details);
   };
 
   const handleCancelConfirm = () => {
@@ -178,7 +194,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     return option ? option.label : '';
   };
 
-  const isFormValid = result && (!needsPosition || position) && (!needsOutfieldDirection || outfieldDirection);
+  const isFormValid = result && (!needsPosition || position) && (!needsOutfieldDirection || outfieldDirection) && (!needsBatType || batType);
 
   // セーフティバント確認ダイアログ
   if (showSafetyBuntDialog) {
@@ -218,8 +234,12 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
       outfieldDirection={outfieldDirection}
       setOutfieldDirection={(v: string) => setOutfieldDirection(v as OutfieldDirection)}
       outfieldDirectionOptions={outfieldDirectionOptions}
+      batType={batType}
+      setBatType={setBatType}
+      batTypeOptions={batTypeOptions}
       needsPosition={needsPosition}
       needsOutfieldDirection={needsOutfieldDirection}
+      needsBatType={needsBatType}
       isFormValid={!!isFormValid}
       onSubmit={handleSubmit}
       onCancel={onComplete}
