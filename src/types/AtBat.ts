@@ -1,5 +1,13 @@
-import { HalfInning, Runners } from '../models/games';
+// import { HalfInning, Runners } from '../models/games';
 import { PitchType } from '../components/play/common/PitchTypeSelector';
+
+export type HalfInning = 'top' | 'bottom';
+
+export interface Runners {
+  '1': string | null;
+  '2': string | null;
+  '3': string | null;
+}
 
 export type AtBatType = 'bat' | 'steal' | 'substitution' | 'other';
 

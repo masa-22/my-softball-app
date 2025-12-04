@@ -340,6 +340,53 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   // 打席結果に応じた初期配置を計算
   const getInitialAfterRunners = () => {
     const n = getAdvanceDistance(battingResult);
+
+    // 犠牲フライ・犠打の場合、3塁ランナーはデフォルトでホームイン（塁から削除）
+    if (battingResult === 'sacrifice_fly' || battingResult === 'sacrifice_bunt') {
+      const after = { ...initialRunners };
+      if (after['3']) {
+        after['3'] = null;
+      }
+      return after;
+    }
+
+    // エラー・四死球の場合の特別ルール（押し出しのみ進塁）
+    if (battingResult === 'error' || battingResult === 'walk' || battingResult === 'deadball') {
+      if (!batterId) return { ...initialRunners };
+      
+      const after = { ...initialRunners };
+      
+      // 押し出し処理: 打者が1塁に来るため、1塁にランナーがいれば玉突きが発生する
+      if (initialRunners['1']) {
+        // 1. 1塁ランナーは2塁へ
+        after['2'] = initialRunners['1'];
+
+        // 2. 元々2塁にランナーがいた場合
+        if (initialRunners['2']) {
+          // 2塁ランナーは3塁へ
+          after['3'] = initialRunners['2'];
+          
+          // 元々3塁にランナーがいた場合、そのランナーはホームイン（after['3']が上書きされることで盤面から消える）
+        } else {
+          // 2塁が空だった場合
+          // 1塁ランナーが2塁に来て止まる。玉突き終了。
+          // 元々3塁にいたランナーは動かない（ステイ）
+          if (initialRunners['3']) {
+            after['3'] = initialRunners['3'];
+          }
+        }
+      } else {
+        // 1塁が空の場合、玉突きは発生しない
+        // 2塁・3塁のランナーはそのまま（ステイ）
+        // afterはコピーなのでそのままでOK
+      }
+
+      // 最後に打者を1塁へ配置
+      after['1'] = batterId;
+
+      return after;
+    }
+
     if (!batterId || n === 0) return { ...initialRunners };
     const { after } = advanceRunnersBy(initialRunners, batterId, n);
     return after;
@@ -527,8 +574,13 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         scored.push(batterId);
       }
     } else if (battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
-      // 既存の犠打・犠飛の取り扱いを維持
-      if (beforeRunners['3']) scored.push(beforeRunners['3']!);
+      // 犠打・犠飛の場合、3塁ランナーが盤面から消えていれば得点とみなす
+      const runner3 = beforeRunners['3'];
+      const isRunner3StillOnBase = runner3 && Object.values(afterRunners).includes(runner3);
+      
+      if (runner3 && !isRunner3StillOnBase) {
+        scored.push(runner3);
+      }
     }
     // バント失敗などは得点なし
 
