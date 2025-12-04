@@ -3,7 +3,8 @@
  * 投球位置を記録するコンポーネント
  */
 import React from 'react';
-import { PitchSymbol, PitchType } from '../common/PitchTypeSelector';
+import { PitchSymbol } from '../common/PitchTypeSelector';
+import { PitchType } from '../../../types/PitchType';
 
 interface PitchData {
   id: number;

@@ -2,7 +2,7 @@
  * 1球・1プレー登録画面のメインコンポーネント
  * - 親としてgame_states購読・書き込み、ランナー進塁/アウト/得点のロジックを管理
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import ScoreBoard from './ScoreBoard';
 // import { getMatches } from '../../services/matchService';
@@ -22,23 +22,18 @@ import { recordStartersFromLineup, applySubstitutionToLineup } from '../../servi
 import { getParticipations } from '../../services/participationService';
 import { getAtBats, saveAtBat } from '../../services/atBatService';
 import { AtBat } from '../../types/AtBat';
-import { PitchType } from './common/PitchTypeSelector';
+import { PitchType } from '../../types/PitchType';
+import { PitchData } from '../../types/PitchData';
 import { RunnerMovementResult } from './RunnerMovementInput';
 import { POSITIONS } from '../../data/softball/positions';
-
-// PitchData の型定義（PitchCourseInput と合わせる）
-interface PitchData {
-  id: number;
-  x: number;
-  y: number;
-  type: PitchType;
-  order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
-}
+import { 
+  ZONE_WIDTH, ZONE_HEIGHT, 
+  formatAtBatSummary, calculateCourse, toPercentage,
+  getFielderLabel, getDirectionLabel 
+} from '../../utils/scoreKeeping';
+import { useGameInput } from '../../hooks/useGameInput';
 
 // 座標計算用定数（StrikeZoneGridのサイズに合わせる）
-const ZONE_WIDTH = 260;
-const ZONE_HEIGHT = 325;
 const PLAY_LAYOUT_WIDTH = 1200;
 const SCALE_BASE_WIDTH = 1400;
 const MOBILE_BREAKPOINT = 768;
@@ -46,107 +41,24 @@ const MOBILE_BREAKPOINT = 768;
 type MovementDetails = { position: string; batType: string; outfieldDirection: string };
 type RecentResultDisplay = { playId: string; label: string; rbi: number };
 
-const FIELDER_LABELS: Record<string, string> = Object.keys(POSITIONS).reduce((acc, key) => {
-  const def = POSITIONS[key];
-  if (def?.shortName) {
-    acc[key] = def.shortName;
-  }
-  return acc;
-}, {} as Record<string, string>);
-
-const OUTFIELD_DIRECTION_LABELS: Record<string, string> = {
-  left: '左',
-  'left-center': '左中',
-  center: '中',
-  'right-center': '右中',
-  right: '右',
-  infield: '内',
-};
-
-const getFielderLabel = (position?: string) => (position ? (FIELDER_LABELS[position] || '') : '');
-
-const getDirectionLabel = (direction?: string) => {
-  if (!direction) return '';
-  if (OUTFIELD_DIRECTION_LABELS[direction]) {
-    return OUTFIELD_DIRECTION_LABELS[direction];
-  }
-  return getFielderLabel(direction);
-};
-
-const formatAtBatSummary = (atBat: AtBat): string => {
-  const type = atBat.result?.type;
-  if (!type) return '';
-
-  const beforeOuts = atBat.situationBefore?.outs ?? 0;
-  const afterOuts = atBat.situationAfter?.outs ?? beforeOuts;
-  const outsDiff = Math.max(0, afterOuts - beforeOuts);
-
-  const rawDirection = atBat.playDetails?.direction;
-  const directionLabel = getDirectionLabel(rawDirection);
-  const fieldedBy =
-    atBat.result?.fieldedBy ||
-    atBat.playDetails?.fielding?.[0]?.position ||
-    (rawDirection && /^[1-9]$/.test(rawDirection) ? rawDirection : '');
-  const fielderLabel = getFielderLabel(fieldedBy);
-  const labelForHit = fielderLabel || directionLabel;
-
-  switch (type) {
-    case 'single':
-      return labelForHit ? `${labelForHit}安` : '安';
-    case 'double':
-      return labelForHit ? `${labelForHit}2` : '2';
-    case 'triple':
-      return (directionLabel || fielderLabel || '') ? `${directionLabel || fielderLabel}3` : '3';
-    case 'homerun':
-      return `${directionLabel || fielderLabel || '中'}本`;
-    case 'runninghomerun':
-      return `${directionLabel || fielderLabel || '中'}走本`;
-    case 'groundout':
-      if (outsDiff >= 2) {
-        return fielderLabel ? `${fielderLabel}併殺` : '併殺';
-      }
-      return fielderLabel ? `${fielderLabel}ゴロ` : 'ゴロ';
-    case 'flyout':
-      return fielderLabel ? `${fielderLabel}飛` : '飛';
-    case 'bunt_out':
-      return fielderLabel ? `${fielderLabel}バ失` : 'バ失';
-    case 'strikeout_swinging':
-      return '空三振';
-    case 'strikeout_looking':
-      return '見三振';
-    case 'droppedthird':
-      return '振逃';
-    case 'walk':
-      return '四球';
-    case 'deadball':
-      return '死球';
-    case 'sac_bunt':
-    case 'sacrifice_bunt':
-      return '犠打';
-    case 'sac_fly':
-    case 'sacrifice_fly':
-      return '犠飛';
-    case 'error':
-      return fielderLabel ? `${fielderLabel}失` : '失';
-    case 'interference':
-      return '干渉';
-    default:
-      return '他';
-  }
-};
-
-const calculateCourse = (x: number, y: number): number => {
-  const col = Math.min(4, Math.max(0, Math.floor((x / ZONE_WIDTH) * 5)));
-  const row = Math.min(4, Math.max(0, Math.floor((y / ZONE_HEIGHT) * 5)));
-  return row * 5 + col + 1;
-};
-
-const toPercentage = (val: number, max: number): number => {
-  return parseFloat(((val / max) * 100).toFixed(1));
-};
-
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
+
+  // カスタムフックを使用
+  const {
+    runners,
+    setRunners,
+    handleRunnersChange,
+    currentBSO,
+    setCurrentBSO,
+    currentInningVal,
+    currentHalf,
+    setCurrentHalf, // 追加
+    pitches,
+    setPitches,
+    handleCountsChange,
+    handleCountsReset
+  } = useGameInput(matchId);
 
   const [match, setMatch] = useState<any>(null);
   const [lineup, setLineup] = useState<any>(null);
@@ -157,8 +69,8 @@ const PlayRegister: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pitch' | 'runner'>('pitch');
   const [homeBatIndex, setHomeBatIndex] = useState<number>(0);
   const [awayBatIndex, setAwayBatIndex] = useState<number>(0);
-  const [currentHalf, setCurrentHalf] = useState<'top' | 'bottom'>('top');
-  
+  // const [currentHalf, setCurrentHalf] = useState<'top' | 'bottom'>('top'); // フックへ移動
+
   // 追加: プレー結果入力モード
   const [showPlayResult, setShowPlayResult] = useState(false);
   const [showRunnerMovement, setShowRunnerMovement] = useState(false);
@@ -175,76 +87,13 @@ const PlayRegister: React.FC = () => {
   const [homeTeamName, setHomeTeamName] = useState<string>('先攻');
   const [awayTeamName, setAwayTeamName] = useState<string>('後攻');
 
-  // 追加: ランナー状態を管理
-  const [runners, setRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({
-    '1': null, '2': null, '3': null,
-  });
-
-  // ▼ 追加: gameState のランナー購読（リアルタイム）
-  React.useEffect(() => {
-    if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
-      if (gs) {
-        setRunners({ '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] });
-      }
-    };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
-  }, [matchId]);
-
-  // 現在のBSO状態（追加）
-  const [currentBSO, setCurrentBSO] = useState({ b: 0, s: 0, o: 0 });
-  const [currentInningVal, setCurrentInningVal] = useState(1);
-  const [pitches, setPitches] = useState<PitchData[]>([]);
-
-  // 追加: gameState のBSOを購読（リアルタイム）
-  React.useEffect(() => {
-    if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
-      if (gs) {
-        setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
-        setCurrentInningVal(gs.current_inning);
-      }
-    };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
-  }, [matchId]);
-
-  // ランナー変更ハンドラ
-  const handleRunnersChange = (newRunners: { '1': string | null; '2': string | null; '3': string | null }) => {
-    console.log('ランナー変更:', newRunners); // デバッグ用
-    setRunners(newRunners);
-  };
+  // 追加: 初期化追跡用Ref
+  const lineupInitialized = useRef(false);
 
   // 追加: PitchCourseInputからのカウント更新要求を親で処理
-  const handleCountsChange = (partial: { b?: number; s?: number; o?: number }) => {
-    if (!matchId) return;
-    // 現在値に部分更新を適用
-    const next = { ...currentBSO, ...partial };
-    setCurrentBSO(next);
-    // DB反映は親で管理
-    updateCountsRealtime(matchId, next);
-  };
+  // handleCountsChangeはフックから取得
 
-  const handleCountsReset = () => {
-    if (!matchId) return;
-    resetCountsRealtime(matchId);
-    // ローカルも同期
-    const gs = getGameState(matchId);
-    if (gs) {
-      setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
-    } else {
-      setCurrentBSO({ b: 0, s: 0, o: 0 });
-    }
-  };
+  // handleCountsResetはフックから取得
 
   useEffect(() => {
     if (!matchId) return;
@@ -394,6 +243,9 @@ const PlayRegister: React.FC = () => {
     setAwayLineup(nextAway);
     setLineup(updatedLineup);
 
+    // 変更用ランナー状態（代走反映用）
+    const newRunners = { ...runners };
+
     // ▼ participation 同期
     try {
       // 参加記録未作成ならスタメンとして記録
@@ -429,6 +281,15 @@ const PlayRegister: React.FC = () => {
               kind,
               position: cur.position,
             });
+
+            // 代走反映: 交代した選手がランナーに出ている場合、新しい選手に置き換える
+            if (changed && prev.playerId) {
+              (['1', '2', '3'] as const).forEach(base => {
+                if (newRunners[base] === prev.playerId) {
+                   newRunners[base] = cur.playerId || null;
+                }
+              });
+            }
           }
         }
       }
@@ -482,8 +343,14 @@ const PlayRegister: React.FC = () => {
         ...homePlayers.map(p => p.playerId),
         ...awayPlayers.map(p => p.playerId),
       ]);
-      const nextRunners = { ...runners };
+      const nextRunners = { ...newRunners }; // 更新されたランナー情報を使用
       let runnersChanged = false;
+      
+      // newRunnersと現在のrunnersを比較して変更があればフラグを立てる
+      if (JSON.stringify(newRunners) !== JSON.stringify(runners)) {
+        runnersChanged = true;
+      }
+
       (['1','2','3'] as const).forEach(b => {
         const pid = nextRunners[b];
         if (pid && !validIds.has(pid)) {
@@ -506,25 +373,12 @@ const PlayRegister: React.FC = () => {
     }
   };
 
-  // 追加: 現在の攻撃側 half を gameState からリアルタイム購読
-  useEffect(() => {
-    if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
-      if (gs) setCurrentHalf(gs.top_bottom);
-    };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
-  }, [matchId]);
-
   // 初期打者/投手設定時にインデックス初期化
   useEffect(() => {
-    if (!lineup) return;
+    if (!lineup || lineupInitialized.current) return;
     setHomeBatIndex(0);
     setAwayBatIndex(0);
+    lineupInitialized.current = true;
   }, [lineup]);
 
   // 追加: 現在の half と打順に応じて currentBatter を更新
@@ -603,8 +457,11 @@ const PlayRegister: React.FC = () => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout'].includes(battingResult);
     
-    if (!hasRunners && isOut) {
-      // 打者アウト+ランナーなし → ここでアウト加算とBSリセット、打順前進も行い確定扱い
+    // 3アウト目になる場合はランナー選択をスキップ
+    const nextO = currentBSO.o + (isOut ? 1 : 0);
+
+    if ((!hasRunners && isOut) || (isOut && nextO >= 3)) {
+      // 打者アウト+ランナーなし、または3アウト目 → ここでアウト加算とBSリセット、打順前進も行い確定扱い
       if (matchId) {
         // --- at_bats 保存処理 ---
         const gs = getGameState(matchId);
@@ -1129,6 +986,12 @@ const PlayRegister: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // ランナー選択画面用のアウトカウント（フライアウト等の場合、+1した状態を表示）
+  const movementInitialOuts = useMemo(() => {
+    const isOut = ['groundout', 'flyout'].includes(battingResultForMovement);
+    return Math.min(3, currentBSO.o + (isOut ? 1 : 0));
+  }, [battingResultForMovement, currentBSO.o]);
+
   const desktopContent = (
     <>
       <style>{`
@@ -1190,6 +1053,7 @@ const PlayRegister: React.FC = () => {
               showRunnerMovement={showRunnerMovement}
               showPlayResult={showPlayResult}
               currentBSO={currentBSO}
+              initialOuts={movementInitialOuts} // 追加
               pitches={pitches}
               onPitchesChange={setPitches}
               runners={runners}
@@ -1265,6 +1129,7 @@ const PlayRegister: React.FC = () => {
   );
 
   const scaled = desktopScale < 1 && desktopScale > 0;
+
   return (
     <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
       {scaled ? (
