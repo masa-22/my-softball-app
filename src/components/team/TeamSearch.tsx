@@ -52,34 +52,36 @@ const TeamSearch: React.FC = () => {
     <div>
       <h2>チーム検索</h2>
       <form onSubmit={handleSearch} style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <input
-            type="text"
-            placeholder="チーム名で検索（部分一致）"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <select
-            value={prefecture}
-            onChange={(e) => setPrefecture(e.target.value)}
-            style={{ width: '180px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-          >
-            <option value="">都道府県を選択</option>
-            {prefectures.map((p) => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <select
-            value={affiliation}
-            onChange={(e) => setAffiliation(e.target.value)}
-            style={{ width: '180px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-          >
-            <option value="">所属を選択</option>
-            {affiliations.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            <input
+              type="text"
+              placeholder="チーム名で検索（部分一致）"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ flex: '1 1 200px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            />
+            <select
+              value={prefecture}
+              onChange={(e) => setPrefecture(e.target.value)}
+              style={{ flex: '1 1 140px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            >
+              <option value="">都道府県を選択</option>
+              {prefectures.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            <select
+              value={affiliation}
+              onChange={(e) => setAffiliation(e.target.value)}
+              style={{ flex: '1 1 140px', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            >
+              <option value="">所属を選択</option>
+              {affiliations.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -87,6 +89,7 @@ const TeamSearch: React.FC = () => {
             type="submit"
             disabled={loading}
             style={{
+              flex: 1,
               padding: '10px 20px',
               backgroundColor: '#3498db',
               color: '#fff',
@@ -101,6 +104,7 @@ const TeamSearch: React.FC = () => {
             type="button"
             onClick={handleReset}
             style={{
+              flex: 1,
               padding: '10px 20px',
               backgroundColor: '#eee',
               color: '#333',

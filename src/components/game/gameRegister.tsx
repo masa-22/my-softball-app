@@ -108,7 +108,7 @@ const MatchRegister: React.FC = () => {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom:12 }}>
           <label>所属大会</label>
-          <select value={tournamentId} onChange={(e)=>setTournamentId(e.target.value)} style={{ width:'100%', padding:8 }}>
+          <select value={tournamentId} onChange={(e)=>setTournamentId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
             <option value="">大会を選択</option>
             {tournaments.map(t => <option key={t.id} value={t.id}>{t.year} {t.name}</option>)}
           </select>
@@ -116,32 +116,32 @@ const MatchRegister: React.FC = () => {
 
         <div style={{ marginBottom:12 }}>
           <label>開催日</label>
-          <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={{ width:'100%', padding:8 }} />
+          <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ marginBottom:12 }}>
           <label>開始時間</label>
-          <input type="time" value={startTime} onChange={(e)=>setStartTime(e.target.value)} style={{ width:'100%', padding:8 }} />
+          <input type="time" value={startTime} onChange={(e)=>setStartTime(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ display:'flex', gap:10, marginBottom:12 }}>
           <div style={{ flex:1 }}>
             <label>先攻チーム</label>
-            <select value={homeTeamId} onChange={(e)=>setHomeTeamId(e.target.value)} style={{ width:'100%', padding:8 }}>
+            <select value={homeTeamId} onChange={(e)=>setHomeTeamId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
               <option value="">先攻を選択</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>)}
             </select>
           </div>
           <div style={{ flex:1 }}>
             <label>後攻チーム</label>
-            <select value={awayTeamId} onChange={(e)=>setAwayTeamId(e.target.value)} style={{ width:'100%', padding:8 }}>
+            <select value={awayTeamId} onChange={(e)=>setAwayTeamId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
               <option value="">後攻を選択</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>)}
             </select>
           </div>
         </div>
 
-        <button disabled={loading} type="submit" style={{ padding:'10px 16px', background:'#27ae60', color:'#fff', border:'none' }}>
+        <button disabled={loading} type="submit" style={{ width: '100%', padding:'12px', background:'#27ae60', color:'#fff', border:'none', borderRadius:'4px', fontWeight:'bold', cursor:'pointer' }}>
           {loading ? '登録中...' : '試合を登録'}
         </button>
       </form>

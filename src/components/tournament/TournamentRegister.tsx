@@ -55,24 +55,24 @@ const TournamentRegister: React.FC = () => {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom:12 }}>
           <label>開催年</label>
-          <input value={year} onChange={(e)=>setYear(e.target.value)} placeholder="例: 2025" style={{ width:'100%', padding:8 }} />
+          <input value={year} onChange={(e)=>setYear(e.target.value)} placeholder="例: 2025" style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ marginBottom:12 }}>
           <label>大会名</label>
-          <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="例: 春季大会" style={{ width:'100%', padding:8 }} />
+          <input value={name} onChange={(e)=>setName(e.target.value)} placeholder="例: 春季大会" style={{ width:'100%', padding:8, boxSizing: 'border-box' }} />
         </div>
 
         <div style={{ marginBottom:12 }}>
           <label>大会種別</label>
-          <select value={type} onChange={(e)=>setType(e.target.value as any)} style={{ width:'100%', padding:8 }}>
+          <select value={type} onChange={(e)=>setType(e.target.value as any)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
             <option value="">選択してください</option>
             <option value="トーナメント">トーナメント</option>
             <option value="リーグ">リーグ</option>
           </select>
         </div>
 
-        <button type="submit" disabled={loading} style={{ padding:'10px 16px', background:'#27ae60', color:'#fff', border:'none' }}>
+        <button type="submit" disabled={loading} style={{ width: '100%', padding:'12px', background:'#27ae60', color:'#fff', border:'none', borderRadius:'4px', fontWeight:'bold', cursor:'pointer' }}>
           {loading ? '登録中...' : '大会を登録'}
         </button>
       </form>

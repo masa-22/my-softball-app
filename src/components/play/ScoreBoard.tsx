@@ -71,10 +71,12 @@ const ScoreBoard: React.FC = () => {
       borderRadius: 12, 
       padding: 16, 
       marginBottom: 20, 
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)' 
+      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      overflowX: 'auto'
     }}>
       <table style={{ 
         width: '100%', 
+        minWidth: 400,
         borderCollapse: 'collapse', 
         fontSize: 14 
       }}>
@@ -86,6 +88,7 @@ const ScoreBoard: React.FC = () => {
               textAlign: 'left',
               fontWeight: 600,
               color: '#495057',
+              minWidth: 100
             }}>
               チーム
             </th>
@@ -101,6 +104,7 @@ const ScoreBoard: React.FC = () => {
                     fontWeight: highlight ? 700 : 600,
                     backgroundColor: highlight ? '#fff3cd' : 'transparent',
                     color: highlight ? '#856404' : '#495057',
+                    minWidth: 30
                   }}
                 >
                   {n}
@@ -114,6 +118,7 @@ const ScoreBoard: React.FC = () => {
               fontWeight: 700,
               background: '#e7f5ff',
               color: '#1c7ed6',
+              minWidth: 40
             }}>
               計
             </th>

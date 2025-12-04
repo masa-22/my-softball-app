@@ -106,56 +106,58 @@ const StartingLineup: React.FC = () => {
 
   const renderLineupTable = (side: 'home' | 'away', lineup: any[], players: any[], usedPositions: Set<string>) => {
     return (
-      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ccc' }}>
-        <thead>
-          <tr style={{ background: '#f0f0f0' }}>
-            <th style={{ border: '1px solid #ccc', padding: 8 }}>打順</th>
-            <th style={{ border: '1px solid #ccc', padding: 8 }}>守備</th>
-            <th style={{ border: '1px solid #ccc', padding: 8 }}>選手名</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lineup.map((entry, idx) => {
-            const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
-            return (
-              <tr key={idx}>
-                <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>{displayOrder}</td>
-                <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                  <select
-                    value={entry.position}
-                    onChange={(e) => handlePositionChange(side, idx, e.target.value)}
-                    style={{ width: '100%', padding: 4 }}
-                  >
-                    <option value="">選択</option>
-                    {POSITIONS.map(pos => {
-                      const isUsed = usedPositions.has(pos) && pos !== entry.position;
-                      return (
-                        <option key={pos} value={pos} disabled={isUsed}>
-                          {pos}
+      <div style={{ width: '100%', overflowX: 'auto' }}>
+        <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse', border: '1px solid #ccc' }}>
+          <thead>
+            <tr style={{ background: '#f0f0f0' }}>
+              <th style={{ border: '1px solid #ccc', padding: 8 }}>打順</th>
+              <th style={{ border: '1px solid #ccc', padding: 8 }}>守備</th>
+              <th style={{ border: '1px solid #ccc', padding: 8 }}>選手名</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineup.map((entry, idx) => {
+              const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
+              return (
+                <tr key={idx}>
+                  <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>{displayOrder}</td>
+                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
+                    <select
+                      value={entry.position}
+                      onChange={(e) => handlePositionChange(side, idx, e.target.value)}
+                      style={{ width: '100%', padding: 4, boxSizing: 'border-box' }}
+                    >
+                      <option value="">選択</option>
+                      {POSITIONS.map(pos => {
+                        const isUsed = usedPositions.has(pos) && pos !== entry.position;
+                        return (
+                          <option key={pos} value={pos} disabled={isUsed}>
+                            {pos}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </td>
+                  <td style={{ border: '1px solid #ccc', padding: 8 }}>
+                    <select
+                      value={entry.playerId}
+                      onChange={(e) => handlePlayerChange(side, idx, e.target.value)}
+                      style={{ width: '100%', padding: 4, boxSizing: 'border-box' }}
+                    >
+                      <option value="">選択</option>
+                      {players.map(p => (
+                        <option key={p.playerId} value={p.playerId}>
+                          {p.familyName} {p.givenName}
                         </option>
-                      );
-                    })}
-                  </select>
-                </td>
-                <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                  <select
-                    value={entry.playerId}
-                    onChange={(e) => handlePlayerChange(side, idx, e.target.value)}
-                    style={{ width: '100%', padding: 4 }}
-                  >
-                    <option value="">選択</option>
-                    {players.map(p => (
-                      <option key={p.playerId} value={p.playerId}>
-                        {p.familyName} {p.givenName}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   };
 
@@ -191,15 +193,15 @@ const StartingLineup: React.FC = () => {
     };
 
     return (
-      <div style={{ minWidth: '600px' }}>
+      <div style={{ width: 'min(90vw, 900px)' }}>
         <h3 style={{ textAlign: 'center', marginBottom: 16 }}>登録内容の確認</h3>
-        <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
           {renderTeamConfirm('away', awayLineup, awayPlayers, awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻')}
           {renderTeamConfirm('home', homeLineup, homePlayers, homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻')}
         </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>
-          <button onClick={confirmSave} style={{ padding: '8px 12px', background: '#27ae60', color: '#fff', border: 'none' }}>保存する</button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+          <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px', flex: '1 1 140px' }}>キャンセル</button>
+          <button onClick={confirmSave} style={{ padding: '8px 12px', background: '#27ae60', color: '#fff', border: 'none', flex: '1 1 140px' }}>保存する</button>
         </div>
       </div>
     );
@@ -209,7 +211,7 @@ const StartingLineup: React.FC = () => {
   const awayUsed = getUsedPositions('away');
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
+    <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', padding: 20, boxSizing: 'border-box' }}>
       <h1>スタメン登録</h1>
       <p>
         <strong>試合ID:</strong> {game.gameId} / <strong>開催日:</strong> {game.date}
@@ -218,15 +220,15 @@ const StartingLineup: React.FC = () => {
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
 
-      <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 20 }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <h2 style={{ textAlign: 'center' }}>
             {awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻チーム'}
           </h2>
           {renderLineupTable('away', awayLineup, awayPlayers, awayUsed)}
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <h2 style={{ textAlign: 'center' }}>
             {homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻チーム'}
           </h2>
@@ -234,11 +236,11 @@ const StartingLineup: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-        <button onClick={handleBack} style={{ padding: '10px 16px', border: '1px solid #ccc' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+        <button onClick={handleBack} style={{ padding: '10px 16px', border: '1px solid #ccc', flex: '1 1 200px' }}>
           試合一覧へ戻る
         </button>
-        <button onClick={handleSave} style={{ padding: '10px 16px', background: '#27ae60', color: '#fff', border: 'none' }}>
+        <button onClick={handleSave} style={{ padding: '10px 16px', background: '#27ae60', color: '#fff', border: 'none', flex: '1 1 200px' }}>
           スタメンを保存
         </button>
       </div>

@@ -8,7 +8,7 @@ const TeamManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('search');
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+    <div style={{ width: '95%', maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
       <h1>チーム管理</h1>
 
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid #ccc' }}>

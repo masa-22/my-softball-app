@@ -38,8 +38,11 @@ interface PitchData {
 }
 
 // 座標計算用定数（StrikeZoneGridのサイズに合わせる）
-const ZONE_WIDTH = 248;
-const ZONE_HEIGHT = 310;
+const ZONE_WIDTH = 260;
+const ZONE_HEIGHT = 325;
+const PLAY_LAYOUT_WIDTH = 1200;
+const SCALE_BASE_WIDTH = 1400;
+const MOBILE_BREAKPOINT = 768;
 
 const calculateCourse = (x: number, y: number): number => {
   const col = Math.min(4, Math.max(0, Math.floor((x / ZONE_WIDTH) * 5)));
@@ -877,6 +880,7 @@ const PlayRegister: React.FC = () => {
   const [showAddOutDialog, setShowAddOutDialog] = useState(false);
   const [selectedOutRunner, setSelectedOutRunner] = useState<{ runnerId: string; fromBase: '1' | '2' | '3' } | null>(null);
   const [previousRunners, setPreviousRunners] = useState<{ '1': string | null; '2': string | null; '3': string | null }>({ '1': null, '2': null, '3': null });
+  const [desktopScale, setDesktopScale] = useState(1);
 
   // ラベル/名前解決（親提供）
   const baseLabel = (b: '1' | '2' | '3' | 'home') => (b === 'home' ? 'ホーム' : b === '1' ? '一塁' : b === '2' ? '二塁' : '三塁');
@@ -1033,77 +1037,173 @@ const PlayRegister: React.FC = () => {
     }
   }, [matchId, currentBatter, currentPitcher]);
 
-  return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20, backgroundColor: '#f8f9fa' }}>
-      <ScoreBoard />
-      <div style={{ display:'grid', gridTemplateColumns:'280px 1fr 280px', gap:16 }}>
-        <LeftSidebar
-          teamName={awayTeamName}
-          lineup={awayLineup}
-          players={awayPlayers}
-          currentPitcher={currentPitcher}
-          pitcherStats={pitcherStats}
-          runners={runners}
-          onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
-          onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
-          onSave={() => handleSidebarSave('away')}
-          // 追加: 左サイドにも現在打者IDを渡す（攻撃側がawayのときハイライト）
-          currentBatterId={currentBatter?.playerId}
-        />
-        <CenterPanel
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          showRunnerMovement={showRunnerMovement}
-          showPlayResult={showPlayResult}
-          currentBSO={currentBSO}
-          pitches={pitches}
-          onPitchesChange={setPitches}
-          runners={runners}
-          currentBatterId={currentBatter?.playerId}
-          battingResultForMovement={battingResultForMovement}
-          onPlayResultComplete={handlePlayResultComplete}
-          onInplayCommit={handleInplayCommit}
-          onStrikeoutCommit={handleStrikeoutCommit}
-          onWalkCommit={handleWalkCommit}
-          onRunnerMovement={handleRunnerMovement}
-          onRunnersChange={handleRunnersChange}
-          onCountsChange={handleCountsChange}
-          onCountsReset={handleCountsReset}
-          strikeoutType={strikeoutType}
-          offensePlayers={offensePlayers}
-          offenseTeamId={offenseTeamId} // 追加
-          baseLabel={baseLabel}
-          getRunnerName={getRunnerName}
-          onRunnerBaseClick={handleRunnerBaseClick}
-          onAddOutClick={handleAddOutClick}
-          showAdvanceDialog={showAdvanceDialog}
-          pendingAdvancements={pendingAdvancements}
-          onAdvanceConfirm={handleRunnerAdvanceConfirm}
-          showOutDialog={showOutDialog}
-          pendingOuts={pendingOuts}
-          onOutConfirm={handleRunnerOutConfirm}
-          onDialogCancel={handleRunnerDialogCancel}
-          showAddOutDialog={showAddOutDialog}
-          selectedOutRunner={selectedOutRunner}
-          onSelectOutRunner={handleSelectOutRunner}
-          onAddOutConfirm={handleAddOutConfirm}
-          onAddOutCancel={handleAddOutCancel}
-        />
-        <RightSidebar
-          teamName={homeTeamName}
-          lineup={homeLineup}
-          players={homePlayers}
-          currentBatter={currentBatter}
-          recentBatterResults={recentBatterResults}
-          runners={runners}
-          onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
-          onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
-          onSave={() => handleSidebarSave('home')}
-          currentBattingOrder={currentBattingOrder}
-          // 追加: 右サイドにも現在投手IDを渡す（守備側がhomeのときハイライト）
-          currentPitcherId={currentPitcher?.playerId}
-        />
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window === 'undefined') return;
+      const width = window.innerWidth;
+      if (width <= MOBILE_BREAKPOINT) {
+        setDesktopScale(1);
+        return;
+      }
+      const ratio = Math.min(1, width / SCALE_BASE_WIDTH);
+      setDesktopScale(ratio);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const desktopContent = (
+    <>
+      <style>{`
+        .play-register-container {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px 10px;
+          background-color: #f8f9fa;
+          box-sizing: border-box;
+        }
+        
+        .play-grid {
+          display: grid;
+          gap: 16px;
+          /* PC: 左(可変) 中(広め) 右(可変) */
+          grid-template-columns: minmax(200px, 280px) minmax(300px, 1fr) minmax(200px, 280px);
+          grid-template-areas: "left center right";
+          align-items: start;
+        }
+
+        .area-scoreboard {
+          display: block;
+          overflow-x: auto;
+          margin-bottom: 16px;
+        }
+
+        .area-center { grid-area: center; }
+        .area-left { grid-area: left; }
+        .area-right { grid-area: right; }
+
+        /* スマホ・縦画面 (幅が狭い場合) */
+        @media (max-width: 768px) {
+          .area-scoreboard {
+            display: none; /* スコアボード非表示 */
+          }
+
+          .play-grid {
+            /* 中央を上に、下段に左右を並べる */
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            grid-template-areas:
+              "center center"
+              "left right";
+          }
+        }
+      `}</style>
+
+      <div className="play-register-container">
+        <div className="area-scoreboard">
+          <div style={{ minWidth: 320 }}>
+            <ScoreBoard />
+          </div>
+        </div>
+        <div className="play-grid">
+          <div className="area-center">
+            <CenterPanel
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              showRunnerMovement={showRunnerMovement}
+              showPlayResult={showPlayResult}
+              currentBSO={currentBSO}
+              pitches={pitches}
+              onPitchesChange={setPitches}
+              runners={runners}
+              currentBatterId={currentBatter?.playerId}
+              battingResultForMovement={battingResultForMovement}
+              onPlayResultComplete={handlePlayResultComplete}
+              onInplayCommit={handleInplayCommit}
+              onStrikeoutCommit={handleStrikeoutCommit}
+              onWalkCommit={handleWalkCommit}
+              onRunnerMovement={handleRunnerMovement}
+              onRunnersChange={handleRunnersChange}
+              onCountsChange={handleCountsChange}
+              onCountsReset={handleCountsReset}
+              strikeoutType={strikeoutType}
+              offensePlayers={offensePlayers}
+              offenseTeamId={offenseTeamId} // 追加
+              baseLabel={baseLabel}
+              getRunnerName={getRunnerName}
+              onRunnerBaseClick={handleRunnerBaseClick}
+              onAddOutClick={handleAddOutClick}
+              showAdvanceDialog={showAdvanceDialog}
+              pendingAdvancements={pendingAdvancements}
+              onAdvanceConfirm={handleRunnerAdvanceConfirm}
+              showOutDialog={showOutDialog}
+              pendingOuts={pendingOuts}
+              onOutConfirm={handleRunnerOutConfirm}
+              onDialogCancel={handleRunnerDialogCancel}
+              showAddOutDialog={showAddOutDialog}
+              selectedOutRunner={selectedOutRunner}
+              onSelectOutRunner={handleSelectOutRunner}
+              onAddOutConfirm={handleAddOutConfirm}
+              onAddOutCancel={handleAddOutCancel}
+            />
+          </div>
+          
+          <div className="area-left">
+            <LeftSidebar
+              teamName={awayTeamName}
+              lineup={awayLineup}
+              players={awayPlayers}
+              currentPitcher={currentPitcher}
+              pitcherStats={pitcherStats}
+              runners={runners}
+              onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
+              onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
+              onSave={() => handleSidebarSave('away')}
+              // 追加: 左サイドにも現在打者IDを渡す（攻撃側がawayのときハイライト）
+              currentBatterId={currentBatter?.playerId}
+            />
+          </div>
+
+          <div className="area-right">
+            <RightSidebar
+              teamName={homeTeamName}
+              lineup={homeLineup}
+              players={homePlayers}
+              currentBatter={currentBatter}
+              recentBatterResults={recentBatterResults}
+              runners={runners}
+              onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
+              onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
+              onSave={() => handleSidebarSave('home')}
+              currentBattingOrder={currentBattingOrder}
+              // 追加: 右サイドにも現在投手IDを渡す（守備側がhomeのときハイライト）
+              currentPitcherId={currentPitcher?.playerId}
+            />
+          </div>
+        </div>
       </div>
+    </>
+  );
+
+  const scaled = desktopScale < 1 && desktopScale > 0;
+  return (
+    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+      {scaled ? (
+        <div style={{ width: PLAY_LAYOUT_WIDTH * desktopScale }}>
+          <div
+            style={{
+              width: PLAY_LAYOUT_WIDTH,
+              transform: `scale(${desktopScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            {desktopContent}
+          </div>
+        </div>
+      ) : (
+        <div style={{ width: '100%', maxWidth: PLAY_LAYOUT_WIDTH }}>{desktopContent}</div>
+      )}
     </div>
   );
 };

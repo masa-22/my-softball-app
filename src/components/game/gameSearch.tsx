@@ -75,17 +75,19 @@ const MatchSearch: React.FC = () => {
     <div>
       <h2>試合検索</h2>
       <form onSubmit={handleSearch} style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-          <select value={tournamentId} onChange={(e)=>setTournamentId(e.target.value)} style={{ width: 240, padding: 8 }}>
-            <option value="">大会を選択</option>
-            {tournaments.map(t => <option key={t.id} value={t.id}>{t.year} {t.name}</option>)}
-          </select>
-          <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={{ padding:8 }} />
-          <input placeholder="チーム名（部分一致）" value={teamName} onChange={(e)=>setTeamName(e.target.value)} style={{ flex:1, padding:8 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            <select value={tournamentId} onChange={(e)=>setTournamentId(e.target.value)} style={{ flex: '1 1 200px', padding: 8, boxSizing: 'border-box' }}>
+              <option value="">大会を選択</option>
+              {tournaments.map(t => <option key={t.id} value={t.id}>{t.year} {t.name}</option>)}
+            </select>
+            <input type="date" value={date} onChange={(e)=>setDate(e.target.value)} style={{ flex: '1 1 140px', padding:8, boxSizing: 'border-box' }} />
+            <input placeholder="チーム名（部分一致）" value={teamName} onChange={(e)=>setTeamName(e.target.value)} style={{ flex:'1 1 200px', padding:8, boxSizing: 'border-box' }} />
+          </div>
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <button type="submit" style={{ padding:'8px 16px', background:'#3498db', color:'#fff', border:'none' }}>検索</button>
-          <button type="button" onClick={handleReset} style={{ padding:'8px 16px', border:'1px solid #ccc' }}>リセット</button>
+          <button type="submit" style={{ flex: 1, padding:'8px 16px', background:'#3498db', color:'#fff', border:'none', borderRadius: 4 }}>検索</button>
+          <button type="button" onClick={handleReset} style={{ flex: 1, padding:'8px 16px', border:'1px solid #ccc', borderRadius: 4 }}>リセット</button>
         </div>
       </form>
 
