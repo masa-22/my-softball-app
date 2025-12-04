@@ -24,8 +24,7 @@ import { getAtBats, saveAtBat } from '../../services/atBatService';
 import { AtBat } from '../../types/AtBat';
 import { PitchType } from './common/PitchTypeSelector';
 import { RunnerMovementResult } from './RunnerMovementInput';
-
-const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
+import { POSITIONS } from '../../data/softball/positions';
 
 // PitchData の型定義（PitchCourseInput と合わせる）
 interface PitchData {
@@ -43,6 +42,98 @@ const ZONE_HEIGHT = 325;
 const PLAY_LAYOUT_WIDTH = 1200;
 const SCALE_BASE_WIDTH = 1400;
 const MOBILE_BREAKPOINT = 768;
+
+type MovementDetails = { position: string; batType: string; outfieldDirection: string };
+type RecentResultDisplay = { playId: string; label: string; rbi: number };
+
+const FIELDER_LABELS: Record<string, string> = Object.keys(POSITIONS).reduce((acc, key) => {
+  const def = POSITIONS[key];
+  if (def?.shortName) {
+    acc[key] = def.shortName;
+  }
+  return acc;
+}, {} as Record<string, string>);
+
+const OUTFIELD_DIRECTION_LABELS: Record<string, string> = {
+  left: '左',
+  'left-center': '左中',
+  center: '中',
+  'right-center': '右中',
+  right: '右',
+  infield: '内',
+};
+
+const getFielderLabel = (position?: string) => (position ? (FIELDER_LABELS[position] || '') : '');
+
+const getDirectionLabel = (direction?: string) => {
+  if (!direction) return '';
+  if (OUTFIELD_DIRECTION_LABELS[direction]) {
+    return OUTFIELD_DIRECTION_LABELS[direction];
+  }
+  return getFielderLabel(direction);
+};
+
+const formatAtBatSummary = (atBat: AtBat): string => {
+  const type = atBat.result?.type;
+  if (!type) return '';
+
+  const beforeOuts = atBat.situationBefore?.outs ?? 0;
+  const afterOuts = atBat.situationAfter?.outs ?? beforeOuts;
+  const outsDiff = Math.max(0, afterOuts - beforeOuts);
+
+  const rawDirection = atBat.playDetails?.direction;
+  const directionLabel = getDirectionLabel(rawDirection);
+  const fieldedBy =
+    atBat.result?.fieldedBy ||
+    atBat.playDetails?.fielding?.[0]?.position ||
+    (rawDirection && /^[1-9]$/.test(rawDirection) ? rawDirection : '');
+  const fielderLabel = getFielderLabel(fieldedBy);
+  const labelForHit = fielderLabel || directionLabel;
+
+  switch (type) {
+    case 'single':
+      return labelForHit ? `${labelForHit}安` : '安';
+    case 'double':
+      return labelForHit ? `${labelForHit}2` : '2';
+    case 'triple':
+      return (directionLabel || fielderLabel || '') ? `${directionLabel || fielderLabel}3` : '3';
+    case 'homerun':
+      return `${directionLabel || fielderLabel || '中'}本`;
+    case 'runninghomerun':
+      return `${directionLabel || fielderLabel || '中'}走本`;
+    case 'groundout':
+      if (outsDiff >= 2) {
+        return fielderLabel ? `${fielderLabel}併殺` : '併殺';
+      }
+      return fielderLabel ? `${fielderLabel}ゴロ` : 'ゴロ';
+    case 'flyout':
+      return fielderLabel ? `${fielderLabel}飛` : '飛';
+    case 'bunt_out':
+      return fielderLabel ? `${fielderLabel}バ失` : 'バ失';
+    case 'strikeout_swinging':
+      return '空三振';
+    case 'strikeout_looking':
+      return '見三振';
+    case 'droppedthird':
+      return '振逃';
+    case 'walk':
+      return '四球';
+    case 'deadball':
+      return '死球';
+    case 'sac_bunt':
+    case 'sacrifice_bunt':
+      return '犠打';
+    case 'sac_fly':
+    case 'sacrifice_fly':
+      return '犠飛';
+    case 'error':
+      return fielderLabel ? `${fielderLabel}失` : '失';
+    case 'interference':
+      return '干渉';
+    default:
+      return '他';
+  }
+};
 
 const calculateCourse = (x: number, y: number): number => {
   const col = Math.min(4, Math.max(0, Math.floor((x / ZONE_WIDTH) * 5)));
@@ -71,7 +162,7 @@ const PlayRegister: React.FC = () => {
   const [strikeoutType, setStrikeoutType] = useState<'swinging' | 'looking' | null>(null);
   const [battingResultForMovement, setBattingResultForMovement] = useState<string>(''); // 追加
   // positionだけでなく詳細を保持するように変更
-  const [playDetailsForMovement, setPlayDetailsForMovement] = useState<{ position: string; batType: string }>({ position: '', batType: 'ground' });
+  const [playDetailsForMovement, setPlayDetailsForMovement] = useState<MovementDetails>({ position: '', batType: 'ground', outfieldDirection: '' });
 
   // 追加: サイドバー編集用 state（先攻/後攻）
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
@@ -202,41 +293,23 @@ const PlayRegister: React.FC = () => {
   }, [lineup, currentBatter]);
 
   // 現在打者の過去打席結果（直近から最大3件）
-  const recentBatterResults = useMemo(() => {
+  const recentBatterResults = useMemo<RecentResultDisplay[]>(() => {
     if (!matchId || !currentBatter) return [];
     const allAtBats = getAtBats(matchId);
-    const myAtBats = allAtBats.filter(a => a.batterId === currentBatter.playerId && a.type === 'bat');
-
-    // 表示用に変換
-    const results = myAtBats.map(a => {
-        let label = '';
-        switch(a.result?.type) {
-            case 'single': label = '安'; break;
-            case 'double': label = '二'; break;
-            case 'triple': label = '三'; break;
-            case 'homerun': label = '本'; break;
-            case 'walk': label = '四'; break;
-            case 'deadball': label = '死'; break;
-            case 'strikeout_swinging':
-            case 'strikeout_looking':
-            case 'droppedthird':
-                label = '三振'; break;
-            case 'groundout': label = 'ゴ'; break;
-            case 'flyout': label = '飛'; break;
-            case 'sac_bunt': label = '犠打'; break;
-            case 'sac_fly': label = '犠飛'; break;
-            case 'error': label = '失'; break;
-            default: label = '他'; break;
-        }
+    return allAtBats
+      .filter(a => a.batterId === currentBatter.playerId && a.type === 'bat')
+      .map(atBat => {
+        const label = formatAtBatSummary(atBat);
+        if (!label) return null;
         return {
-            inning: a.inning,
-            half: a.topOrBottom,
-            result: label
+          playId: atBat.playId,
+          label,
+          rbi: atBat.result?.rbi ?? 0,
         };
-    })
-    .reverse()
-    .slice(0, 3);
-    return results;
+      })
+      .filter((item): item is RecentResultDisplay => !!item)
+      .reverse()
+      .slice(0, 3);
   }, [matchId, currentBatter]);
 
   // 投手の現在回・球数・ストライク/ボール数
@@ -521,13 +594,13 @@ const PlayRegister: React.FC = () => {
     const isDeadball = pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball';
     setBattingResultForMovement(isDeadball ? 'deadball' : 'walk');
     
-    setPlayDetailsForMovement({ position: '', batType: 'walk' });
+    setPlayDetailsForMovement({ position: '', batType: 'walk', outfieldDirection: '' });
     setShowRunnerMovement(true);
     // BSリセット・打順前進は「最終確定時」に実施
   };
 
   // ランナー動き入力画面へ遷移（結果確定後に呼ばれる）
-  const handleRunnerMovement = (battingResult: string, details: { position: string; batType: string }) => {
+  const handleRunnerMovement = (battingResult: string, details: MovementDetails) => {
     // ランナーがいない状態でアウトの場合はランナー入力をスキップ
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout'].includes(battingResult);
@@ -564,6 +637,7 @@ const PlayRegister: React.FC = () => {
           battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1, // 暫定
           result: {
             type: battingResult as any,
+            fieldedBy: details.position || undefined,
           },
           situationBefore: {
             outs: currentO,
@@ -582,7 +656,7 @@ const PlayRegister: React.FC = () => {
           runnerEvents: [], // ランナーなしアウトなのでイベントなし
           playDetails: {
             batType: details.batType as any,
-            direction: details.position, // 誰が取ったか
+            direction: details.outfieldDirection || details.position,
             fielding: (() => {
               if (!details.position) return [];
               const fielding = [];
@@ -628,7 +702,7 @@ const PlayRegister: React.FC = () => {
       setShowPlayResult(false);
       setShowRunnerMovement(false);
       setBattingResultForMovement('');
-      setPlayDetailsForMovement({ position: '', batType: '' });
+      setPlayDetailsForMovement({ position: '', batType: '', outfieldDirection: '' });
       return;
     }
 
@@ -729,6 +803,10 @@ const PlayRegister: React.FC = () => {
           type: battingResultForMovement, // 保存しておいた打撃結果を使用
         };
         
+        if (playDetailsForMovement.position) {
+          atBatResult.fieldedBy = playDetailsForMovement.position;
+        }
+        
         if (scoredRunners.length > 0) {
           atBatResult.rbi = scoredRunners.length;
         }
@@ -764,7 +842,7 @@ const PlayRegister: React.FC = () => {
           runnerEvents: [], // TODO: movementResultからイベント詳細があれば変換
           playDetails: {
              batType: playDetailsForMovement.batType as any,
-             direction: playDetailsForMovement.position, // 誰が取ったか
+             direction: playDetailsForMovement.outfieldDirection || playDetailsForMovement.position,
              fielding: (() => {
                const list: any[] = [];
                // 1. 打球処理 (fielded)
@@ -840,7 +918,7 @@ const PlayRegister: React.FC = () => {
         setShowRunnerMovement(false);
         setStrikeoutType(null);
         setBattingResultForMovement('');
-        setPlayDetailsForMovement({ position: '', batType: '' });
+        setPlayDetailsForMovement({ position: '', batType: '', outfieldDirection: '' });
         setPendingOutcome(null);
     } else {
         // キャンセルの場合、入力画面を閉じるかどうか
@@ -851,7 +929,7 @@ const PlayRegister: React.FC = () => {
         // あるいは RunnerMovementInput を閉じて PlayResultPanel を出すか。
         // ここでは単純に閉じて、PitchCourseInput (初期状態) に戻る挙動にする
         setBattingResultForMovement('');
-        setPlayDetailsForMovement({ position: '', batType: '' });
+        setPlayDetailsForMovement({ position: '', batType: '', outfieldDirection: '' });
     }
   };
 

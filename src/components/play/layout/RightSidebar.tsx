@@ -6,7 +6,7 @@ interface RightSidebarProps {
   lineup: any[];
   players: any[];
   currentBatter: any;
-  recentBatterResults: Array<{ inning: number; half: 'top' | 'bottom'; result: string }>;
+  recentBatterResults: Array<{ playId: string; label: string; rbi: number }>;
   runners: { '1': string | null; '2': string | null; '3': string | null };
   onPositionChange: (idx: number, val: string) => void;
   onPlayerChange: (idx: number, val: string) => void;
@@ -60,12 +60,17 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         <div style={{ fontSize: 12, color: '#6c757d' }}>
           {recentBatterResults.length > 0 ? (
             <div>
-              直近打席:
-              <ul style={{ margin: '4px 0 0 16px', paddingLeft: 0 }}>
-                {recentBatterResults.map((r, i) => (
-                  <li key={i} style={{ fontSize: 11 }}>{`${r.inning}回${r.half === 'top' ? '表' : '裏'}: ${r.result}`}</li>
+              <div style={{ marginBottom: 4 }}>直近打席</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                {recentBatterResults.map((result) => (
+                  <span key={result.playId} style={{ fontSize: 13, fontWeight: 600, color: '#212529', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span>{result.label}</span>
+                    {result.rbi > 0 && (
+                      <span style={{ color: '#c92a2a', fontWeight: 700 }}>+{result.rbi}</span>
+                    )}
+                  </span>
                 ))}
-              </ul>
+              </div>
             </div>
           ) : (
             <span>過去打席なし</span>
