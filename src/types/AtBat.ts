@@ -74,7 +74,7 @@ export interface RunnerEvent {
   };
 }
 
-export type BatType = 'ground' | 'fly' | 'liner' | 'bunt';
+export type BatType = 'ground' | 'fly' | 'liner' | 'bunt' | 'walk';
 
 // 打球方向は既存の定義を維持しつつ、将来的にポジション番号も入れられるようにしておく
 export type BatDirection = 'left' | 'center' | 'right' | 'infield' | string;

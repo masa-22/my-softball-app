@@ -518,7 +518,7 @@ const PlayRegister: React.FC = () => {
     const isDeadball = pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball';
     setBattingResultForMovement(isDeadball ? 'deadball' : 'walk');
     
-    setPlayDetailsForMovement({ position: '', batType: '' });
+    setPlayDetailsForMovement({ position: '', batType: 'walk' });
     setShowRunnerMovement(true);
     // BSリセット・打順前進は「最終確定時」に実施
   };
