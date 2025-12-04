@@ -1,26 +1,6 @@
 import { Teams as initialTeams } from '../data/Teams';
 
-interface Team {
-  id: number;
-  teamName: string;
-  teamAbbr: string;
-  prefecture: string;
-  affiliation: string;
-  createdAt?: string;
-}
-
-interface TeamData {
-  teamName: string;
-  teamAbbr: string;
-  prefecture: string;
-  affiliation: string;
-}
-
-interface SearchParams {
-  name?: string;
-  prefecture?: string;
-  affiliation?: string;
-}
+import { Team, TeamData, TeamSearchParams } from '../types/Team';
 
 let teams: Team[] = [];
 
@@ -71,7 +51,7 @@ export const getAffiliations = (): string[] => {
   return Array.from(set).sort();
 };
 
-export const searchTeams = async (param: string | SearchParams): Promise<Team[]> => {
+export const searchTeams = async (param: string | TeamSearchParams): Promise<Team[]> => {
   let name = '';
   let prefecture = '';
   let affiliation = '';

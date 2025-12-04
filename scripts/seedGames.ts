@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import type { Game } from '../src/models/games';
+import type { Game } from '../src/types/Game';
 
 // TODO: 環境変数や設定ファイルから取得する
 const firebaseConfig = {

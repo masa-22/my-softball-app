@@ -1,10 +1,4 @@
-type Tournament = {
-  id: string;
-  year: string;
-  name: string;
-  type: 'トーナメント' | 'リーグ' | string;
-  createdAt?: string;
-};
+import { Tournament, TournamentSearchParams, TournamentRegisterData } from '../types/Tournament';
 
 let tournaments: Tournament[] = [];
 
@@ -34,7 +28,7 @@ load();
 
 export const getTournaments = (): Tournament[] => tournaments.slice();
 
-export const searchTournaments = async (params: { year?: string; name?: string }) : Promise<Tournament[]> => {
+export const searchTournaments = async (params: TournamentSearchParams) : Promise<Tournament[]> => {
   const year = (params.year || '').trim();
   const name = (params.name || '').trim().toLowerCase();
   return tournaments.filter(t => {
@@ -44,7 +38,7 @@ export const searchTournaments = async (params: { year?: string; name?: string }
   }).sort((a,b) => (a.year + a.name).localeCompare(b.year + b.name));
 };
 
-export const registerTournament = async (data: { year: string; name: string; type: Tournament['type'] }) : Promise<Tournament> => {
+export const registerTournament = async (data: TournamentRegisterData) : Promise<Tournament> => {
   const year = (data.year || '').trim();
   const name = (data.name || '').trim();
   const type = (data.type || '').trim() as Tournament['type'];

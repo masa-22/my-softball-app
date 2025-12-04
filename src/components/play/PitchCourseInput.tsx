@@ -69,6 +69,8 @@ interface PitchCourseInputProps {
   runners: { '1': string | null; '2': string | null; '3': string | null };
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;
+  pitches?: PitchData[]; // 追加
+  onPitchesChange?: React.Dispatch<React.SetStateAction<PitchData[]>>; // 追加
 }
 
 const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
@@ -79,8 +81,10 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   runners,
   onCountsChange,
   onCountsReset,
+  pitches = [],
+  onPitchesChange,
 }) => {
-  const [pitches, setPitches] = useState<PitchData[]>([]);
+  // const [pitches, setPitches] = useState<PitchData[]>([]); // 内部管理廃止
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
   const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | ''>('');
@@ -100,7 +104,11 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
       order: pitches.length + 1,
       result: pendingResult as PitchData['result'],
     };
-    setPitches(prev => [...prev, newPitch]);
+    
+    // 親の状態を更新
+    if (onPitchesChange) {
+      onPitchesChange(prev => [...prev, newPitch]);
+    }
 
     const currentBalls = bso.b;
     const currentStrikes = bso.s;
