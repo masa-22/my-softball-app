@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import MatchSearch from './MatchSearch';
-import MatchRegister from './MatchRegister';
+import MatchSearch from './gameSearch';
+import MatchRegister from './gameRegister';
 
 type ActiveTab = 'search' | 'register';
 

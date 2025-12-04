@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getMatches } from '../../services/matchService';
+// import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 import { getPlayers } from '../../services/playerService';
-import { getLineup, saveLineup } from '../../services/lineupService';
+import { getLineup, saveLineup, recordStartersFromLineup } from '../../services/lineupService';
 import Modal from '../common/Modal';
+import { getGame } from '../../services/gameService';
 
 const POSITIONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP'];
 
@@ -12,7 +13,7 @@ const StartingLineup: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
 
-  const [match, setMatch] = useState<any>(null);
+  const [game, setGame] = useState<any>(null);
   const [homeTeam, setHomeTeam] = useState<any>(null);
   const [awayTeam, setAwayTeam] = useState<any>(null);
   const [homePlayers, setHomePlayers] = useState<any[]>([]);
@@ -27,17 +28,18 @@ const StartingLineup: React.FC = () => {
 
   useEffect(() => {
     if (!matchId) return;
-    const matches = getMatches();
-    const m = matches.find(x => x.id === matchId);
-    if (!m) {
+    // games から取得
+    const g = getGame(matchId);
+    if (!g) {
       setError('試合が見つかりません。');
       return;
     }
-    setMatch(m);
+    setGame(g);
 
     const teams = getTeams();
-    const home = teams.find(t => String(t.id) === String(m.homeTeamId));
-    const away = teams.find(t => String(t.id) === String(m.awayTeamId));
+    // 先攻 = top, 後攻 = bottom
+    const home = teams.find(t => String(t.id) === String(g.topTeam.id));
+    const away = teams.find(t => String(t.id) === String(g.bottomTeam.id));
     setHomeTeam(home);
     setAwayTeam(away);
 
@@ -81,22 +83,24 @@ const StartingLineup: React.FC = () => {
     setConfirmOpen(true);
   };
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     if (!matchId) return;
     saveLineup(matchId, { home: homeLineup, away: awayLineup });
+    // ▼ 追加: participationへスタメン記録
+    await recordStartersFromLineup(matchId);
     setMessage('スタメンを保存しました。');
     setConfirmOpen(false);
     // スタメン保存後にプレイ登録画面へ遷移
     setTimeout(() => {
-      navigate(`/match/${matchId}/play`);
+      navigate(`/game/${matchId}/play`);
     }, 1000);
   };
 
   const handleBack = () => {
-    navigate('/match');
+    navigate('/match'); // 必要ならゲーム一覧ページに変更
   };
 
-  if (!match) {
+  if (!game) {
     return <div style={{ padding: 20 }}>{error || '読み込み中...'}</div>;
   }
 
@@ -208,14 +212,13 @@ const StartingLineup: React.FC = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 20 }}>
       <h1>スタメン登録</h1>
       <p>
-        <strong>試合ID:</strong> {match.id} / <strong>日時:</strong> {match.date} {match.startTime}
+        <strong>試合ID:</strong> {game.gameId} / <strong>開催日:</strong> {game.date}
       </p>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
       {message && <p style={{ color: 'green' }}>{message}</p>}
 
       <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
-        {/* 後攻チーム（左側） */}
         <div style={{ flex: 1 }}>
           <h2 style={{ textAlign: 'center' }}>
             {awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻チーム'}
@@ -223,7 +226,6 @@ const StartingLineup: React.FC = () => {
           {renderLineupTable('away', awayLineup, awayPlayers, awayUsed)}
         </div>
 
-        {/* 先攻チーム（右側） */}
         <div style={{ flex: 1 }}>
           <h2 style={{ textAlign: 'center' }}>
             {homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻チーム'}

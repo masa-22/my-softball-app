@@ -4,9 +4,10 @@
  */
 import React, { useMemo, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getMatches } from '../../../services/matchService';
+// import { getMatches } from '../../../services/matchService';
 import { getTeams } from '../../../services/teamService';
 import { getGameState } from '../../../services/gameStateService';
+import { getGame } from '../../../services/gameService';
 
 interface MiniScoreBoardProps {
   bso: {
@@ -69,23 +70,18 @@ const styles = {
 
 const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
   const { matchId } = useParams<{ matchId: string }>();
-  const match = useMemo(() => (matchId ? getMatches().find(m => m.id === matchId) : null), [matchId]);
+  const game = useMemo(() => (matchId ? getGame(matchId) : null), [matchId]);
 
-  // ▼ 追加: gameState をリアルタイム購読
+  // ▼ gameState をリアルタイム購読
   const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
   useEffect(() => {
     if (!matchId) return;
     const update = () => setState(getGameState(matchId));
     update();
     const t = setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'game_states') update();
-    };
+    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
     window.addEventListener('storage', onStorage);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener('storage', onStorage);
-    };
+    return () => { clearInterval(t); window.removeEventListener('storage', onStorage); };
   }, [matchId]);
 
   const currentInningInfo = useMemo(() => {
@@ -94,16 +90,17 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
   }, [state]);
 
   const teamNames = useMemo(() => {
-    if (!match) return { home: '先攻', away: '後攻' };
+    if (!game) return { home: '先攻', away: '後攻' };
     const teams = getTeams();
-    const home = teams.find(t => String(t.id) === String(match.homeTeamId));
-    const away = teams.find(t => String(t.id) === String(match.awayTeamId));
-    return { home: home?.teamAbbr || '先攻', away: away?.teamAbbr || '後攻' };
-  }, [match]);
+    const home = teams.find(t => String(t.id) === String(game.topTeam.id));
+    const away = teams.find(t => String(t.id) === String(game.bottomTeam.id));
+    return {
+      home: home?.teamAbbr || game.topTeam.shortName || game.topTeam.name,
+      away: away?.teamAbbr || game.bottomTeam.shortName || game.bottomTeam.name,
+    };
+  }, [game]);
 
   const isTopInning = currentInningInfo.half === 'top';
-
-  // ▼ 追加: BSOは gameState 優先、未取得時は props を使用
   const counts = state?.counts || bso;
 
   return (

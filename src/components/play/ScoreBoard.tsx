@@ -3,9 +3,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getMatches } from '../../services/matchService';
+// import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 import { getGameState } from '../../services/gameStateService';
+import { getGame } from '../../services/gameService';
 
 const MAX_INNINGS = 7;
 
@@ -18,20 +19,20 @@ const ScoreBoard: React.FC = () => {
   useEffect(() => {
     if (!matchId) return;
 
-    const m = getMatches().find(x => x.id === matchId);
-    if (m) {
+    // ▼ gamesからチーム名取得
+    const g = getGame(matchId);
+    if (g) {
       const teams = getTeams();
-      const home = teams.find(t => String(t.id) === String(m.homeTeamId));
-      const away = teams.find(t => String(t.id) === String(m.awayTeamId));
-      if (home) setHomeName(home.teamName);
-      if (away) setAwayName(away.teamName);
+      const home = teams.find(t => String(t.id) === String(g.topTeam.id));
+      const away = teams.find(t => String(t.id) === String(g.bottomTeam.id));
+      setHomeName(home ? home.teamName : g.topTeam.name);
+      setAwayName(away ? away.teamName : g.bottomTeam.name);
     }
 
     const update = () => setState(getGameState(matchId));
     update();
 
     const t = setInterval(update, 500);
-
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'game_states') update();
     };
