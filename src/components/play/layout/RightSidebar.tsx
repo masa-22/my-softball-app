@@ -43,10 +43,18 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
       />
       <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
         <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の打者</div>
-        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-          {currentBattingOrder && <span style={{ fontWeight: 700, fontSize: 18, color: '#212529' }}>{currentBattingOrder}</span>}
-          <span style={{ fontSize: 15, fontWeight: 500 }}>
+        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* 打順（細字） */}
+          <span style={{ fontWeight: 400, fontSize: 16, color: '#212529', minWidth: 28, textAlign: 'right' }}>
+            {currentBattingOrder || '—'}
+          </span>
+          {/* 名前（太字） */}
+          <span style={{ fontSize: 16, fontWeight: 700 }}>
             {currentBatter ? `${currentBatter.familyName} ${currentBatter.givenName}` : '—'}
+          </span>
+          {/* 打ち方（細字） */}
+          <span style={{ fontSize: 13, fontWeight: 400, color: '#6c757d' }}>
+            {currentBatter ? currentBatter.batting : '—'}
           </span>
         </div>
         <div style={{ fontSize: 12, color: '#6c757d' }}>

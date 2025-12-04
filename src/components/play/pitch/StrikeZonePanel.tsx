@@ -4,13 +4,13 @@ import PitchResultSelector from './PitchResultSelector';
 import { PitchType } from '../common/PitchTypeSelector';
 
 interface StrikeZonePanelProps {
-  pitches: Array<{ id: number; x: number; y: number; type: PitchType; order: number; result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball'; }>;
+  pitches: Array<{ id: number; x: number; y: number; type: PitchType; order: number; result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'; }>;
   pendingPoint: { x: number; y: number } | null;
-  pendingResult: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | '';
+  pendingResult: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | '';
   selectedPitchType: PitchType;
   pitchTypeName: string;
   onZoneClick: (x: number, y: number) => void;
-  onSelectResult: (r: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | '') => void;
+  onSelectResult: (r: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | '') => void;
   onCommit: () => void;
   onCancel: () => void;
 }

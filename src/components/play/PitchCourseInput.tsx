@@ -14,7 +14,7 @@ interface PitchData {
   y: number;
   type: PitchType;
   order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball';
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
 }
 
 // スタイル変更（タイトル削除・任意座標プロット対応）
@@ -83,7 +83,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   const [pitches, setPitches] = useState<PitchData[]>([]);
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
-  const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | ''>('');
+  const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | ''>('');
 
   const handleZoneClick = (x: number, y: number) => {
     setPendingPoint({ x, y });
@@ -98,7 +98,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
       y: pendingPoint.y,
       type: selectedPitchType,
       order: pitches.length + 1,
-      result: pendingResult,
+      result: pendingResult as PitchData['result'],
     };
     setPitches(prev => [...prev, newPitch]);
 
@@ -127,6 +127,12 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
         onStrikeoutCommit && onStrikeoutCommit(isSwinging);
         onCountsReset && onCountsReset();
       }
+    } else if (pendingResult === 'foul') {
+      // ファウル: 2ストライク未満ならストライク+1、2ストライクなら据え置き
+      if (currentStrikes < 2) {
+        onCountsChange({ s: Math.min(2, bso.s + 1) });
+      }
+      // 三振判定は行わない
     } else if (pendingResult === 'inplay') {
       onInplayCommit && onInplayCommit();
     }

@@ -41,8 +41,15 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       />
       <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
         <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の投手</div>
-        <div style={{ marginBottom: 6, fontSize: 15, fontWeight: 500 }}>
+        <div style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* 名前（太字） */}
+          <span style={{ fontSize: 16, fontWeight: 700 }}>
           {currentPitcher ? `${currentPitcher.familyName} ${currentPitcher.givenName}` : '—'}
+          </span>
+          {/* 投げ方（細字） */}
+          <span style={{ fontSize: 13, fontWeight: 400, color: '#6c757d' }}>
+            {currentPitcher ? currentPitcher.throwing : '—'}
+          </span>
         </div>
         <div style={{ fontSize: 12, color: '#6c757d' }}>
           {`投球回: ${pitcherStats.inningStr}回 / 球数: ${pitcherStats.total}球`}
