@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
 // import MiniScoreBoard from './common/MiniScoreBoard';
 // import MiniDiamondField from './pitch/MiniDiamondField';
-import PitchTypeSelector, { PitchType } from './common/PitchTypeSelector';
+import PitchTypeSelector from './common/PitchTypeSelector';
+import { PitchType } from '../../types/PitchType';
 // import StrikeZoneGrid from './pitch/StrikeZoneGrid';
 // import PitchResultSelector from './pitch/PitchResultSelector';
-import PitchLeftColumn from './pitch/PitchLeftColumn.tsx';
-import StrikeZonePanel from './pitch/StrikeZonePanel.tsx';
-
-// --- 型定義 ---
-interface PitchData {
-  id: number;
-  x: number;
-  y: number;
-  type: PitchType;
-  order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
-}
+import PitchLeftColumn from './pitch/PitchLeftColumn';
+import StrikeZonePanel from './pitch/StrikeZonePanel';
+import { PitchData } from '../../types/PitchData';
 
 // スタイル変更（タイトル削除・任意座標プロット対応）
 const styles = {

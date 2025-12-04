@@ -3,17 +3,9 @@ import PitchCourseInput from '../PitchCourseInput';
 import RunnerStatus from '../RunnerStatus';
 import PlayResultPanel from '../PlayResultPanel';
 import RunnerMovementInput, { RunnerMovementResult } from '../RunnerMovementInput';
+import { PitchData } from '../../../types/PitchData';
 
-import { PitchType } from '../common/PitchTypeSelector';
-
-interface PitchData {
-  id: number;
-  x: number;
-  y: number;
-  type: PitchType;
-  order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
-}
+import { PitchType } from '../../../types/PitchType';
 
 interface CenterPanelProps {
   activeTab: 'pitch' | 'runner';
@@ -37,6 +29,7 @@ interface CenterPanelProps {
   strikeoutType: 'swinging' | 'looking' | null;
   offensePlayers: any[];
   offenseTeamId: string | null; // 追加
+  initialOuts?: number; // 追加
   // RunnerStatus制御用（親から）
   baseLabel: (b: '1' | '2' | '3' | 'home') => string;
   getRunnerName: (playerId: string | null) => string;
@@ -94,6 +87,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onSelectOutRunner,
   onAddOutConfirm,
   onAddOutCancel,
+  initialOuts,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -104,7 +98,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           initialRunners={runners}
           battingResult={battingResultForMovement}
           batterId={currentBatterId}
-          initialOuts={currentBSO.o}
+          initialOuts={initialOuts ?? currentBSO.o}
           pitches={pitches}
           offenseTeamId={offenseTeamId} // 追加
         />

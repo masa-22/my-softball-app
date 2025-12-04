@@ -1,5 +1,5 @@
 // import { HalfInning, Runners } from '../models/games';
-import { PitchType } from '../components/play/common/PitchTypeSelector';
+import { PitchType } from './PitchType';
 
 export type HalfInning = 'top' | 'bottom';
 

@@ -5,6 +5,7 @@
 import React from 'react';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
+const MULTI_SELECTABLE_POSITIONS = ['PH', 'PR', 'TR'];
 
 interface LineupPanelProps {
   teamName: string;
@@ -144,7 +145,8 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
                     >
                       <option value="">選択</option>
                       {POSITIONS.map(pos => {
-                        const disable = usedPositions.has(pos) && pos !== entry.position;
+                        const isMulti = MULTI_SELECTABLE_POSITIONS.includes(pos);
+                        const disable = !isMulti && usedPositions.has(pos) && pos !== entry.position;
                         return <option key={pos} value={pos} disabled={disable}>{pos}</option>;
                       })}
                     </select>

@@ -9,7 +9,7 @@ import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonD
 import FinalConfirmDialog from './runner/FinalConfirmDialog';
 import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
-import { PitchType } from './common/PitchTypeSelector';
+import { PitchType } from '../../types/PitchType';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 

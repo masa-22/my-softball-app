@@ -3,8 +3,9 @@
  * SVGアイコンと選択UIを提供
  */
 import React from 'react';
+import { PitchType } from '../../../types/PitchType';
 
-export type PitchType = 'rise' | 'drop' | 'cut' | 'changeup' | 'chenrai' | 'slider' | 'unknown';
+// export { PitchType }; // Removed re-export to avoid confusion
 
 interface PitchSymbolProps {
   type: PitchType;
