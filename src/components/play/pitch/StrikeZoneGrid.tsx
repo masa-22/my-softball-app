@@ -11,7 +11,7 @@ interface PitchData {
   y: number;
   type: PitchType;
   order: number;
-  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball';
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
 }
 
 interface StrikeZoneGridProps {
