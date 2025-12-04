@@ -224,7 +224,6 @@ const PlayRegister: React.FC = () => {
   const handleSidebarSave = async (side: 'home' | 'away') => {
     if (!matchId) return;
     const updatedLineup = { home: homeLineup, away: awayLineup };
-    // lineup保存
     saveLineup(matchId, updatedLineup);
 
     // ▼ participation 同期
@@ -271,6 +270,69 @@ const PlayRegister: React.FC = () => {
       setPrevAwaySnapshot(JSON.parse(JSON.stringify(awayLineup)));
     } catch (e) {
       console.warn('participation sync error', e);
+    }
+
+    // 追加: 現在の打者・投手・ランナーの整合性チェック
+    try {
+      const gs = getGameState(matchId);
+      const half = gs?.top_bottom ?? currentHalf;
+
+      // 投手の整合性（守備側の「1」）
+      if (half === 'top') {
+        const pitcherEntry = awayLineup.find((e: any) => e.position === '1');
+        const nextPitcher = awayPlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
+        if ((currentPitcher?.playerId || null) !== (nextPitcher?.playerId || null)) {
+          setCurrentPitcher(nextPitcher);
+        }
+      } else {
+        const pitcherEntry = homeLineup.find((e: any) => e.position === '1');
+        const nextPitcher = homePlayers.find(p => p.playerId === pitcherEntry?.playerId) || null;
+        if ((currentPitcher?.playerId || null) !== (nextPitcher?.playerId || null)) {
+          setCurrentPitcher(nextPitcher);
+        }
+      }
+
+      // 打者の整合性（攻撃側インデックスに連動）
+      if (half === 'top') {
+        const entry = homeLineup[homeBatIndex % Math.max(1, homeLineup.length)];
+        const nextBatter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
+        if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
+          setCurrentBatter(nextBatter);
+        }
+      } else {
+        const entry = awayLineup[awayBatIndex % Math.max(1, awayLineup.length)];
+        const nextBatter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
+        if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
+          setCurrentBatter(nextBatter);
+        }
+      }
+
+      // ランナーの整合性（存在しないIDならクリア）
+      const validIds = new Set<string>([
+        ...homePlayers.map(p => p.playerId),
+        ...awayPlayers.map(p => p.playerId),
+      ]);
+      const nextRunners = { ...runners };
+      let runnersChanged = false;
+      (['1','2','3'] as const).forEach(b => {
+        const pid = nextRunners[b];
+        if (pid && !validIds.has(pid)) {
+          nextRunners[b] = null;
+          runnersChanged = true;
+        }
+      });
+      if (runnersChanged) {
+        setRunners(nextRunners);
+        updateRunnersRealtime(matchId, { '1b': nextRunners['1'], '2b': nextRunners['2'], '3b': nextRunners['3'] });
+      }
+
+      // matchup の再同期
+      updateMatchupRealtime(matchId, {
+        batter_id: currentBatter?.playerId ?? null,
+        pitcher_id: currentPitcher?.playerId ?? null,
+      });
+    } catch (e) {
+      console.warn('lineup integrity check error', e);
     }
   };
 

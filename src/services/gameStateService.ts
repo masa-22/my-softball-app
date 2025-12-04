@@ -146,7 +146,11 @@ export const addRunsRealtime = (gameId: string, half: 'top' | 'bottom', runs: nu
   const key = String(state.current_inning);
   if (!state.scores.innings[key]) state.scores.innings[key] = { top: 0, bottom: null };
   const cell = state.scores.innings[key];
-  if (half === 'top') {
+
+  // 修正: 引数の half に依存せず、常に現在の攻撃側(state.top_bottom)に加算する
+  const effectiveHalf = state.top_bottom;
+
+  if (effectiveHalf === 'top') {
     cell.top = (cell.top ?? 0) + runs;
     state.scores.top_total += runs;
   } else {
