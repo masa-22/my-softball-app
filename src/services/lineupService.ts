@@ -1,13 +1,4 @@
-type LineupEntry = {
-  battingOrder: number; // 1-9 or FP(10)
-  position: string; // '1'-'9', 'DP', or ''
-  playerId: string; // player ID or ''
-};
-
-type Lineup = {
-  home: LineupEntry[]; // 先攻 (10 entries: batting order 1-9 + P)
-  away: LineupEntry[]; // 後攻 (10 entries)
-};
+import { Lineup, LineupEntry } from '../types/Lineup';
 
 let lineups: Record<string, Lineup> = {}; // key: matchId
 

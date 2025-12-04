@@ -1,24 +1,5 @@
 import { getTeams } from './teamService';
-
-interface Player {
-  playerId: string;
-  teamId: string | number;
-  familyName: string;
-  givenName: string;
-  throwing: string;
-  batting: string;
-  entryYear: string | null;
-  createdAt: string;
-}
-
-interface PlayerData {
-  teamId: string | number;
-  familyName: string;
-  givenName: string;
-  throwing: string;
-  batting: string;
-  entryYear?: string | null;
-}
+import { Player, PlayerData } from '../types/Player';
 
 interface SearchParams {
   teamId: string | number;

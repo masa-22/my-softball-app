@@ -8,7 +8,6 @@ import ScoreBoard from './ScoreBoard';
 // import { getMatches } from '../../services/matchService';
 import { getLineup, saveLineup } from '../../services/lineupService';
 import { getPlayers } from '../../services/playerService';
-import { getPlays } from '../../services/playService';
 import { getTeams } from '../../services/teamService';
 import { getGameState, updateCountsRealtime, resetCountsRealtime, updateRunnersRealtime, addRunsRealtime, closeHalfInningRealtime, updateMatchupRealtime } from '../../services/gameStateService';
 import { getGame } from '../../services/gameService';
@@ -21,8 +20,22 @@ import { RunnerOut } from './runner/OutReasonDialog';
 import { recordStartersFromLineup, applySubstitutionToLineup } from '../../services/lineupService';
 // ▼ 追加: 参加記録の存在確認
 import { getParticipations } from '../../services/participationService';
+import { getAtBats, saveAtBat } from '../../services/atBatService';
+import { AtBat } from '../../types/AtBat';
+import { PitchType } from './common/PitchTypeSelector';
+import { RunnerMovementResult } from './RunnerMovementInput';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
+
+// PitchData の型定義（PitchCourseInput と合わせる）
+interface PitchData {
+  id: number;
+  x: number;
+  y: number;
+  type: PitchType;
+  order: number;
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
+}
 
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
@@ -71,6 +84,8 @@ const PlayRegister: React.FC = () => {
 
   // 現在のBSO状態（追加）
   const [currentBSO, setCurrentBSO] = useState({ b: 0, s: 0, o: 0 });
+  const [currentInningVal, setCurrentInningVal] = useState(1);
+  const [pitches, setPitches] = useState<PitchData[]>([]);
 
   // 追加: gameState のBSOを購読（リアルタイム）
   React.useEffect(() => {
@@ -79,6 +94,7 @@ const PlayRegister: React.FC = () => {
       const gs = getGameState(matchId);
       if (gs) {
         setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
+        setCurrentInningVal(gs.current_inning);
       }
     };
     update();
@@ -144,6 +160,7 @@ const PlayRegister: React.FC = () => {
       const pitcher = awayPs.find(p => p.playerId === pitcherEntry?.playerId) || null;
       setCurrentBatter(batter);
       setCurrentPitcher(pitcher);
+      setPitches([]); // 打者変更時にリセットすべきだが、一旦初期化時にリセット
 
       // サイドバー表示用ラインナップ
       setHomeLineup(l.home);
@@ -169,40 +186,88 @@ const PlayRegister: React.FC = () => {
   // 現在打者の過去打席結果（直近から最大3件）
   const recentBatterResults = useMemo(() => {
     if (!matchId || !currentBatter) return [];
-    const plays = getPlays(matchId).filter(p => p.batterId === currentBatter.playerId);
-    // 打席終了っぽい結果のみ簡易抽出（ヒット/アウト/四球/死球 など）
-    const atBatResults = plays
-      .filter(p => ['ヒット', 'アウト', '四球', '死球', '得点', '犠打', '犠飛'].includes(p.result))
-      .map(p => ({ inning: p.inning, half: p.topOrBottom, result: p.result }))
-      .reverse()
-      .slice(0, 3);
-    return atBatResults;
+    const allAtBats = getAtBats(matchId);
+    const myAtBats = allAtBats.filter(a => a.batterId === currentBatter.playerId && a.type === 'bat');
+
+    // 表示用に変換
+    const results = myAtBats.map(a => {
+        let label = '';
+        switch(a.result?.type) {
+            case 'single': label = '安'; break;
+            case 'double': label = '二'; break;
+            case 'triple': label = '三'; break;
+            case 'homerun': label = '本'; break;
+            case 'walk': label = '四'; break;
+            case 'deadball': label = '死'; break;
+            case 'strikeout_swinging':
+            case 'strikeout_looking':
+            case 'droppedthird':
+                label = '三振'; break;
+            case 'groundout': label = 'ゴ'; break;
+            case 'flyout': label = '飛'; break;
+            case 'sac_bunt': label = '犠打'; break;
+            case 'sac_fly': label = '犠飛'; break;
+            case 'error': label = '失'; break;
+            default: label = '他'; break;
+        }
+        return {
+            inning: a.inning,
+            half: a.topOrBottom,
+            result: label
+        };
+    })
+    .reverse()
+    .slice(0, 3);
+    return results;
   }, [matchId, currentBatter]);
 
   // 投手の現在回・球数・ストライク/ボール数
   const pitcherStats = useMemo(() => {
     if (!matchId || !currentPitcher) return { inningStr: '0', total: 0, strikes: 0, balls: 0, inning: 1, half: 'top' as 'top' | 'bottom' };
-    const plays = getPlays(matchId);
-    // アウト数（当該投手が関与した「アウト」結果をカウント）
-    const outs = plays.filter(p => p.pitcherId === currentPitcher.playerId && p.result === 'アウト').length;
-    const inningWhole = Math.floor(outs / 3);
-    const inningRemainder = outs % 3;
-    const inningStr = `${inningWhole}.${inningRemainder}`; // 例: 5アウト => 1.2回
+    
+    const allAtBats = getAtBats(matchId);
+    const pitcherAtBats = allAtBats.filter(a => a.pitcherId === currentPitcher.playerId);
+    
+    let totalOuts = 0;
+    pitcherAtBats.forEach(a => {
+        const outsAdded = Math.max(0, a.situationAfter.outs - a.situationBefore.outs);
+        totalOuts += outsAdded;
+    });
 
-    // 現在進行中の回と球数（簡易集計）
-    const last = plays.length ? plays[plays.length - 1] : undefined;
-    const currentInning = last ? last.inning : 1;
-    const currentHalf = last ? last.topOrBottom : 'top';
+    const inningWhole = Math.floor(totalOuts / 3);
+    const inningRemainder = totalOuts % 3;
+    const inningStr = `${inningWhole}.${inningRemainder}`;
 
-    const thisInningPlays = plays.filter(
-      p => p.inning === currentInning && p.topOrBottom === currentHalf && p.pitcherId === currentPitcher.playerId
+    // 現在の回と球数
+    const gs = getGameState(matchId);
+    const currentInning = gs?.current_inning ?? 1;
+    const currentHalf = gs?.top_bottom ?? 'top';
+
+    const thisInningAtBats = pitcherAtBats.filter(
+      a => a.inning === currentInning && a.topOrBottom === currentHalf
     );
-    const strikes = thisInningPlays.filter(p => p.result === 'ストライク' || p.result === 'ファウル').length;
-    const balls = thisInningPlays.filter(p => p.result === 'ボール' || p.result === '死球' || p.result === '四球').length;
-    const total = thisInningPlays.length;
+    
+    let total = 0;
+    let strikes = 0;
+    let balls = 0;
+    
+    thisInningAtBats.forEach(a => {
+        a.pitches.forEach(p => {
+            total++;
+            if (['swing', 'looking', 'foul'].includes(p.result)) strikes++;
+            if (['ball'].includes(p.result)) balls++;
+        });
+    });
+    
+    // 現在入力中の球数も加算
+    pitches.forEach(p => {
+        total++;
+        if (['swing', 'looking', 'foul'].includes(p.result)) strikes++;
+        if (['ball'].includes(p.result)) balls++;
+    });
 
     return { inningStr, total, strikes, balls, inning: currentInning, half: currentHalf };
-  }, [matchId, currentPitcher]);
+  }, [matchId, currentPitcher, pitches]);
 
   // 追加: ラインナップ編集ハンドラ
   const handlePositionChange = (side: 'home' | 'away', index: number, value: string) => {
@@ -223,7 +288,7 @@ const PlayRegister: React.FC = () => {
 
   const handleSidebarSave = async (side: 'home' | 'away') => {
     if (!matchId) return;
-    const updatedLineup = { home: homeLineup, away: awayLineup };
+    const updatedLineup = { matchId, home: homeLineup, away: awayLineup };
     saveLineup(matchId, updatedLineup);
 
     // ▼ participation 同期
@@ -296,14 +361,16 @@ const PlayRegister: React.FC = () => {
       if (half === 'top') {
         const entry = homeLineup[homeBatIndex % Math.max(1, homeLineup.length)];
         const nextBatter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
-        if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
+          if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
           setCurrentBatter(nextBatter);
+          setPitches([]); // 打者変更時にリセット
         }
       } else {
         const entry = awayLineup[awayBatIndex % Math.max(1, awayLineup.length)];
         const nextBatter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
         if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
           setCurrentBatter(nextBatter);
+          setPitches([]); // 打者変更時にリセット
         }
       }
 
@@ -370,10 +437,12 @@ const PlayRegister: React.FC = () => {
       const entry = lineup.home[homeBatIndex % lineup.home.length];
       const batter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
       setCurrentBatter(batter);
+      setPitches([]); // 打者変更時にリセット
     } else {
       const entry = lineup.away[awayBatIndex % lineup.away.length];
       const batter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
       setCurrentBatter(batter);
+      setPitches([]); // 打者変更時にリセット
     }
   }, [currentHalf, lineup, homeBatIndex, awayBatIndex, homePlayers, awayPlayers]);
 
@@ -443,8 +512,56 @@ const PlayRegister: React.FC = () => {
     if (!hasRunners && isOut) {
       // 打者アウト+ランナーなし → ここでアウト加算とBSリセット、打順前進も行い確定扱い
       if (matchId) {
+        // --- at_bats 保存処理 ---
         const gs = getGameState(matchId);
         const currentO = gs?.counts.o ?? 0;
+        
+        // 投球記録の変換
+        const pitchRecords = pitches.map(p => ({
+          seq: p.order,
+          type: p.type,
+          course: 13, // 仮: StrikeZoneGridから詳細な位置を取得するのは別途対応が必要かも
+          result: p.result,
+        }));
+
+        const atBat: AtBat = {
+          playId: `play_${Date.now()}`,
+          matchId,
+          index: getAtBats(matchId).length + 1,
+          inning: currentInningInfo.inning,
+          topOrBottom: currentInningInfo.half,
+          type: 'bat',
+          batterId: currentBatter?.playerId || '',
+          pitcherId: currentPitcher?.playerId || '',
+          battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1, // 暫定
+          result: {
+            type: battingResult as any,
+          },
+          situationBefore: {
+            outs: currentO,
+            runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+            balls: currentBSO.b,
+            strikes: currentBSO.s,
+          },
+          situationAfter: {
+            outs: Math.min(3, currentO + 1),
+            runners: { '1': null, '2': null, '3': null }, // ランナーなしなので変化なし
+            balls: 0,
+            strikes: 0,
+          },
+          scoredRunners: [],
+          pitches: pitchRecords,
+          runnerEvents: [], // ランナーなしアウトなのでイベントなし
+          playDetails: {
+            batType: 'ground', // 仮
+            direction: 'infield', // 仮
+            fielding: [],
+          },
+          timestamp: new Date().toISOString(),
+        };
+        saveAtBat(atBat);
+        // -----------------------
+
         const newO = Math.min(3, currentO + 1);
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
@@ -474,45 +591,182 @@ const PlayRegister: React.FC = () => {
   };
 
   // プレー結果入力完了時のコールバック（打者更新・BSリセット・必要なアウト加算をここで実行）
-  const handlePlayResultComplete = () => {
+  // 引数にRunnerMovementInputからの結果を受け取るように修正
+  const handlePlayResultComplete = (movementResult?: RunnerMovementResult) => {
     // 打撃結果確定後の共通処理
     if (matchId) {
       const gs = getGameState(matchId);
       const currentO = gs?.counts.o ?? 0;
-      if (pendingOutcome?.kind === 'strikeout') {
+
+      if (!movementResult && pendingOutcome?.kind === 'strikeout') {
         const newO = Math.min(3, currentO + 1);
+
+        // --- at_bats 保存処理 (三振) ---
+        const pitchRecords = pitches.map(p => ({
+          seq: p.order,
+          type: p.type,
+          course: 13, 
+          result: p.result,
+        }));
+
+        const atBat: AtBat = {
+          playId: `play_${Date.now()}`,
+          matchId,
+          index: getAtBats(matchId).length + 1,
+          inning: currentInningInfo.inning,
+          topOrBottom: currentInningInfo.half,
+          type: 'bat',
+          batterId: currentBatter?.playerId || '',
+          pitcherId: currentPitcher?.playerId || '',
+          battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
+          result: {
+            type: strikeoutType === 'swinging' ? 'strikeout_swinging' : 'strikeout_looking',
+          },
+          situationBefore: {
+            outs: currentO,
+            runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+            balls: currentBSO.b,
+            strikes: currentBSO.s,
+          },
+          situationAfter: {
+            outs: newO,
+            runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+            balls: 0,
+            strikes: 0,
+          },
+          scoredRunners: [],
+          pitches: pitchRecords,
+          runnerEvents: [], 
+          playDetails: {
+            fielding: [],
+          },
+          timestamp: new Date().toISOString(),
+        };
+        saveAtBat(atBat);
+        // -----------------------
+
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
           closeHalfInningRealtime(matchId);
           // 追加: UI側ランナーも即時クリア
           setRunners({ '1': null, '2': null, '3': null });
         }
+      } else if (movementResult) {
+        // RunnerMovementInput から結果が返ってきた場合 (インプレイ、四死球など)
+        const { afterRunners, outsAfter, scoredRunners, outDetails } = movementResult;
+
+        // --- at_bats 保存処理 ---
+        const pitchRecords = pitches.map(p => ({
+          seq: p.order,
+          type: p.type,
+          course: 13, 
+          result: p.result,
+        }));
+
+        const atBatResult: any = {
+          type: battingResultForMovement, // 保存しておいた打撃結果を使用
+        };
+        
+        if (scoredRunners.length > 0) {
+          atBatResult.rbi = scoredRunners.length;
+        }
+
+        const atBat: AtBat = {
+          playId: `play_${Date.now()}`,
+          matchId,
+          index: getAtBats(matchId).length + 1,
+          inning: currentInningInfo.inning,
+          topOrBottom: currentInningInfo.half,
+          type: 'bat',
+          batterId: currentBatter?.playerId || '',
+          pitcherId: currentPitcher?.playerId || '',
+          battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
+          result: atBatResult,
+          situationBefore: {
+            outs: currentO,
+            runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+            balls: currentBSO.b,
+            strikes: currentBSO.s,
+          },
+          situationAfter: {
+            outs: outsAfter,
+            runners: { '1': afterRunners['1'], '2': afterRunners['2'], '3': afterRunners['3'] },
+            balls: 0,
+            strikes: 0,
+          },
+          scoredRunners: scoredRunners,
+          pitches: pitchRecords,
+          runnerEvents: [], // TODO: movementResultからイベント詳細があれば変換
+          playDetails: {
+             // PlayResultPanelで入力された打球方向などはまだここに来ていないが positionForMovement はあるかも
+             fielding: [],
+          },
+          timestamp: new Date().toISOString(),
+        };
+        saveAtBat(atBat);
+        
+        // ランナー配置更新
+        updateRunnersRealtime(matchId, {
+          '1b': afterRunners['1'],
+          '2b': afterRunners['2'],
+          '3b': afterRunners['3'],
+        });
+
+        // 得点更新
+        if (scoredRunners.length > 0) {
+          const half = getGameState(matchId)?.top_bottom || 'top';
+          addRunsRealtime(matchId, half, scoredRunners.length);
+        }
+
+        // アウト更新
+        updateCountsRealtime(matchId, { o: outsAfter, b: 0, s: 0 }); // カウントもリセット
+
+        // チェンジ判定
+        if (outsAfter >= 3) {
+          closeHalfInningRealtime(matchId);
+          setRunners({ '1': null, '2': null, '3': null });
+        }
+        
+        // 同一タブ内通知
+        try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
+
       } else {
-        updateCountsRealtime(matchId, { b: 0, s: 0, o: currentO });
+         // キャンセルなどで何もしない場合
+         // ただし三振以外のキャンセルはここでハンドルする必要があるかも？
+         // 現状、三振以外で movementResult がない場合はキャンセル扱いとする
       }
     }
 
     // 打順前進（確定タイミング）
-    advanceBattingOrder();
-
-    // 画面状態クリア
-    setShowPlayResult(false);
-    setShowRunnerMovement(false);
-    setStrikeoutType(null);
-    setBattingResultForMovement('');
-    setPositionForMovement('');
-    setPendingOutcome(null);
-    // 必要に応じて他のリセット
+    // キャンセルの場合は打順を進めないようにする制御が必要
+    // movementResultがある、または三振確定の場合のみ進める
+    if (movementResult || (!movementResult && pendingOutcome?.kind === 'strikeout')) {
+        advanceBattingOrder();
+        
+        // 画面状態クリア
+        setShowPlayResult(false);
+        setShowRunnerMovement(false);
+        setStrikeoutType(null);
+        setBattingResultForMovement('');
+        setPositionForMovement('');
+        setPendingOutcome(null);
+    } else {
+        // キャンセルの場合、入力画面を閉じるかどうか
+        // RunnerMovementInputのキャンセルボタンは onCancel で呼ばれ、そこからここに来る
+        // 単に閉じるだけでよい
+        setShowRunnerMovement(false);
+        // 入力内容はクリアしない方が親切かもしれないが、一旦クリアして前の画面（PlayResultPanel?）に戻すか、
+        // あるいは RunnerMovementInput を閉じて PlayResultPanel を出すか。
+        // ここでは単純に閉じて、PitchCourseInput (初期状態) に戻る挙動にする
+        setBattingResultForMovement('');
+        setPositionForMovement('');
+    }
   };
 
   // 追加: 攻撃側選手（親で計算）
   const currentInningInfo = useMemo(() => {
-    if (!matchId) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const plays = getPlays(matchId);
-    if (!plays.length) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const last = plays[plays.length - 1];
-    return { inning: last.inning, half: last.topOrBottom };
-  }, [matchId]);
+    return { inning: currentInningVal, half: currentHalf };
+  }, [currentInningVal, currentHalf]);
 
   // 修正: offenseTeamId は gameState の currentHalf を使用して決定
   const offenseTeamId = useMemo(() => {
@@ -713,6 +967,8 @@ const PlayRegister: React.FC = () => {
           showRunnerMovement={showRunnerMovement}
           showPlayResult={showPlayResult}
           currentBSO={currentBSO}
+          pitches={pitches}
+          onPitchesChange={setPitches}
           runners={runners}
           currentBatterId={currentBatter?.playerId}
           battingResultForMovement={battingResultForMovement}
@@ -726,6 +982,7 @@ const PlayRegister: React.FC = () => {
           onCountsReset={handleCountsReset}
           strikeoutType={strikeoutType}
           offensePlayers={offensePlayers}
+          offenseTeamId={offenseTeamId} // 追加
           baseLabel={baseLabel}
           getRunnerName={getRunnerName}
           onRunnerBaseClick={handleRunnerBaseClick}

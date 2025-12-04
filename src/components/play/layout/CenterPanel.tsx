@@ -2,7 +2,18 @@ import React from 'react';
 import PitchCourseInput from '../PitchCourseInput';
 import RunnerStatus from '../RunnerStatus';
 import PlayResultPanel from '../PlayResultPanel';
-import RunnerMovementInput from '../RunnerMovementInput';
+import RunnerMovementInput, { RunnerMovementResult } from '../RunnerMovementInput';
+
+import { PitchType } from '../common/PitchTypeSelector';
+
+interface PitchData {
+  id: number;
+  x: number;
+  y: number;
+  type: PitchType;
+  order: number;
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
+}
 
 interface CenterPanelProps {
   activeTab: 'pitch' | 'runner';
@@ -11,9 +22,11 @@ interface CenterPanelProps {
   showPlayResult: boolean;
   currentBSO: { b: number; s: number; o: number };
   runners: { '1': string | null; '2': string | null; '3': string | null };
+  pitches?: PitchData[];
+  onPitchesChange?: React.Dispatch<React.SetStateAction<PitchData[]>>;
   currentBatterId?: string;
   battingResultForMovement: string;
-  onPlayResultComplete: () => void;
+  onPlayResultComplete: (result?: RunnerMovementResult) => void; // 引数を追加 (キャンセル時はundefinedの可能性も考慮してOptionalにするか、キャンセルは別ハンドラにするか。元の実装はonCancel=onCompleteだったので合わせる)
   onInplayCommit: () => void;
   onStrikeoutCommit: (isSwinging: boolean) => void;
   onWalkCommit: () => void;
@@ -22,7 +35,8 @@ interface CenterPanelProps {
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;
   strikeoutType: 'swinging' | 'looking' | null;
-  offensePlayers: any[]; // 追加: 親で計算した攻撃側選手
+  offensePlayers: any[];
+  offenseTeamId: string | null; // 追加
   // RunnerStatus制御用（親から）
   baseLabel: (b: '1' | '2' | '3' | 'home') => string;
   getRunnerName: (playerId: string | null) => string;
@@ -49,6 +63,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   showPlayResult,
   currentBSO,
   runners,
+  pitches,
+  onPitchesChange,
   currentBatterId,
   battingResultForMovement,
   onPlayResultComplete,
@@ -61,6 +77,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onCountsReset,
   strikeoutType,
   offensePlayers,
+  offenseTeamId, // 追加
   baseLabel,
   getRunnerName,
   onRunnerBaseClick,
@@ -83,11 +100,13 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
       {showRunnerMovement ? (
         <RunnerMovementInput
           onComplete={onPlayResultComplete}
-          onCancel={onPlayResultComplete}
+          onCancel={() => onPlayResultComplete(undefined)} // キャンセル時はundefinedで呼ぶ
           initialRunners={runners}
           battingResult={battingResultForMovement}
           batterId={currentBatterId}
           initialOuts={currentBSO.o}
+          pitches={pitches}
+          offenseTeamId={offenseTeamId} // 追加
         />
       ) : !showPlayResult ? (
         <>
@@ -137,6 +156,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 onWalkCommit={onWalkCommit}
                 onCountsChange={onCountsChange}
                 onCountsReset={onCountsReset}
+                pitches={pitches}
+                onPitchesChange={onPitchesChange}
               />
             ) : (
               <RunnerStatus
@@ -172,7 +193,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
         </>
       ) : (
         <PlayResultPanel
-          onComplete={onPlayResultComplete}
+          onComplete={() => onPlayResultComplete(undefined)} // PlayResultPanelは結果を返さないのでundefined
           strikeoutType={strikeoutType}
           onRunnerMovement={onRunnerMovement}
           currentRunners={runners}

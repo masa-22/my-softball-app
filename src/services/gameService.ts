@@ -5,18 +5,13 @@
  * - 出場記録（participation）は participationService に直接委譲（本サービスではロースターを保持しない）
  */
 
-export type GameStatus = 'SCHEDULED' | 'PLAYING' | 'FINISHED';
-export type TopOrBottom = 'top' | 'bottom';
-
-export interface Game {
-  gameId: string;
-  date: string;
-  status: GameStatus;
-  tournament: { id: string; name: string };
-  topTeam: { id: string; name: string; shortName: string };
-  bottomTeam: { id: string; name: string; shortName: string };
-  // 動的情報やロースターは保持しない
-}
+import {
+  Game,
+  GameStatus,
+  TopOrBottom,
+  GameView,
+  GameCreateInput
+} from '../types/Game';
 
 // 動的データは完全委譲
 import {
@@ -117,22 +112,6 @@ export const updateGame = (gameId: string, updates: Partial<Game>): Game | null 
 /**
  * 静的＋動的の統合ビュー（UI向け）
  */
-export type GameView = Game & {
-  realtime: {
-    status: GameRealtimeStatus;
-    currentInning: number;
-    topOrBottom: TopOrBottom;
-    balls: number;
-    strikes: number;
-    outs: number;
-    runners: { '1': string | null; '2': string | null; '3': string | null };
-    score: { top: number; bottom: number };
-    inningScores: { top: number[]; bottom: number[] };
-    matchup: { pitcherId: string | null; batterId: string | null };
-    lastUpdated: string;
-  };
-};
-
 export const getGameView = (gameId: string): GameView | null => {
   const base = games[gameId];
   if (!base) return null;
@@ -215,19 +194,6 @@ export const updateMatchup = (
 /**
  * 試合登録ユーティリティ（静的作成のみ）
  */
-export type GameCreateInput = {
-  gameId: string;
-  date: string;
-  tournamentId: string;
-  tournamentName: string;
-  topTeamId: string;
-  topTeamName: string;
-  topTeamShortName: string;
-  bottomTeamId: string;
-  bottomTeamName: string;
-  bottomTeamShortName: string;
-};
-
 export const ensureGameCreated = (data: GameCreateInput): Game => {
   const existing = getGame(data.gameId);
   if (existing) return existing;

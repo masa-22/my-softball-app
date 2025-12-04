@@ -3,23 +3,13 @@
  * - リアルタイム試合状況を含む詳細なゲーム状態を管理
  */
 
-export type GameRealtimeStatus = 'in_progress' | 'finished' | 'scheduled';
+import {
+  GameRealtimeStatus,
+  GameState
+} from '../types/GameState';
 
-export interface GameState {
-  game_id: string;
-  status: GameRealtimeStatus;
-  current_inning: number;
-  top_bottom: 'top' | 'bottom';
-  counts: { b: number; s: number; o: number };
-  runners: { '1b': string | null; '2b': string | null; '3b': string | null };
-  matchup: { pitcher_id: string | null; batter_id: string | null };
-  scores: {
-    top_total: number;
-    bottom_total: number;
-    innings: Record<string, { top: number | null; bottom: number | null }>;
-  };
-  last_updated: string;
-}
+export type { GameRealtimeStatus, GameState };
+
 
 // ========== GameState (リアルタイム最小情報) ==========
 

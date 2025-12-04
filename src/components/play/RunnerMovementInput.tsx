@@ -3,34 +3,47 @@
  * - 打席結果後のランナーの進塁・アウト・得点を入力
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
 import DiamondField from './runner/DiamondField';
 import AdvanceReasonDialog, { RunnerAdvancement, AdvanceReasonResult } from './runner/AdvanceReasonDialog';
 import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonDialog';
 import FinalConfirmDialog from './runner/FinalConfirmDialog';
 import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
-import { getLineup } from '../../services/lineupService';
-// import { getMatches } from '../../services/matchService';
-import { getPlays } from '../../services/playService';
-import { 
-  getGameState,
-  updateRunnersRealtime,
-  addRunsRealtime,
-  updateCountsRealtime,
-  closeHalfInningRealtime
-} from '../../services/gameStateService';
-import { getGame } from '../../services/gameService';
+import { PitchType } from './common/PitchTypeSelector';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
+interface PitchData {
+  id: number;
+  x: number;
+  y: number;
+  type: PitchType;
+  order: number;
+  result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
+}
+
+export interface RunnerMovementResult {
+  afterRunners: { '1': string | null; '2': string | null; '3': string | null };
+  outsAfter: number;
+  scoredRunners: string[];
+  outDetails: Array<{
+    runnerId: string;
+    base: string;
+    threwPosition: string;
+    caughtPosition: string;
+  }>;
+}
+
 interface RunnerMovementInputProps {
-  onComplete?: () => void;
+  onComplete?: (result: RunnerMovementResult) => void;
   onCancel?: () => void;
   initialRunners?: { '1': string | null; '2': string | null; '3': string | null };
   battingResult?: string; // 追加: 打席結果
   batterId?: string; // 追加: 打者ID
   initialOuts?: number; // 追加: 初期アウトカウント
+  pitches?: PitchData[]; // 追加
+  battingOrder?: number; // 追加
+  offenseTeamId?: string | null; // 追加: 親から攻撃チームIDをもらう
 }
 
 const styles = {
@@ -236,8 +249,10 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   battingResult = '',
   batterId = '',
   initialOuts = 0,
+  pitches = [], // 追加
+  battingOrder = 0, // 追加
+  offenseTeamId, // 追加: 親から受け取る
 }) => {
-  const { matchId } = useParams<{ matchId: string }>();
   const [beforeRunners] = useState(initialRunners);
   // 追加: 打席結果→進塁数のマッピング（打者・既存ランナーともに同じ距離）
   const getAdvanceDistance = (result: string) => {
@@ -342,29 +357,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     caughtPosition: string;
   }>>([]);
 
-  const match = useMemo(() => {
-    if (!matchId) return null;
-    const g = getGame(matchId);
-    return g ? { id: g.gameId, homeTeamId: g.topTeam.id, awayTeamId: g.bottomTeam.id } : null;
-  }, [matchId]);
-
-  // 既存の currentInningInfo は保持（回数表示などに使用）
-  const currentInningInfo = useMemo(() => {
-    if (!matchId) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const plays = getPlays(matchId);
-    if (!plays.length) return { inning: 1, half: 'top' as 'top' | 'bottom' };
-    const last = plays[plays.length - 1];
-    return { inning: last.inning, half: last.topOrBottom };
-  }, [matchId]);
-
-  // 修正: 攻撃側チームIDは gameState の half を使用
-  const offenseTeamId = useMemo(() => {
-    if (!match || !matchId) return null;
-    const gs = getGameState(matchId);
-    const half = gs?.top_bottom ?? 'top';
-    return half === 'top' ? match.homeTeamId : match.awayTeamId;
-  }, [match, matchId]);
-
   const offensePlayers = useMemo(() => {
     if (offenseTeamId == null) return [];
     return getPlayers(offenseTeamId);
@@ -380,66 +372,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     const player = offensePlayers.find(p => p.playerId === playerId);
     if (!player) return '';
     return `${player.familyName} ${player.givenName}`.trim();
-  };
-
-  // ランナー変更を検出
-  const detectRunnerChanges = (
-    initial: { '1': string | null; '2': string | null; '3': string | null },
-    final: { '1': string | null; '2': string | null; '3': string | null }
-  ) => {
-    const advancements: RunnerAdvancement[] = [];
-    const outs: RunnerOut[] = [];
-
-    // 初期配置にいた全てのランナーをチェック
-    const allRunnerIds = new Set<string>();
-    (['1', '2', '3'] as const).forEach(base => {
-      if (initial[base]) allRunnerIds.add(initial[base]!);
-      if (final[base]) allRunnerIds.add(final[base]!);
-    });
-
-    allRunnerIds.forEach(runnerId => {
-      // 初期位置を特定
-      let initialBase: '1' | '2' | '3' | null = null;
-      (['1', '2', '3'] as const).forEach(base => {
-        if (initial[base] === runnerId) initialBase = base;
-      });
-
-      // 最終位置を特定
-      let finalBase: '1' | '2' | '3' | 'home' | null = null;
-      (['1', '2', '3'] as const).forEach(base => {
-        if (final[base] === runnerId) finalBase = base;
-      });
-
-      // 変更を判定
-      if (initialBase && finalBase && initialBase !== finalBase) {
-        // 進塁した
-        const player = offensePlayers.find(p => p.playerId === runnerId);
-        if (player) {
-          advancements.push({
-            runnerId,
-            runnerName: `${player.familyName} ${player.givenName}`.trim(),
-            fromBase: initialBase,
-            toBase: finalBase,
-          });
-        }
-      } else if (initialBase && !finalBase) {
-        // アウトまたは得点（得点は別処理で判定）
-        const player = offensePlayers.find(p => p.playerId === runnerId);
-        if (player) {
-          // 得点候補リストに含まれていない場合のみアウト扱い
-          if (!pendingScores.includes(runnerId) && !scoredRunners.includes(runnerId)) {
-            outs.push({
-              runnerId,
-              runnerName: `${player.familyName} ${player.givenName}`.trim(),
-              fromBase: initialBase,
-              outAtBase: initialBase,
-            });
-          }
-        }
-      }
-    });
-
-    return { advancements, outs };
   };
 
   const handleAfterBaseClick = (base: BaseKey) => {
@@ -531,49 +463,18 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     setShowFinalConfirm(true);
   };
 
-  const notifyGameStatesUpdated = () => {
-    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
-  };
-
   const handleFinalConfirm = () => {
-    console.log('最終確認:', {
-      beforeRunners,
-      afterRunners,
-      scoredRunners,
-      outsAfter,
-      outDetails,
-    });
-
-    // gameState へ反映
-    if (matchId) {
-      // ランナー配置
-      updateRunnersRealtime(matchId, {
-        '1b': afterRunners['1'],
-        '2b': afterRunners['2'],
-        '3b': afterRunners['3'],
+    // データ処理は親コンポーネントに委譲
+    if (onComplete) {
+      onComplete({
+        afterRunners,
+        outsAfter,
+        scoredRunners,
+        outDetails,
       });
-
-      // 得点
-      if (scoredRunners.length > 0) {
-        // 修正: plays ではなく gameState の現在ハーフを使用
-        const half = getGameState(matchId)?.top_bottom || 'top';
-        addRunsRealtime(matchId, half, scoredRunners.length);
-      }
-
-      // アウト更新（0〜3）
-      updateCountsRealtime(matchId, { o: outsAfter });
-
-      // 3アウトでイニング進行
-      if (outsAfter >= 3) {
-        closeHalfInningRealtime(matchId);
-      }
-
-      // 追加: 同一タブ内にも即時通知
-      notifyGameStatesUpdated();
     }
 
     setShowFinalConfirm(false);
-    if (onComplete) onComplete();
   };
 
   const handleFinalCancel = () => {
@@ -582,7 +483,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     console.log('進塁理由:', results);
-    // TODO: playServiceに保存
+    // TODO: 必要なら理由も親に渡す構造にするが、現状はログのみ
     
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
@@ -590,15 +491,12 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   const handleOutConfirm = (results: OutReasonResult[]) => {
     console.log('アウト理由:', results);
-    // TODO: playServiceに保存
+    // TODO: 必要なら理由も親に渡す構造にするが、現状はログのみ
     
     setShowOutDialog(false);
     setPendingOuts([]);
     
-    // すべて完了
-    if (onComplete) {
-      onComplete();
-    }
+    // すべて完了（これ以前に呼ばれていたが、理由入力がある場合のフローは見直しが必要かもしれない。現状は維持）
   };
 
   const handleDialogCancel = () => {
@@ -786,7 +684,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       {/* 最終確認ダイアログ */}
       {showFinalConfirm && (
         <>
-          {/* 既存の overlay はコンポーネント内に内包するため削除 */}
           <FinalConfirmDialog
             initialOuts={initialOuts}
             outsAfter={outsAfter}
@@ -808,7 +705,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       {/* ランナー選択ダイアログ */}
       {showRunnerSelectDialog && (
         <>
-          {/* 既存の overlay はコンポーネント内に内包するため削除 */}
           <RunnerSelectDialog
             selectedTargetBase={selectedTargetBase}
             candidates={candidateRunners}
@@ -843,7 +739,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       {/* 得点確認ダイアログ */}
       {showScoreConfirm && (
         <>
-          {/* 既存の overlay は維持 */}
           <div style={styles.confirmOverlay} onClick={handleCancelScores} />
           <div style={styles.confirmDialog}>
             <div style={styles.confirmTitle}>
