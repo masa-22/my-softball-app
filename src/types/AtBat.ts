@@ -26,7 +26,9 @@ export type BatterResultType =
   | 'walk'
   | 'deadball'
   | 'sac_bunt'
+  | 'sacrifice_bunt'
   | 'sac_fly'
+  | 'sacrifice_fly'
   | 'interference'
   | 'error';
 

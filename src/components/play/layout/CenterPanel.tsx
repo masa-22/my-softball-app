@@ -30,7 +30,7 @@ interface CenterPanelProps {
   onInplayCommit: () => void;
   onStrikeoutCommit: (isSwinging: boolean) => void;
   onWalkCommit: () => void;
-  onRunnerMovement: (battingResult: string, details: { position: string; batType: string }) => void;
+  onRunnerMovement: (battingResult: string, details: { position: string; batType: string; outfieldDirection: string }) => void;
   onRunnersChange: (next: { '1': string | null; '2': string | null; '3': string | null }) => void;
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;

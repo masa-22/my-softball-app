@@ -11,7 +11,7 @@ interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
   // positionだけでなく詳細オブジェクトを渡すように変更
-  onRunnerMovement?: (battingResult: string, details: { position: string; batType: string }) => void;
+  onRunnerMovement?: (battingResult: string, details: { position: string; batType: string; outfieldDirection: string }) => void;
   currentRunners?: { '1': string | null; '2': string | null; '3': string | null };
   currentOuts?: number;
 }
@@ -159,6 +159,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     const details = {
       position: position,
       batType: batType,
+      outfieldDirection: outfieldDirection,
     };
 
     // アウト結果かつランナー不在でも RunnerMovement 経由で親に通知し、親でアウト加算を行う
