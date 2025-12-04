@@ -12,6 +12,7 @@ interface LeftSidebarProps {
   onPlayerChange: (idx: number, val: string) => void;
   onSave: () => void;
   currentBatterId?: string | null;
+  matchId?: string;
 }
 
 const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -25,6 +26,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onPlayerChange,
   onSave,
   currentBatterId,
+  matchId,
 }) => {
   return (
     <div>
@@ -38,6 +40,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
         onPositionChange={onPositionChange}
         onPlayerChange={onPlayerChange}
         onSave={onSave}
+        matchId={matchId}
       />
       <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
         <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の投手</div>

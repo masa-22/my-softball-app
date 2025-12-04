@@ -15,7 +15,8 @@ interface LineupPanelProps {
   runners: { '1': string | null; '2': string | null; '3': string | null };
   onPositionChange: (index: number, value: string) => void;
   onPlayerChange: (index: number, value: string) => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
+  matchId?: string;
 }
 
 const LineupPanel: React.FC<LineupPanelProps> = ({
@@ -28,6 +29,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
   onPositionChange,
   onPlayerChange,
   onSave,
+  matchId,
 }) => {
   const getUsedPositions = (): Set<string> => {
     const used = new Set<string>();
@@ -37,8 +39,21 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
 
   const usedPositions = getUsedPositions();
 
-  // 追加: 初期ラインナップのスナップショット（差分表示用）
-  const [initialSnapshot] = React.useState<any[]>(() => JSON.parse(JSON.stringify(lineup)));
+  const [savedSnapshot, setSavedSnapshot] = React.useState<any[]>([]);
+  const prevMatchIdRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (prevMatchIdRef.current !== (matchId || null)) {
+      prevMatchIdRef.current = matchId || null;
+      setSavedSnapshot([]);
+    }
+  }, [matchId]);
+
+  React.useEffect(() => {
+    if (savedSnapshot.length === 0 && lineup.length > 0) {
+      setSavedSnapshot(JSON.parse(JSON.stringify(lineup)));
+    }
+  }, [lineup, savedSnapshot.length]);
 
   // 追加: 保存確認ダイアログの状態
   const [showConfirm, setShowConfirm] = React.useState(false);
@@ -47,8 +62,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
   const diffs = React.useMemo(() => {
     return lineup
       .map((cur, idx) => {
-        const prev = initialSnapshot[idx];
-        if (!prev) return null;
+        const prev = savedSnapshot[idx] || { position: '', playerId: '' };
         const posChanged = (prev.position || '') !== (cur.position || '');
         const playerChanged = (prev.playerId || '') !== (cur.playerId || '');
         if (!posChanged && !playerChanged) return null;
@@ -65,7 +79,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
         before: { position: string; playerId: string };
         after: { position: string; playerId: string };
       }>;
-  }, [lineup, initialSnapshot]);
+  }, [lineup, savedSnapshot]);
 
   const getPlayerNameById = (pid: string) => {
     if (!pid) return '—';
@@ -74,7 +88,15 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
   };
 
   const handleClickSave = () => setShowConfirm(true);
-  const handleConfirmAccept = () => { setShowConfirm(false); onSave(); };
+  const handleConfirmAccept = async () => {
+    try {
+      await onSave();
+      setSavedSnapshot(JSON.parse(JSON.stringify(lineup)));
+      setShowConfirm(false);
+    } catch (e) {
+      console.error('failed to save lineup', e);
+    }
+  };
   const handleConfirmCancel = () => setShowConfirm(false);
 
   return (
