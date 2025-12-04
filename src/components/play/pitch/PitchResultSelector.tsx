@@ -92,11 +92,11 @@ const PitchResultSelector: React.FC<PitchResultSelectorProps> = ({
   onCancel,
 }) => {
   const results: Array<{ key: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'; label: string }> = [
-    { key: 'swing', label: 'スイング' },
     { key: 'looking', label: '見逃し' },
+    { key: 'swing', label: 'スイング' }, 
+    { key: 'foul', label: 'ファウル' },
     { key: 'ball', label: 'ボール' },
     { key: 'deadball', label: 'デッドボール' },
-    { key: 'foul', label: 'ファウル' },
     { key: 'inplay', label: 'インプレイ' },
   ];
 

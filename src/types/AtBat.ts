@@ -49,6 +49,8 @@ export interface PitchRecord {
   seq: number;
   type: PitchType;
   course: number; // 1-25 (StrikeZoneGridのグリッド番号)
+  x?: number; // 0-100% (左上が0,0)
+  y?: number; // 0-100%
   result: PitchResult;
   velocity?: number | null;
 }
@@ -73,12 +75,14 @@ export interface RunnerEvent {
 }
 
 export type BatType = 'ground' | 'fly' | 'liner' | 'bunt';
-export type BatDirection = 'left' | 'center' | 'right' | 'infield';
+
+// 打球方向は既存の定義を維持しつつ、将来的にポジション番号も入れられるようにしておく
+export type BatDirection = 'left' | 'center' | 'right' | 'infield' | string;
 
 export interface FieldingAction {
-  playerId: string;
+  playerId?: string; // IDが不明な場合も許容
   position: string;
-  action: 'fielded' | 'assist' | 'error';
+  action: 'fielded' | 'assist' | 'putout' | 'error'; // putout(刺殺)を追加
   quality: 'clean' | 'bobbled' | 'missed';
 }
 

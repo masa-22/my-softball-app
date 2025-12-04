@@ -11,8 +11,14 @@ interface PlayResultFormProps {
   outfieldDirection: string;
   setOutfieldDirection: (v: string) => void;
   outfieldDirectionOptions: Array<{ value: string; label: string }>;
+  // 追加: batType
+  batType: string;
+  setBatType: (v: string) => void;
+  batTypeOptions: Array<{ value: string; label: string }>;
+  
   needsPosition: boolean;
   needsOutfieldDirection: boolean;
+  needsBatType: boolean;
   isFormValid: boolean;
   onSubmit: () => void;
   onCancel?: () => void;
@@ -29,8 +35,14 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
   outfieldDirection,
   setOutfieldDirection,
   outfieldDirectionOptions,
+  // 追加
+  batType,
+  setBatType,
+  batTypeOptions,
+  
   needsPosition,
   needsOutfieldDirection,
+  needsBatType,
   isFormValid,
   onSubmit,
   onCancel,
@@ -101,6 +113,48 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
         ))}
       </div>
     </div>
+    
+    {/* 打球タイプ選択（追加） */}
+    {needsBatType && (
+      <div style={{ marginBottom: 20 }}>
+        <label style={{
+          display: 'block',
+          marginBottom: 8,
+          fontWeight: 600,
+          fontSize: 14,
+          color: '#495057',
+        }}>
+          打球タイプ <span style={{ color: '#e74c3c' }}>*</span>
+        </label>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 8,
+        }}>
+          {batTypeOptions.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setBatType(option.value)}
+              style={{
+                padding: '10px 12px',
+                background: batType === option.value ? '#fd7e14' : '#f8f9fa',
+                color: batType === option.value ? '#fff' : '#495057',
+                border: batType === option.value ? '2px solid #fd7e14' : '1px solid #dee2e6',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: batType === option.value ? 600 : 400,
+                fontSize: 13,
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    )}
+
     {/* 打球方向選択（必要な場合のみ表示） */}
     {needsPosition && (
       <div style={{ marginBottom: 20 }}>

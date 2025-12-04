@@ -37,6 +37,20 @@ interface PitchData {
   result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
 }
 
+// 座標計算用定数（StrikeZoneGridのサイズに合わせる）
+const ZONE_WIDTH = 248;
+const ZONE_HEIGHT = 310;
+
+const calculateCourse = (x: number, y: number): number => {
+  const col = Math.min(4, Math.max(0, Math.floor((x / ZONE_WIDTH) * 5)));
+  const row = Math.min(4, Math.max(0, Math.floor((y / ZONE_HEIGHT) * 5)));
+  return row * 5 + col + 1;
+};
+
+const toPercentage = (val: number, max: number): number => {
+  return parseFloat(((val / max) * 100).toFixed(1));
+};
+
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
 
@@ -53,7 +67,8 @@ const PlayRegister: React.FC = () => {
   const [showRunnerMovement, setShowRunnerMovement] = useState(false);
   const [strikeoutType, setStrikeoutType] = useState<'swinging' | 'looking' | null>(null);
   const [battingResultForMovement, setBattingResultForMovement] = useState<string>(''); // 追加
-  const [positionForMovement, setPositionForMovement] = useState<string>(''); // 追加
+  // positionだけでなく詳細を保持するように変更
+  const [playDetailsForMovement, setPlayDetailsForMovement] = useState<{ position: string; batType: string }>({ position: '', batType: 'ground' });
 
   // 追加: サイドバー編集用 state（先攻/後攻）
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
@@ -254,16 +269,16 @@ const PlayRegister: React.FC = () => {
     thisInningAtBats.forEach(a => {
         a.pitches.forEach(p => {
             total++;
-            if (['swing', 'looking', 'foul'].includes(p.result)) strikes++;
-            if (['ball'].includes(p.result)) balls++;
+            if (['swing', 'looking', 'foul', 'inplay'].includes(p.result)) strikes++;
+            if (['ball', 'deadball'].includes(p.result)) balls++;
         });
     });
     
     // 現在入力中の球数も加算
     pitches.forEach(p => {
         total++;
-        if (['swing', 'looking', 'foul'].includes(p.result)) strikes++;
-        if (['ball'].includes(p.result)) balls++;
+        if (['swing', 'looking', 'foul', 'inplay'].includes(p.result)) strikes++;
+        if (['ball', 'deadball'].includes(p.result)) balls++;
     });
 
     return { inningStr, total, strikes, balls, inning: currentInning, half: currentHalf };
@@ -503,13 +518,13 @@ const PlayRegister: React.FC = () => {
     const isDeadball = pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball';
     setBattingResultForMovement(isDeadball ? 'deadball' : 'walk');
     
-    setPositionForMovement('');
+    setPlayDetailsForMovement({ position: '', batType: '' });
     setShowRunnerMovement(true);
     // BSリセット・打順前進は「最終確定時」に実施
   };
 
   // ランナー動き入力画面へ遷移（結果確定後に呼ばれる）
-  const handleRunnerMovement = (battingResult: string, position: string) => {
+  const handleRunnerMovement = (battingResult: string, details: { position: string; batType: string }) => {
     // ランナーがいない状態でアウトの場合はランナー入力をスキップ
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout'].includes(battingResult);
@@ -525,14 +540,19 @@ const PlayRegister: React.FC = () => {
         const pitchRecords = pitches.map(p => ({
           seq: p.order,
           type: p.type,
-          course: 13, // 仮: StrikeZoneGridから詳細な位置を取得するのは別途対応が必要かも
+          course: calculateCourse(p.x, p.y),
+          x: toPercentage(p.x, ZONE_WIDTH),
+          y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
         }));
 
+        const newIndex = getAtBats(matchId).length + 1;
+        const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
+
         const atBat: AtBat = {
-          playId: `play_${Date.now()}`,
+          playId: newPlayId,
           matchId,
-          index: getAtBats(matchId).length + 1,
+          index: newIndex,
           inning: currentInningInfo.inning,
           topOrBottom: currentInningInfo.half,
           type: 'bat',
@@ -558,9 +578,30 @@ const PlayRegister: React.FC = () => {
           pitches: pitchRecords,
           runnerEvents: [], // ランナーなしアウトなのでイベントなし
           playDetails: {
-            batType: 'ground', // 仮
-            direction: 'infield', // 仮
-            fielding: [],
+            batType: details.batType as any,
+            direction: details.position, // 誰が取ったか
+            fielding: (() => {
+              if (!details.position) return [];
+              const fielding = [];
+              if (battingResult === 'flyout') {
+                // フライアウト: そのまま刺殺
+                fielding.push({ position: details.position, action: 'putout', quality: 'clean' });
+              } else if (battingResult === 'groundout') {
+                // ゴロアウト:
+                if (details.position === '3') {
+                  // ファーストゴロ: 自らベースを踏んだとみなし刺殺
+                  fielding.push({ position: details.position, action: 'putout', quality: 'clean' });
+                } else {
+                  // それ以外: 処理した選手が補殺、ファーストが刺殺
+                  fielding.push({ position: details.position, action: 'assist', quality: 'clean' });
+                  fielding.push({ position: '3', action: 'putout', quality: 'clean' });
+                }
+              } else {
+                // その他: 一旦fielded
+                fielding.push({ position: details.position, action: 'fielded', quality: 'clean' });
+              }
+              return fielding as any;
+            })(),
           },
           timestamp: new Date().toISOString(),
         };
@@ -584,13 +625,13 @@ const PlayRegister: React.FC = () => {
       setShowPlayResult(false);
       setShowRunnerMovement(false);
       setBattingResultForMovement('');
-      setPositionForMovement('');
+      setPlayDetailsForMovement({ position: '', batType: '' });
       return;
     }
 
     // ランナーあり → 進塁入力へ
     setBattingResultForMovement(battingResult);
-    setPositionForMovement(position);
+    setPlayDetailsForMovement(details);
     setShowPlayResult(false);
     setShowRunnerMovement(true);
   };
@@ -610,14 +651,19 @@ const PlayRegister: React.FC = () => {
         const pitchRecords = pitches.map(p => ({
           seq: p.order,
           type: p.type,
-          course: 13, 
+          course: calculateCourse(p.x, p.y),
+          x: toPercentage(p.x, ZONE_WIDTH),
+          y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
         }));
 
+        const newIndex = getAtBats(matchId).length + 1;
+        const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
+
         const atBat: AtBat = {
-          playId: `play_${Date.now()}`,
+          playId: newPlayId,
           matchId,
-          index: getAtBats(matchId).length + 1,
+          index: newIndex,
           inning: currentInningInfo.inning,
           topOrBottom: currentInningInfo.half,
           type: 'bat',
@@ -643,7 +689,13 @@ const PlayRegister: React.FC = () => {
           pitches: pitchRecords,
           runnerEvents: [], 
           playDetails: {
-            fielding: [],
+            fielding: [
+              {
+                position: '2', // 捕手
+                action: 'putout',
+                quality: 'clean',
+              }
+            ],
           },
           timestamp: new Date().toISOString(),
         };
@@ -664,7 +716,9 @@ const PlayRegister: React.FC = () => {
         const pitchRecords = pitches.map(p => ({
           seq: p.order,
           type: p.type,
-          course: 13, 
+          course: calculateCourse(p.x, p.y),
+          x: toPercentage(p.x, ZONE_WIDTH),
+          y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
         }));
 
@@ -676,10 +730,13 @@ const PlayRegister: React.FC = () => {
           atBatResult.rbi = scoredRunners.length;
         }
 
+        const newIndex = getAtBats(matchId).length + 1;
+        const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
+
         const atBat: AtBat = {
-          playId: `play_${Date.now()}`,
+          playId: newPlayId,
           matchId,
-          index: getAtBats(matchId).length + 1,
+          index: newIndex,
           inning: currentInningInfo.inning,
           topOrBottom: currentInningInfo.half,
           type: 'bat',
@@ -703,8 +760,35 @@ const PlayRegister: React.FC = () => {
           pitches: pitchRecords,
           runnerEvents: [], // TODO: movementResultからイベント詳細があれば変換
           playDetails: {
-             // PlayResultPanelで入力された打球方向などはまだここに来ていないが positionForMovement はあるかも
-             fielding: [],
+             batType: playDetailsForMovement.batType as any,
+             direction: playDetailsForMovement.position, // 誰が取ったか
+             fielding: (() => {
+               const list: any[] = [];
+               // 1. 打球処理 (fielded)
+               if (playDetailsForMovement.position) {
+                 // outDetailsがない場合で、かつフライアウトなら刺殺とみなす（ランナーなしフライアウトなど）
+                 // outDetailsがある場合はそちらでputoutが記録されるはずなので、ここはfieldedとする
+                 const hasOutDetails = outDetails && outDetails.length > 0;
+                 if (!hasOutDetails && battingResultForMovement === 'flyout') {
+                    list.push({ position: playDetailsForMovement.position, action: 'putout', quality: 'clean' });
+                 } else {
+                    list.push({ position: playDetailsForMovement.position, action: 'fielded', quality: 'clean' });
+                 }
+               }
+
+               // 2. 詳細なアウト記録 (assist / putout) - ランナー移動入力で入力されたもの
+               if (outDetails) {
+                 outDetails.forEach(d => {
+                   if (d.threwPosition) {
+                     list.push({ position: d.threwPosition, action: 'assist', quality: 'clean' });
+                   }
+                   if (d.caughtPosition) {
+                     list.push({ position: d.caughtPosition, action: 'putout', quality: 'clean' });
+                   }
+                 });
+               }
+               return list;
+             })(),
           },
           timestamp: new Date().toISOString(),
         };
@@ -753,7 +837,7 @@ const PlayRegister: React.FC = () => {
         setShowRunnerMovement(false);
         setStrikeoutType(null);
         setBattingResultForMovement('');
-        setPositionForMovement('');
+        setPlayDetailsForMovement({ position: '', batType: '' });
         setPendingOutcome(null);
     } else {
         // キャンセルの場合、入力画面を閉じるかどうか
@@ -764,7 +848,7 @@ const PlayRegister: React.FC = () => {
         // あるいは RunnerMovementInput を閉じて PlayResultPanel を出すか。
         // ここでは単純に閉じて、PitchCourseInput (初期状態) に戻る挙動にする
         setBattingResultForMovement('');
-        setPositionForMovement('');
+        setPlayDetailsForMovement({ position: '', batType: '' });
     }
   };
 
