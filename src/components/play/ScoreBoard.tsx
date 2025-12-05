@@ -1,12 +1,14 @@
 /**
  * 横型スコアボード
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 // import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
 import { getGameState } from '../../services/gameStateService';
 import { getGame } from '../../services/gameService';
+import { getAtBats } from '../../services/atBatService';
+import { AtBat } from '../../types/AtBat';
 
 const MAX_INNINGS = 7;
 
@@ -15,6 +17,28 @@ const ScoreBoard: React.FC = () => {
   const [homeName, setHomeName] = useState<string>('先攻');
   const [awayName, setAwayName] = useState<string>('後攻');
   const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
+  const [atBats, setAtBats] = useState<AtBat[]>([]);
+
+  const inningActivity = useMemo(() => {
+    const map: Record<number, { top: boolean; bottom: boolean }> = {};
+    atBats.forEach((bat) => {
+      const inning = Math.min(MAX_INNINGS, bat.inning ?? 0);
+      if (!inning) return;
+      const entry = map[inning] || { top: false, bottom: false };
+      if (bat.topOrBottom === 'top') {
+        entry.top = true;
+      } else {
+        entry.bottom = true;
+      }
+      map[inning] = entry;
+    });
+    return map;
+  }, [atBats]);
+
+  const recordedMaxInning = useMemo(() => {
+    const maxInning = atBats.reduce((max, bat) => Math.max(max, bat.inning ?? 0), 0);
+    return Math.min(MAX_INNINGS, maxInning);
+  }, [atBats]);
 
   useEffect(() => {
     if (!matchId) return;
@@ -29,12 +53,15 @@ const ScoreBoard: React.FC = () => {
       setAwayName(away ? away.teamName : g.bottomTeam.name);
     }
 
-    const update = () => setState(getGameState(matchId));
+    const update = () => {
+      setState(getGameState(matchId));
+      setAtBats(getAtBats(matchId));
+    };
     update();
 
     const t = setInterval(update, 500);
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'game_states') update();
+      if (e.key === 'game_states' || e.key === 'softball_app_at_bats') update();
     };
     window.addEventListener('storage', onStorage);
 
@@ -54,16 +81,43 @@ const ScoreBoard: React.FC = () => {
 
   const current = { inning: state.current_inning, half: state.top_bottom };
   const totals = { home: state.scores.top_total, away: state.scores.bottom_total };
+  const isFinished = state.status === 'finished';
 
   const inningCols = Array.from({ length: MAX_INNINGS }, (_, i) => i + 1);
-  const scoreTopByInning: Record<number, number | '-' | null> = {};
-  const scoreBottomByInning: Record<number, number | '-' | null> = {};
-
-  inningCols.forEach(n => {
-    const rec = state.scores.innings[String(n)];
-    scoreTopByInning[n] = rec ? (rec.top ?? 0) : 0;
-    scoreBottomByInning[n] = rec ? (rec.bottom ?? (n === current.inning && current.half === 'bottom' ? null : 0)) : 0;
-  });
+  const getHalfDisplay = (half: 'top' | 'bottom', inning: number): string | number => {
+    const rec = state.scores.innings[String(inning)];
+    const activity = inningActivity[inning] || { top: false, bottom: false };
+    const finishedHyphen =
+      isFinished && (recordedMaxInning === 0 || inning > recordedMaxInning);
+    if (finishedHyphen) {
+      return '-';
+    }
+    if (!isFinished) {
+      if (inning > current.inning) {
+        return '-';
+      }
+      if (half === 'bottom' && inning === current.inning && current.half === 'top') {
+        return '-';
+      }
+    }
+    if (half === 'bottom') {
+      const showCross =
+        isFinished &&
+        recordedMaxInning > 0 &&
+        inning === recordedMaxInning &&
+        activity.top &&
+        !activity.bottom;
+      if (showCross) {
+        return '×';
+      }
+    }
+    const value = half === 'top' ? rec?.top : rec?.bottom;
+    if (typeof value === 'number') {
+      return value;
+    }
+    const played = half === 'top' ? activity.top : activity.bottom;
+    return played ? 0 : '-';
+  };
 
   return (
     <div style={{ 
@@ -137,9 +191,7 @@ const ScoreBoard: React.FC = () => {
             {inningCols.map(n => {
               const isCurrentInning = n === current.inning;
               const isAttacking = isCurrentInning && current.half === 'top';
-              const score = n > current.inning ? '-' : 
-                           (n === current.inning && current.half === 'top') ? scoreTopByInning[n] || 0 :
-                           scoreTopByInning[n] || 0;
+              const score = getHalfDisplay('top', n);
               
               return (
                 <td 
@@ -180,9 +232,7 @@ const ScoreBoard: React.FC = () => {
             {inningCols.map(n => {
               const isCurrentInning = n === current.inning;
               const isAttacking = isCurrentInning && current.half === 'bottom';
-              const score = n > current.inning ? '-' : 
-                           (n === current.inning && current.half === 'top') ? '-' :
-                           scoreBottomByInning[n] || 0;
+              const score = getHalfDisplay('bottom', n);
               
               return (
                 <td 

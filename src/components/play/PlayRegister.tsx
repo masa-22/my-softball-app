@@ -19,6 +19,8 @@ import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { useBoxScoreData } from '../../hooks/useBoxScoreData';
 import BoxScoreModal from './boxscore/BoxScoreModal';
 import SpecialSubstitutionModal from './substitution/SpecialSubstitutionModal';
+import FinishGameButton from './FinishGameButton';
+import { useGameStatus } from '../../hooks/useGameStatus';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -37,6 +39,13 @@ type MovementDetails = {
 
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
+  const {
+    status: gameStatus,
+    isFinished: isGameFinished,
+    startIfScheduled,
+    finishGame,
+    transitioning: statusTransitioning,
+  } = useGameStatus(matchId);
 
   // 1. Game State (Realtime)
   const {
@@ -142,6 +151,11 @@ const PlayRegister: React.FC = () => {
     loading: boxScoreLoading,
     refresh: refreshBoxScore,
   } = useBoxScoreData(matchId);
+
+  useEffect(() => {
+    if (!matchId || gameStatus !== 'SCHEDULED') return;
+    startIfScheduled();
+  }, [matchId, gameStatus, startIfScheduled]);
 
   useEffect(() => {
     const key = specialEntries.map(entry => entry.id).join('|');
@@ -336,6 +350,8 @@ const PlayRegister: React.FC = () => {
     return defaultLabel;
   }, [battingResultForMovement, playDetailsForMovement.position]);
 
+  const playAreaLocked = isGameFinished;
+
   const desktopContent = (
     <>
       <style>{`
@@ -409,6 +425,29 @@ const PlayRegister: React.FC = () => {
           cursor: not-allowed;
         }
 
+        .play-grid-wrapper {
+          position: relative;
+        }
+
+        .play-grid-wrapper.locked .play-grid {
+          pointer-events: none;
+          opacity: 0.4;
+        }
+
+        .play-grid-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          font-weight: 600;
+          color: #495057;
+          background-color: rgba(248, 249, 250, 0.75);
+          border-radius: 12px;
+          padding: 16px;
+        }
+
         .area-center { grid-area: center; }
         .area-left { grid-area: left; }
         .area-right { grid-area: right; }
@@ -448,89 +487,104 @@ const PlayRegister: React.FC = () => {
                   交代処理 ({specialEntries.length})
                 </button>
               )}
+              <div style={{ marginLeft: 'auto' }}>
+                <FinishGameButton
+                  status={gameStatus}
+                  onFinish={finishGame}
+                  busy={statusTransitioning}
+                  disabled={!matchId}
+                />
+              </div>
             </div>
           </div>
         </div>
-        <div className="play-grid">
-          <div className="area-center">
-            <CenterPanel
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              showRunnerMovement={showRunnerMovement}
-              showPlayResult={showPlayResult}
-              currentBSO={currentBSO}
-              initialOuts={movementInitialOuts}
-              presetOutsAfter={movementPresetOutsAfter}
-              battingResultLabel={battingResultDisplayLabel}
-              pitches={pitches}
-              onPitchesChange={setPitches}
-              offenseTeamId={offenseTeamId}
-              playDetails={playDetailsForMovement}
-              runners={runners}
-              currentBatterId={currentBatter?.playerId}
-              battingResultForMovement={battingResultForMovement}
-              onPlayResultComplete={handlePlayResultComplete}
-              onInplayCommit={handleInplayCommit}
-              onStrikeoutCommit={handleStrikeoutCommit}
-              onWalkCommit={handleWalkCommit}
-              onRunnerMovement={handleRunnerMovement}
-              onRunnersChange={handleRunnersChange}
-              onCountsChange={handleCountsChange}
-              onCountsReset={handleCountsReset}
-              strikeoutType={strikeoutType}
-              offensePlayers={offensePlayers}
-              offenseTeamId={offenseTeamId}
-              baseLabel={runnerManager.baseLabel}
-              getRunnerName={runnerManager.getRunnerName}
-              onRunnerBaseClick={runnerManager.handleRunnerBaseClick}
-              onAddOutClick={runnerManager.handleAddOutClick}
-              showAdvanceDialog={runnerManager.showAdvanceDialog}
-              pendingAdvancements={runnerManager.pendingAdvancements}
-              onAdvanceConfirm={runnerManager.handleRunnerAdvanceConfirm}
-              showOutDialog={runnerManager.showOutDialog}
-              pendingOuts={runnerManager.pendingOuts}
-              onOutConfirm={runnerManager.handleRunnerOutConfirm}
-              onDialogCancel={runnerManager.handleRunnerDialogCancel}
-              showAddOutDialog={runnerManager.showAddOutDialog}
-              selectedOutRunner={runnerManager.selectedOutRunner}
-              onSelectOutRunner={runnerManager.handleSelectOutRunner}
-              onAddOutConfirm={runnerManager.handleAddOutConfirm}
-              onAddOutCancel={runnerManager.handleAddOutCancel}
-            />
-          </div>
-          
-          <div className="area-left">
-            <LeftSidebar
-              teamName={awayTeamName}
-              lineup={awayLineupDraft}
-              players={awayPlayers}
-              currentPitcher={currentPitcher}
-              pitcherStats={pitcherStats}
-              runners={runners}
-              onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
-              onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
-              onSave={() => handleSidebarSave('away')}
-              currentBatterId={currentBatter?.playerId}
-              matchId={matchId || ''}
-            />
-          </div>
+        <div className={`play-grid-wrapper${playAreaLocked ? ' locked' : ''}`}>
+          <div className="play-grid">
+            <div className="area-center">
+              <CenterPanel
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                showRunnerMovement={showRunnerMovement}
+                showPlayResult={showPlayResult}
+                currentBSO={currentBSO}
+                initialOuts={movementInitialOuts}
+                presetOutsAfter={movementPresetOutsAfter}
+                battingResultLabel={battingResultDisplayLabel}
+                pitches={pitches}
+                onPitchesChange={setPitches}
+                offenseTeamId={offenseTeamId}
+                playDetails={playDetailsForMovement}
+                runners={runners}
+                currentBatterId={currentBatter?.playerId}
+                battingResultForMovement={battingResultForMovement}
+                onPlayResultComplete={handlePlayResultComplete}
+                onInplayCommit={handleInplayCommit}
+                onStrikeoutCommit={handleStrikeoutCommit}
+                onWalkCommit={handleWalkCommit}
+                onRunnerMovement={handleRunnerMovement}
+                onRunnersChange={handleRunnersChange}
+                onCountsChange={handleCountsChange}
+                onCountsReset={handleCountsReset}
+                strikeoutType={strikeoutType}
+                offensePlayers={offensePlayers}
+                offenseTeamId={offenseTeamId}
+                baseLabel={runnerManager.baseLabel}
+                getRunnerName={runnerManager.getRunnerName}
+                onRunnerBaseClick={runnerManager.handleRunnerBaseClick}
+                onAddOutClick={runnerManager.handleAddOutClick}
+                showAdvanceDialog={runnerManager.showAdvanceDialog}
+                pendingAdvancements={runnerManager.pendingAdvancements}
+                onAdvanceConfirm={runnerManager.handleRunnerAdvanceConfirm}
+                showOutDialog={runnerManager.showOutDialog}
+                pendingOuts={runnerManager.pendingOuts}
+                onOutConfirm={runnerManager.handleRunnerOutConfirm}
+                onDialogCancel={runnerManager.handleRunnerDialogCancel}
+                showAddOutDialog={runnerManager.showAddOutDialog}
+                selectedOutRunner={runnerManager.selectedOutRunner}
+                onSelectOutRunner={runnerManager.handleSelectOutRunner}
+                onAddOutConfirm={runnerManager.handleAddOutConfirm}
+                onAddOutCancel={runnerManager.handleAddOutCancel}
+              />
+            </div>
+            
+            <div className="area-left">
+              <LeftSidebar
+                teamName={awayTeamName}
+                lineup={awayLineupDraft}
+                players={awayPlayers}
+                currentPitcher={currentPitcher}
+                pitcherStats={pitcherStats}
+                runners={runners}
+                onPositionChange={(idx, val) => handlePositionChange('away', idx, val)}
+                onPlayerChange={(idx, val) => handlePlayerChange('away', idx, val)}
+                onSave={() => handleSidebarSave('away')}
+                currentBatterId={currentBatter?.playerId}
+                matchId={matchId || ''}
+              />
+            </div>
 
-          <div className="area-right">
-            <RightSidebar
-              teamName={homeTeamName}
-              lineup={homeLineupDraft}
-              players={homePlayers}
-              currentBatter={currentBatter}
-              recentBatterResults={recentBatterResults}
-              runners={runners}
-              onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
-              onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
-              onSave={() => handleSidebarSave('home')}
-              currentBattingOrder={currentBattingOrder}
-              currentPitcherId={currentPitcher?.playerId}
-              matchId={matchId || ''}
-            />
+            <div className="area-right">
+              <RightSidebar
+                teamName={homeTeamName}
+                lineup={homeLineupDraft}
+                players={homePlayers}
+                currentBatter={currentBatter}
+                recentBatterResults={recentBatterResults}
+                runners={runners}
+                onPositionChange={(idx, val) => handlePositionChange('home', idx, val)}
+                onPlayerChange={(idx, val) => handlePlayerChange('home', idx, val)}
+                onSave={() => handleSidebarSave('home')}
+                currentBattingOrder={currentBattingOrder}
+                currentPitcherId={currentPitcher?.playerId}
+                matchId={matchId || ''}
+              />
+            </div>
           </div>
+          {playAreaLocked && (
+            <div className="play-grid-overlay">
+              この試合は終了済みのため、記録の閲覧のみ可能です。
+            </div>
+          )}
         </div>
       </div>
     </>
