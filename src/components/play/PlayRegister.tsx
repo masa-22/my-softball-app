@@ -16,6 +16,8 @@ import { useGameProcessor } from '../../hooks/useGameProcessor';
 import { getAtBats } from '../../services/atBatService';
 import { POSITIONS } from '../../data/softball/positions';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
+import { useBoxScoreData } from '../../hooks/useBoxScoreData';
+import BoxScoreModal from './boxscore/BoxScoreModal';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -120,6 +122,12 @@ const PlayRegister: React.FC = () => {
   const [pendingOutcome, setPendingOutcome] = useState<{ kind: 'inplay' | 'strikeout' | 'walk'; battingResult?: string } | null>(null);
   const [desktopScale, setDesktopScale] = useState(1);
   const [runnerMovementOutsAfterOverride, setRunnerMovementOutsAfterOverride] = useState<number | null>(null);
+  const [showBoxScore, setShowBoxScore] = useState(false);
+  const {
+    data: boxScoreData,
+    loading: boxScoreLoading,
+    refresh: refreshBoxScore,
+  } = useBoxScoreData(matchId);
 
   // 投手成績（表示用）
   const pitcherStats = useMemo(() => {
@@ -197,6 +205,13 @@ const PlayRegister: React.FC = () => {
     setPlayDetailsForMovement({ position: '', batType: 'walk', outfieldDirection: '' });
     setShowRunnerMovement(true);
   };
+
+  const handleOpenBoxScore = () => {
+    refreshBoxScore();
+    setShowBoxScore(true);
+  };
+
+  const handleCloseBoxScore = () => setShowBoxScore(false);
 
   const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
@@ -299,6 +314,32 @@ const PlayRegister: React.FC = () => {
           margin-bottom: 16px;
         }
 
+        .boxscore-trigger {
+          margin-top: 8px;
+          display: flex;
+          justify-content: flex-start;
+        }
+
+        .boxscore-button {
+          border: none;
+          background-color: #1c7ed6;
+          color: #fff;
+          padding: 8px 18px;
+          border-radius: 999px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s ease;
+        }
+
+        .boxscore-button:hover {
+          background-color: #1971c2;
+        }
+
+        .boxscore-button:disabled {
+          background-color: #adb5bd;
+          cursor: not-allowed;
+        }
+
         .area-center { grid-area: center; }
         .area-left { grid-area: left; }
         .area-right { grid-area: right; }
@@ -319,6 +360,16 @@ const PlayRegister: React.FC = () => {
         <div className="area-scoreboard">
           <div style={{ minWidth: 320 }}>
             <ScoreBoard />
+            <div className="boxscore-trigger">
+              <button
+                type="button"
+                className="boxscore-button"
+                onClick={handleOpenBoxScore}
+                disabled={!matchId}
+              >
+                ボックスを表示
+              </button>
+            </div>
           </div>
         </div>
         <div className="play-grid">
@@ -407,7 +458,14 @@ const PlayRegister: React.FC = () => {
   const scaled = desktopScale < 1 && desktopScale > 0;
 
   return (
-    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+    <>
+      <BoxScoreModal
+        open={showBoxScore}
+        data={boxScoreData}
+        loading={boxScoreLoading}
+        onClose={handleCloseBoxScore}
+      />
+      <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
       {scaled ? (
         <div style={{ width: PLAY_LAYOUT_WIDTH * desktopScale }}>
           <div
@@ -423,7 +481,8 @@ const PlayRegister: React.FC = () => {
       ) : (
         <div style={{ width: '100%', maxWidth: PLAY_LAYOUT_WIDTH }}>{desktopContent}</div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 
