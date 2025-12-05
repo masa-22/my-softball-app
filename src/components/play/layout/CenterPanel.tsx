@@ -24,7 +24,15 @@ interface CenterPanelProps {
   onWalkCommit: () => void;
   onRunnerMovement: (
     battingResult: string,
-    details: { position: string; batType: string; outfieldDirection: string },
+    details: { 
+      position: string; 
+      batType: string; 
+      outfieldDirection: string;
+      fieldingOptions?: {
+        putoutPosition?: string;
+        assistPosition?: string;
+      };
+    },
     outsAfterOverride?: number,
   ) => void;
   onRunnersChange: (next: { '1': string | null; '2': string | null; '3': string | null }) => void;
@@ -36,6 +44,15 @@ interface CenterPanelProps {
   initialOuts?: number; // 追加
   presetOutsAfter?: number | null;
   battingResultLabel?: string;
+  playDetails?: { 
+    position: string; 
+    batType: string; 
+    outfieldDirection: string;
+    fieldingOptions?: {
+      putoutPosition?: string;
+      assistPosition?: string;
+    };
+  }; // 追加
   // RunnerStatus制御用（親から）
   baseLabel: (b: '1' | '2' | '3' | 'home') => string;
   getRunnerName: (playerId: string | null) => string;
@@ -96,6 +113,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   initialOuts,
   presetOutsAfter,
   battingResultLabel,
+  playDetails,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -111,6 +129,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           battingResultLabel={battingResultLabel}
           pitches={pitches}
           offenseTeamId={offenseTeamId} // 追加
+          playDetails={playDetails} // 追加
         />
       ) : !showPlayResult ? (
         <>

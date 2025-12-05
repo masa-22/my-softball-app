@@ -10,3 +10,4 @@ export interface Lineup {
   away: LineupEntry[]; // 後攻
 }
 
+

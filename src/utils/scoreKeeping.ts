@@ -104,3 +104,4 @@ export const toPercentage = (val: number, max: number): number => {
   return parseFloat(((val / max) * 100).toFixed(1));
 };
 
+

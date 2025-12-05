@@ -125,20 +125,23 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
   onCancel,
 }) => {
   const buildInitialRows = () => {
-    if (presetSelections.length > 0) {
-      return presetSelections.slice(0, outsNeeded).map((sel) => ({
-        runnerId: sel.runnerId,
-        outAtBase: sel.outAtBase,
-        threwPosition: sel.threwPosition || '',
-        caughtPosition: sel.caughtPosition || '',
-      }));
-    }
-    return Array.from({ length: outsNeeded }, () => ({
-      runnerId: '',
-      outAtBase: '1' as BaseType,
-      threwPosition: '',
-      caughtPosition: '',
-    }));
+    return Array.from({ length: outsNeeded }, (_, i) => {
+      if (i < presetSelections.length) {
+        const sel = presetSelections[i];
+        return {
+          runnerId: sel.runnerId,
+          outAtBase: sel.outAtBase,
+          threwPosition: sel.threwPosition || '',
+          caughtPosition: sel.caughtPosition || '',
+        };
+      }
+      return {
+        runnerId: '',
+        outAtBase: '1' as BaseType,
+        threwPosition: '',
+        caughtPosition: '',
+      };
+    });
   };
 
   const [rows, setRows] = useState<
@@ -175,7 +178,7 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
     });
   };
 
-  const isValid = rows.every((row) => row.runnerId && row.outAtBase && row.threwPosition && row.caughtPosition);
+  const isValid = rows.every((row) => row.runnerId && row.outAtBase && row.caughtPosition);
 
   const handleConfirm = () => {
     if (!isValid) return;
@@ -185,7 +188,7 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
         runnerId: row.runnerId,
         fromBase: candidate?.fromBase ?? 'home',
         outAtBase: row.outAtBase,
-        threwPosition: row.threwPosition,
+        threwPosition: row.threwPosition || '',
         caughtPosition: row.caughtPosition,
       };
     });
@@ -195,9 +198,13 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
   return (
     <div style={styles.overlay} onClick={onCancel}>
       <div style={styles.dialog} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.title}>アウトになった走者を選択</div>
+        <div style={styles.title}>アウトの詳細を入力</div>
         <div style={styles.subtitle}>
-          打撃結果: {battingResultLabel || '-'} / 増加したアウト数: {outsNeeded}
+          <div>打撃結果: {battingResultLabel || '-'} / 増加したアウト数: {outsNeeded}</div>
+          <div style={{ fontSize: 12, marginTop: 8, color: '#868e96' }}>
+            アウトになった走者と、守備に関わった野手を選択してください。<br />
+            捕球した野手がそのままベースを踏んだ場合など、送球がない場合は「送球した守備位置」を「なし」にしてください。
+          </div>
         </div>
         {rows.map((row, idx) => {
           const unavailableIds = rows
@@ -207,7 +214,7 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
           return (
             <div key={idx} style={styles.selectionCard}>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>アウト {idx + 1}</div>
-              <div style={styles.label}>走者</div>
+              <div style={styles.label}>走者 *</div>
               <select
                 value={row.runnerId}
                 onChange={(e) => handleRunnerChange(idx, e.target.value)}
@@ -224,7 +231,7 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
                   </option>
                 ))}
               </select>
-              <div style={styles.label}>アウトになった塁</div>
+              <div style={styles.label}>アウトになった塁 *</div>
               <select
                 value={row.outAtBase}
                 onChange={(e) => handleBaseChange(idx, e.target.value as BaseType)}
@@ -236,20 +243,20 @@ const OutRunnersSelectionDialog: React.FC<OutRunnersSelectionDialogProps> = ({
                   </option>
                 ))}
               </select>
-              <div style={styles.label}>送球した守備位置 *</div>
+              <div style={styles.label}>送球した守備位置（補殺）</div>
               <select
                 value={row.threwPosition}
                 onChange={(e) => handleDetailChange(idx, 'threwPosition', e.target.value)}
                 style={styles.select}
               >
-                <option value="">選択してください</option>
+                <option value="">なし（刺殺のみ）</option>
                 {positionOptions.map((pos) => (
                   <option key={pos.value} value={pos.value}>
                     {pos.label}
                   </option>
                 ))}
               </select>
-              <div style={styles.label}>アウトにした守備位置 *</div>
+              <div style={styles.label}>捕球・刺殺した守備位置 *</div>
               <select
                 value={row.caughtPosition}
                 onChange={(e) => handleDetailChange(idx, 'caughtPosition', e.target.value)}

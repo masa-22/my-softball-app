@@ -59,6 +59,7 @@ type ParticipationModule = {
     kind: 'pinch_hitter' | 'pinch_runner';
     position?: string;
     note?: string;
+    battingOrder?: number;
   }) => void | Promise<void>;
 };
 
@@ -119,6 +120,7 @@ export const applySubstitutionToLineup = async (params: {
       kind: params.kind,
       position: params.position ?? list[idx].position,
       note: params.note,
+      battingOrder: params.battingOrder,
     });
   }
 

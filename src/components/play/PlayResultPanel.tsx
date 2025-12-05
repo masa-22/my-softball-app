@@ -9,13 +9,24 @@ import PlayResultForm from './playresult/PlayResultForm.tsx';
 import GroundoutOutsDialog from './playresult/GroundoutOutsDialog';
 import { POSITIONS } from '../../data/softball/positions';
 
+import FirstBaseTouchDialog from './playresult/FirstBaseTouchDialog';
+import PutoutPlayerDialog from './playresult/PutoutPlayerDialog';
+
 interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
   // positionだけでなく詳細オブジェクトを渡すように変更
   onRunnerMovement?: (
     battingResult: string,
-    details: { position: string; batType: string; outfieldDirection: string },
+    details: { 
+      position: string; 
+      batType: string; 
+      outfieldDirection: string;
+      fieldingOptions?: {
+        putoutPosition?: string;
+        assistPosition?: string;
+      };
+    },
     outsAfterOverride?: number,
   ) => void;
   currentRunners?: { '1': string | null; '2': string | null; '3': string | null };
@@ -57,12 +68,17 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
   const [showSafetyBuntDialog, setShowSafetyBuntDialog] = useState(false);
   const [isSafetyBunt, setIsSafetyBunt] = useState(false);
   const [showGroundoutOutsDialog, setShowGroundoutOutsDialog] = useState(false);
+  
+  // 追加: ファーストゴロ用ダイアログ状態
+  const [showFirstBaseTouchDialog, setShowFirstBaseTouchDialog] = useState(false);
+  const [showPutoutPlayerDialog, setShowPutoutPlayerDialog] = useState(false);
+  const [pendingFieldingOptions, setPendingFieldingOptions] = useState<{ putoutPosition?: string; assistPosition?: string } | undefined>(undefined);
 
   const handleResultChange = (value: BattingResult) => {
     setResult(value);
     if (value === 'groundout') {
       setBatType('ground');
-    } else if (value === 'flyout') {
+    } else if (value === 'flyout' || value === 'sacrifice_fly') {
       setBatType('fly');
     }
   };
@@ -134,9 +150,9 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
 
   const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
   const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(result);
-  const needsBatType = ['single', 'double', 'triple', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
+  const needsBatType = ['single', 'double', 'triple', 'error', 'sacrifice_bunt', 'bunt_out'].includes(result);
 
-  const triggerRunnerMovement = (outsOverride?: number) => {
+  const triggerRunnerMovement = (outsOverride?: number, fieldingOptionsOverride?: { putoutPosition?: string; assistPosition?: string }) => {
     if (!onRunnerMovement) return;
     onRunnerMovement(
       result,
@@ -144,6 +160,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         position,
         batType,
         outfieldDirection,
+        fieldingOptions: fieldingOptionsOverride || pendingFieldingOptions,
       },
       outsOverride,
     );
@@ -169,39 +186,74 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     setShowConfirm(true);
   };
 
-  const handleConfirm = () => {
-    setShowConfirm(false);
-
-    const isStrikeout = result === 'strikeout_swinging' || result === 'strikeout_looking';
+  // ランナーチェック以降の処理を共通化
+  const proceedWithRunnerCheck = (fieldingOptions?: { putoutPosition?: string; assistPosition?: string }) => {
     const isOutResult = result === 'groundout' || result === 'flyout' || result === 'bunt_out';
-
-    // ランナー不在かどうか
     const hasRunners = !!(currentRunners['1'] || currentRunners['2'] || currentRunners['3']);
 
-    if (isStrikeout) {
-      // 三振はRunnerMovementに遷移せず、その場で完了（親でアウト+1処理）
-      if (onComplete) onComplete();
-      return;
-    }
-
-    // 詳細データ作成
-    const details = {
-      position: position,
-      batType: batType,
-      outfieldDirection: outfieldDirection,
-    };
-
     if (isOutResult && !hasRunners) {
-      triggerRunnerMovement();
+      triggerRunnerMovement(undefined, fieldingOptions);
       return;
     }
 
     if (result === 'groundout' && hasRunners) {
+      // fieldingOptionsがある場合はStateに保存しておく（ダイアログ後のcallbackで参照するため）
+      if (fieldingOptions) {
+        setPendingFieldingOptions(fieldingOptions);
+      }
       setShowGroundoutOutsDialog(true);
       return;
     }
 
-    triggerRunnerMovement();
+    triggerRunnerMovement(undefined, fieldingOptions);
+  };
+
+  const handleConfirm = () => {
+    setShowConfirm(false);
+
+    const isStrikeout = result === 'strikeout_swinging' || result === 'strikeout_looking';
+    
+    if (isStrikeout) {
+      triggerRunnerMovement();
+      return;
+    }
+
+    // ファーストゴロの場合の特別フロー (ランナーなしの場合のみ)
+    // ランナーがいる場合は GroundoutOutsDialog が優先され、そちらで結果を扱う必要があるが、
+    // 現状はランナーなしの打者アウト詳細として扱う。
+    const hasRunners = !!(currentRunners['1'] || currentRunners['2'] || currentRunners['3']);
+    if (result === 'groundout' && position === '3' && !hasRunners) {
+      setShowFirstBaseTouchDialog(true);
+      return;
+    }
+
+    proceedWithRunnerCheck();
+  };
+
+  // ファーストゴロ特別フローのハンドラ
+  const handleFirstBaseTouchResponse = (touched: boolean) => {
+    setShowFirstBaseTouchDialog(false);
+    if (touched) {
+      // ファーストが踏んだ -> 刺殺のみ
+      proceedWithRunnerCheck({ putoutPosition: '3' });
+    } else {
+      // 踏んでない -> 誰が捕ったか聞く
+      setShowPutoutPlayerDialog(true);
+    }
+  };
+
+  const handlePutoutPlayerSelect = (selectedPosition: string) => {
+    setShowPutoutPlayerDialog(false);
+    // 刺殺: 選択された選手, 補殺: ファースト('3')
+    proceedWithRunnerCheck({ putoutPosition: selectedPosition, assistPosition: '3' });
+  };
+  
+  const handlePutoutPlayerCancel = () => {
+    setShowPutoutPlayerDialog(false);
+    // キャンセル時はとりあえずデフォルト挙動に戻すか、処理を中断するか。
+    // ここでは中断せず、デフォルト（補殺なしなど）で進めるか、再選択を促すか。
+    // とりあえずキャンセル＝完了とみなして、オプションなしで進める（既存挙動と同じになる）
+    proceedWithRunnerCheck();
   };
 
   const handleCancelConfirm = () => {
@@ -255,6 +307,23 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         onCancel={() => {
           setShowGroundoutOutsDialog(false);
         }}
+      />
+    );
+  }
+
+  if (showFirstBaseTouchDialog) {
+    return (
+      <FirstBaseTouchDialog
+        onResponse={handleFirstBaseTouchResponse}
+      />
+    );
+  }
+
+  if (showPutoutPlayerDialog) {
+    return (
+      <PutoutPlayerDialog
+        onSelect={handlePutoutPlayerSelect}
+        onCancel={handlePutoutPlayerCancel}
       />
     );
   }

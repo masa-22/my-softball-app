@@ -74,6 +74,7 @@ export const recordSubstitution = (params: {
   kind: 'pinch_hitter' | 'pinch_runner';
   position?: string;
   note?: string;
+  battingOrder?: number;
 }): void => {
   const table = participations[params.matchId] || (participations[params.matchId] = { home: [], away: [] });
   const list = table[params.side];
@@ -81,8 +82,8 @@ export const recordSubstitution = (params: {
   // 交代対象の選手を探す（まだ試合に出ている選手＝endInningがnull）
   const outEntry = list.find(p => p.playerId === params.outPlayerId && p.endInning == null);
   
-  // ★打順の引き継ぎ（見つからない場合はエラーだが、一旦0にしておく）
-  const inheritedOrder = outEntry ? outEntry.battingOrder : 0;
+  // ★打順の引き継ぎ
+  const inheritedOrder = outEntry?.battingOrder ?? params.battingOrder ?? 0;
 
   if (outEntry) {
     outEntry.endInning = params.inning;
@@ -102,17 +103,19 @@ export const recordSubstitution = (params: {
     });
   }
 
-  // 新しい選手の追加
-  list.push({
-    playerId: params.inPlayerId,
-    side: params.side,
-    battingOrder: inheritedOrder, // ★打順を引き継ぐ
-    status: params.kind,
-    startInning: params.inning,
-    endInning: null,
-    positionAtStart: params.position ?? null,
-    note: params.note,
-  });
+  // 新しい選手の追加 (inPlayerIdがある場合のみ)
+  if (params.inPlayerId) {
+    list.push({
+      playerId: params.inPlayerId,
+      side: params.side,
+      battingOrder: inheritedOrder, // ★打順を引き継ぐ
+      status: params.kind,
+      startInning: params.inning,
+      endInning: null,
+      positionAtStart: params.position ?? null,
+      note: params.note,
+    });
+  }
 
   persistParticipations();
 };

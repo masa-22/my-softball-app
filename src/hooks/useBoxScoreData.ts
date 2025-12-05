@@ -15,7 +15,17 @@ export const MAX_BOX_SCORE_INNINGS = 7;
 
 type Side = 'home' | 'away';
 
-type PlayerResultMap = Record<string, Record<number, string[]>>;
+type PlayerResultMap = Record<
+  string,
+  Record<
+    number,
+    {
+      labels: string[];
+      hasHit: boolean;
+      hasRbi: boolean;
+    }
+  >
+>;
 
 export interface BoxScoreRowData {
   key: string;
@@ -26,6 +36,8 @@ export interface BoxScoreRowData {
   roleLabel: string;
   isSubstitute: boolean;
   resultsByInning: Record<number, string>;
+  inningStyles: Record<number, 'hit' | 'rbi' | null>;
+  orderLabel?: string;
 }
 
 export interface BoxScoreTeamData {
@@ -67,8 +79,29 @@ const buildResultMap = (atBats: AtBat[]): Record<Side, PlayerResultMap> => {
     const side: Side = atBat.topOrBottom === 'top' ? 'home' : 'away';
     const sideMap = result[side];
     const playerMap = sideMap[atBat.batterId] || (sideMap[atBat.batterId] = {});
-    const inningList = playerMap[inning] || (playerMap[inning] = []);
-    inningList.push(label);
+    const inningEntry =
+      playerMap[inning] ||
+      (playerMap[inning] = {
+        labels: [],
+        hasHit: false,
+        hasRbi: false,
+      });
+    inningEntry.labels.push(label);
+
+    const hitTypes: AtBat['result']['type'][] = [
+      'single',
+      'double',
+      'triple',
+      'homerun',
+      'runninghomerun',
+    ];
+    if (atBat.result && hitTypes.includes(atBat.result.type)) {
+      inningEntry.hasHit = true;
+    }
+    const rbi = atBat.result?.rbi ?? atBat.scoredRunners?.length ?? 0;
+    if (rbi > 0) {
+      inningEntry.hasRbi = true;
+    }
   });
 
   return result;
@@ -107,6 +140,27 @@ const roleLabelMap: Record<string, string> = {
   finished: '',
 };
 
+const getStatusPriority = (entry: ParticipationEntry) => {
+  if (entry.status === 'starter' || entry.status === 'substituted' || entry.status === 'finished') {
+    return 0;
+  }
+  return 1;
+};
+
+const resolveBattingOrder = (entry: ParticipationEntry, lineupEntries: LineupEntry[]): number | null => {
+  const directOrder = entry.battingOrder ?? null;
+  if (directOrder && directOrder >= 1 && directOrder <= 15) {
+    return directOrder;
+  }
+  const lineupMatch = lineupEntries.find(
+    (lineupEntry) => lineupEntry.playerId && lineupEntry.playerId === entry.playerId
+  );
+  if (lineupMatch?.battingOrder && lineupMatch.battingOrder >= 1 && lineupMatch.battingOrder <= 15) {
+    return lineupMatch.battingOrder;
+  }
+  return null;
+};
+
 const buildRowsForSide = ({
   side,
   lineupEntries,
@@ -133,14 +187,35 @@ const buildRowsForSide = ({
     return acc;
   }, {});
 
+  const unassignedParticipants: ParticipationEntry[] = [];
   const participationByOrder = participationEntries.reduce<Record<number, ParticipationEntry[]>>((acc, entry) => {
-    if (!entry.battingOrder) return acc;
-    const list = acc[entry.battingOrder] || (acc[entry.battingOrder] = []);
+    let resolvedOrder = resolveBattingOrder(entry, lineupEntries);
+
+    // 打順が不明な場合、交代元の選手を探して打順を引き継ぐ
+    if (!resolvedOrder && entry.startInning) {
+      const candidates = participationEntries.filter((p) =>
+        p.endInning === entry.startInning &&
+        resolveBattingOrder(p, lineupEntries)
+      );
+
+      if (candidates.length === 1) {
+        resolvedOrder = resolveBattingOrder(candidates[0], lineupEntries);
+      } else if (candidates.length > 1) {
+        // 複数候補がいる場合、ポジション等で推定（ここでは簡易的に先頭を採用）
+        resolvedOrder = resolveBattingOrder(candidates[0], lineupEntries);
+      }
+    }
+
+    if (!resolvedOrder) {
+      unassignedParticipants.push(entry);
+      return acc;
+    }
+    const list = acc[resolvedOrder] || (acc[resolvedOrder] = []);
     list.push(entry);
     return acc;
   }, {});
 
-  for (let order = 1; order <= 9; order++) {
+  for (let order = 1; order <= 10; order++) {
     const lineupEntry = lineupByOrder[order];
     const participants = ensureParticipantEntries(
       order,
@@ -148,6 +223,8 @@ const buildRowsForSide = ({
       participationByOrder[order]?.slice() || [],
       lineupEntry
     );
+
+    const baseOrderLabel = order === 10 ? 'FP' : String(order);
 
     if (!participants.length) {
       rows.push({
@@ -159,17 +236,19 @@ const buildRowsForSide = ({
         roleLabel: '',
         isSubstitute: false,
         resultsByInning: {},
+        inningStyles: {},
+        orderLabel: baseOrderLabel,
       });
       continue;
     }
 
     participants.sort((a, b) => {
-      const aStart = a.startInning ?? (a.status === 'starter' ? 1 : 999);
-      const bStart = b.startInning ?? (b.status === 'starter' ? 1 : 999);
+      const aPriority = getStatusPriority(a);
+      const bPriority = getStatusPriority(b);
+      const aStart = a.startInning ?? (aPriority === 0 ? 1 : 999);
+      const bStart = b.startInning ?? (bPriority === 0 ? 1 : 999);
       if (aStart !== bStart) return aStart - bStart;
-      if (a.status === b.status) return 0;
-      if (a.status === 'starter') return -1;
-      if (b.status === 'starter') return 1;
+      if (aPriority !== bPriority) return aPriority - bPriority;
       return 0;
     });
 
@@ -185,13 +264,23 @@ const buildRowsForSide = ({
       const positionLabel = getPositionLabel(position);
       const perInning = resultMap[participant.playerId] || {};
       const resultsByInning: Record<number, string> = {};
+      const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
       INNING_COLUMNS.forEach((inning) => {
-        const list = perInning[inning];
-        if (list?.length) {
-          resultsByInning[inning] = list.join(' / ');
+        const info = perInning[inning];
+        if (info?.labels.length) {
+          resultsByInning[inning] = info.labels.join(' / ');
+          if (info.hasRbi) {
+            inningStyles[inning] = 'rbi';
+          } else if (info.hasHit) {
+            inningStyles[inning] = 'hit';
+          } else {
+            inningStyles[inning] = null;
+          }
         }
       });
 
+      const isStarterRow = getStatusPriority(participant) === 0;
+      const orderLabel = isStarterRow ? baseOrderLabel : undefined;
       rows.push({
         key: `${side}-${order}-${participant.playerId || idx}`,
         battingOrder: order,
@@ -199,11 +288,60 @@ const buildRowsForSide = ({
         name: roleLabel ? `${displayName} (${roleLabel})` : displayName,
         positionLabel,
         roleLabel,
-        isSubstitute: participant.status !== 'starter',
+        isSubstitute: !isStarterRow,
         resultsByInning,
+        inningStyles,
+        orderLabel,
       });
     });
   }
+
+  unassignedParticipants
+    .sort((a, b) => {
+      const aStart = a.startInning ?? 999;
+      const bStart = b.startInning ?? 999;
+      return aStart - bStart;
+    })
+    .forEach((participant, idx) => {
+    const player = playersById[participant.playerId];
+    const displayName = formatPlayerName(player) || '未登録';
+    const roleLabel = roleLabelMap[participant.status] || '';
+    const fallbackLineup = lineupEntries.find((entry) => entry.playerId === participant.playerId);
+    const position =
+      participant.positionAtStart ||
+      participant.positionAtEnd ||
+      fallbackLineup?.position ||
+      '';
+    const positionLabel = getPositionLabel(position);
+    const perInning = resultMap[participant.playerId] || {};
+    const resultsByInning: Record<number, string> = {};
+    const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+    INNING_COLUMNS.forEach((inning) => {
+      const info = perInning[inning];
+      if (info?.labels.length) {
+        resultsByInning[inning] = info.labels.join(' / ');
+        if (info.hasRbi) {
+          inningStyles[inning] = 'rbi';
+        } else if (info.hasHit) {
+          inningStyles[inning] = 'hit';
+        } else {
+          inningStyles[inning] = null;
+        }
+      }
+    });
+      rows.push({
+        key: `${side}-extra-${participant.playerId || idx}`,
+        battingOrder: 0,
+        playerId: participant.playerId,
+        name: roleLabel ? `${displayName} (${roleLabel})` : displayName,
+        positionLabel,
+        roleLabel,
+        isSubstitute: true,
+        resultsByInning,
+        inningStyles,
+      orderLabel: undefined,
+      });
+    });
 
   return rows;
 };
