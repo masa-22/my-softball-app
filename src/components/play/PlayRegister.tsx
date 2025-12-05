@@ -55,6 +55,8 @@ const PlayRegister: React.FC = () => {
     awayBatIndex,
     homeLineupDraft,
     awayLineupDraft,
+    homeLineup,
+    awayLineup,
     homeTeamName,
     awayTeamName,
     handlePositionChange,
@@ -104,6 +106,8 @@ const PlayRegister: React.FC = () => {
     awayBatIndex,
     currentHalf,
     advanceBattingOrder,
+    homeLineup,
+    awayLineup,
   });
 
   // UI State
