@@ -137,7 +137,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ open, data, loading, onClose })
     <div style={overlayStyle} onClick={handleOverlayClick}>
       <div style={modalStyle} onClick={handleModalClick}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>成績</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>打撃成績</div>
           <button
             type="button"
             onClick={onClose}
