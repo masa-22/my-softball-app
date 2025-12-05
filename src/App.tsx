@@ -10,8 +10,9 @@ import TournamentManagement from './components/tournament/TournamentManagement';
 import MatchManagement from './components/game/gameManagement';
 import StartingLineup from './components/lineup/StartingLineup';
 import PlayRegister from './components/play/PlayRegister';
+import HomePage from './components/home/HomePage';
+import UserApprovalManagement from './components/admin/UserApprovalManagement';
 
-const HomePage = () => <div>ホームページ</div>;
 const Dashboard = () => <div>ダッシュボード（ログイン必須）</div>;
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
           <Route path="/game/:matchId/lineup" element={<PrivateRoute><StartingLineup /></PrivateRoute>} />
           <Route path="/game/:matchId/play" element={<PrivateRoute><PlayRegister /></PrivateRoute>} />
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+          <Route path="/admin/users" element={<PrivateRoute><UserApprovalManagement /></PrivateRoute>} />
           <Route path="/login" element={<AuthContainer mode="login" />} />
           <Route path="/signup" element={<AuthContainer mode="signup" />} />
           <Route path="/loading" element={<LoadingIndicator />} />
