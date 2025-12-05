@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import GoogleLoginButton from './GoogleLoginButton';
 import AuthContainer from './AuthContainer';
+import { createPendingUser } from '../../services/userApprovalService';
 
 interface Props {
   switchTo?: (mode: 'login' | 'signup') => void;
@@ -12,7 +13,7 @@ interface Props {
 const SignupForm: React.FC<Props> = ({ switchTo, onClose }) => {
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
-  const { signup, currentUser } = useAuth();
+  const { signup, currentUser, logout } = useAuth();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -28,7 +29,15 @@ const SignupForm: React.FC<Props> = ({ switchTo, onClose }) => {
     try {
       setError('');
       setLoading(true);
-      await signup(emailRef.current?.value || '', passwordRef.current?.value || '');
+      const email = emailRef.current?.value || '';
+      const userCredential = await signup(email, passwordRef.current?.value || '');
+      const userId = userCredential.user.uid;
+      
+      // Firestoreにユーザー情報を保存（承認待ち状態）
+      await createPendingUser(userId, email);
+      
+      // ログアウトして認証待ち状態にする
+      await logout();
       if (onClose) onClose();
       navigate('/');
     } catch (e: any) {

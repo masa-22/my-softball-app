@@ -106,3 +106,4 @@ export const toPercentage = (val: number, max: number): number => {
 
 
 
+
