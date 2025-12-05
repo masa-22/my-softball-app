@@ -85,7 +85,7 @@ const StartingLineup: React.FC = () => {
 
   const confirmSave = async () => {
     if (!matchId) return;
-    saveLineup(matchId, { home: homeLineup, away: awayLineup });
+    saveLineup(matchId, { matchId, home: homeLineup, away: awayLineup });
     // ▼ 追加: participationへスタメン記録
     await recordStartersFromLineup(matchId);
     setMessage('スタメンを保存しました。');
