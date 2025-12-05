@@ -1,7 +1,7 @@
 import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunnersRealtime, addRunsRealtime } from '../services/gameStateService';
 import { getAtBats, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
-import { AtBat } from '../types/AtBat';
+import { AtBat, RunnerEvent } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 import { RunnerMovementResult } from '../components/play/RunnerMovementInput';
 
@@ -20,6 +20,8 @@ interface UseGameProcessorProps {
   runners: { '1': string | null; '2': string | null; '3': string | null };
   setRunners: (runners: { '1': string | null; '2': string | null; '3': string | null }) => void;
   pitches: PitchData[];
+  runnerEvents: RunnerEvent[];
+  clearRunnerEvents: () => void;
   currentBatter: any;
   currentPitcher: any;
   homeBatIndex: number;
@@ -35,6 +37,8 @@ export const useGameProcessor = ({
   runners,
   setRunners,
   pitches,
+  runnerEvents,
+  clearRunnerEvents,
   currentBatter,
   currentPitcher,
   homeBatIndex,
@@ -98,7 +102,7 @@ export const useGameProcessor = ({
           },
           scoredRunners: [],
           pitches: pitchRecords,
-          runnerEvents: [], 
+          runnerEvents: runnerEvents.slice(),
           playDetails: {
             fielding: [
               {
@@ -111,6 +115,7 @@ export const useGameProcessor = ({
           timestamp: new Date().toISOString(),
         };
         saveAtBat(atBat);
+        clearRunnerEvents();
         // -----------------------
 
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
@@ -173,7 +178,7 @@ export const useGameProcessor = ({
           },
           scoredRunners: scoredRunners,
           pitches: pitchRecords,
-          runnerEvents: [], 
+          runnerEvents: runnerEvents.slice(),
           playDetails: {
              batType: playDetailsForMovement.batType as any,
              direction: playDetailsForMovement.outfieldDirection || playDetailsForMovement.position,
@@ -206,6 +211,7 @@ export const useGameProcessor = ({
           timestamp: new Date().toISOString(),
         };
         saveAtBat(atBat);
+        clearRunnerEvents();
         
         // ランナー配置更新
         updateRunnersRealtime(matchId, {
@@ -293,7 +299,7 @@ export const useGameProcessor = ({
         },
         scoredRunners: [],
         pitches: pitchRecords,
-        runnerEvents: [],
+        runnerEvents: runnerEvents.slice(),
         playDetails: {
           batType: details.batType as any,
           direction: details.outfieldDirection || details.position,
@@ -318,6 +324,7 @@ export const useGameProcessor = ({
         timestamp: new Date().toISOString(),
       };
       saveAtBat(atBat);
+      clearRunnerEvents();
 
       const newO = Math.min(3, currentO + 1);
       updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });

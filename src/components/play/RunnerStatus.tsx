@@ -2,12 +2,13 @@
  * ランナー状況入力コンポーネント（子化）
  * - 親（PlayRegister）から状態とイベントを受け取り、UI表示と通知のみ行う
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import AdvanceReasonDialog, { RunnerAdvancement, AdvanceReasonResult } from './runner/AdvanceReasonDialog';
 import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonDialog';
 import RunnerStatusSidebar from './runner/RunnerStatusSidebar';
 import RunnerFieldPanel from './runner/RunnerFieldPanel';
 import AddOutDialog from './runner/AddOutDialog.tsx';
+import { PitchData } from '../../types/PitchData';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -16,6 +17,7 @@ interface RunnerStatusProps {
   bso: { b: number; s: number; o: number };
   runners: { '1': string | null; '2': string | null; '3': string | null };
   offensePlayers: any[];
+  pitches?: PitchData[];
 
   // UIラベル/名前解決（親から提供）
   baseLabel: (b: BaseKey) => string;
@@ -73,6 +75,7 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
   bso,
   runners,
   offensePlayers,
+  pitches,
   baseLabel,
   getRunnerName,
   onBaseClick,
@@ -90,6 +93,12 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
   onAddOutConfirm,
   onAddOutCancel,
 }) => {
+  const latestPitchOrder = useMemo(() => {
+    if (!pitches || pitches.length === 0) return null;
+    const sorted = [...pitches].sort((a, b) => a.order - b.order);
+    return sorted[sorted.length - 1]?.order ?? null;
+  }, [pitches]);
+
   return (
     <div style={styles.container}>
       {/* 進塁理由ダイアログ（親制御） */}
@@ -97,6 +106,8 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
         <AdvanceReasonDialog
           advancements={pendingAdvancements}
           context="pitch"
+          pitches={pitches}
+          defaultPitchOrder={latestPitchOrder}
           onConfirm={onAdvanceConfirm}
           onCancel={onDialogCancel}
         />
@@ -107,6 +118,8 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
         <OutReasonDialog
           outs={pendingOuts}
           context="pitch"
+          pitches={pitches}
+          defaultPitchOrder={latestPitchOrder}
           onConfirm={onOutConfirm}
           onCancel={onDialogCancel}
         />
@@ -127,7 +140,7 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
 
       <div style={styles.mainLayout}>
         {/* 左カラム（サイドバー） */}
-        <RunnerStatusSidebar bso={bso} />
+        <RunnerStatusSidebar bso={bso} pitches={pitches} />
 
         {/* 右カラム（フィールド＋ランナー一覧＋アウト追加ボタン） */}
         <div style={styles.rightColumn}>

@@ -1,7 +1,8 @@
 /**
  * ランナーの進塁理由を入力するダイアログコンポーネント
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { PitchData } from '../../../types/PitchData';
 
 // 進塁理由（1球ごと）
 type PitchAdvanceReason = 'steal' | 'wildpitch' | 'passball' | 'illegalpitch';
@@ -19,6 +20,8 @@ export interface RunnerAdvancement {
 export interface AdvanceReasonResult {
   runnerId: string;
   reason: PitchAdvanceReason | BattingAdvanceReason;
+  pitchOrder: number | null;
+  eventSource: 'pitch' | 'non_pitch';
   errorDetail?: {
     errorBy?: string; // エラーした守備位置
   };
@@ -29,6 +32,8 @@ interface AdvanceReasonDialogProps {
   context: 'pitch' | 'batting'; // 1球ごと or 打撃後
   onConfirm: (results: AdvanceReasonResult[]) => void;
   onCancel: () => void;
+  pitches?: PitchData[];
+  defaultPitchOrder?: number | null;
 }
 
 const styles = {
@@ -137,6 +142,9 @@ const styles = {
     maxWidth: 200,
     cursor: 'pointer',
   },
+  pitchOrderGroup: {
+    marginTop: 12,
+  },
 };
 
 const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
@@ -144,8 +152,27 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
   context,
   onConfirm,
   onCancel,
+  pitches = [],
+  defaultPitchOrder = null,
 }) => {
   const [results, setResults] = useState<Record<string, AdvanceReasonResult>>({});
+
+  const pitchOrderOptions = useMemo(() => {
+    const orders = Array.from(new Set(pitches.map(p => p.order))).filter((order) => typeof order === 'number');
+    return orders.sort((a, b) => a - b);
+  }, [pitches]);
+
+  const requiresPitchOrder = (reason?: string) => {
+    if (context !== 'pitch') return false;
+    if (!reason) return false;
+    return ['steal', 'wildpitch', 'passball'].includes(reason);
+  };
+
+  const resolveDefaultPitchOrder = () => {
+    if (typeof defaultPitchOrder === 'number') return defaultPitchOrder;
+    if (pitchOrderOptions.length === 0) return null;
+    return pitchOrderOptions[pitchOrderOptions.length - 1];
+  };
 
   const pitchAdvanceOptions = [
     { value: 'steal', label: '盗塁' },
@@ -175,12 +202,16 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
   ];
 
   const handleReasonSelect = (runnerId: string, reason: string) => {
+    const needsPitchOrder = requiresPitchOrder(reason);
+    const resolvedDefault = needsPitchOrder ? resolveDefaultPitchOrder() : null;
     setResults(prev => ({
       ...prev,
       [runnerId]: {
         runnerId,
         reason: reason as any,
-        errorDetail: {},
+        pitchOrder: needsPitchOrder ? resolvedDefault : null,
+        eventSource: context === 'pitch' && resolvedDefault !== null ? 'pitch' : 'non_pitch',
+        errorDetail: reason === 'error' ? prev[runnerId]?.errorDetail ?? {} : {},
       },
     }));
   };
@@ -211,6 +242,12 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
       // エラーの場合、守備位置が必須
       if (result.reason === 'error') {
         return !!result.errorDetail?.errorBy;
+      }
+
+      if (requiresPitchOrder(result.reason)) {
+        if (pitchOrderOptions.length > 0 && (result.pitchOrder === null || result.pitchOrder === undefined)) {
+          return false;
+        }
       }
       
       return true;
@@ -255,6 +292,48 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
                   ))}
                 </div>
               </div>
+
+              {requiresPitchOrder(currentReason) && (
+                <div style={{ ...styles.detailGroup, ...styles.pitchOrderGroup }}>
+                  <div style={styles.detailLabel}>発生した球数 *</div>
+                  <select
+                    value={
+                      results[advancement.runnerId]?.pitchOrder != null
+                        ? String(results[advancement.runnerId]?.pitchOrder)
+                        : pitchOrderOptions.length === 0
+                          ? 'none'
+                          : ''
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setResults(prev => {
+                        const current = prev[advancement.runnerId];
+                        if (!current) return prev;
+                        return {
+                          ...prev,
+                          [advancement.runnerId]: {
+                            ...current,
+                            pitchOrder: value === 'none' ? null : (value ? Number(value) : null),
+                            eventSource: context === 'pitch' && value !== 'none' ? 'pitch' : 'non_pitch',
+                          },
+                        };
+                      });
+                    }}
+                    style={styles.select}
+                  >
+                    {pitchOrderOptions.length > 0 && <option value="">選択してください</option>}
+                    {pitchOrderOptions.map(order => (
+                      <option key={order} value={order}>
+                        {order}球目
+                      </option>
+                    ))}
+                    <option value="none">投球なし</option>
+                  </select>
+                  <div style={{ fontSize: 11, color: '#868e96' }}>
+                    直前の投球で発生しているか確認してください
+                  </div>
+                </div>
+              )}
 
               {/* エラー詳細入力 */}
               {currentReason === 'error' && (
