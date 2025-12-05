@@ -14,6 +14,8 @@ import { useLineupManager } from '../../hooks/useLineupManager';
 import { useRunnerManager } from '../../hooks/useRunnerManager';
 import { useGameProcessor } from '../../hooks/useGameProcessor';
 import { getAtBats } from '../../services/atBatService';
+import { POSITIONS } from '../../data/softball/positions';
+import { BATTING_RESULTS } from '../../data/softball/battingResults';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -35,6 +37,9 @@ const PlayRegister: React.FC = () => {
     currentHalf,
     pitches,
     setPitches,
+    runnerEvents,
+    addRunnerEvent,
+    clearRunnerEvents,
     handleCountsChange,
     handleCountsReset
   } = useGameInput(matchId);
@@ -75,6 +80,7 @@ const PlayRegister: React.FC = () => {
     setRunners,
     offensePlayers,
     currentBSO,
+    recordRunnerEvent: addRunnerEvent,
   });
 
   // 4. Game Processing (Play Result)
@@ -90,6 +96,8 @@ const PlayRegister: React.FC = () => {
     runners,
     setRunners,
     pitches,
+    runnerEvents,
+    clearRunnerEvents,
     currentBatter,
     currentPitcher,
     homeBatIndex,
@@ -107,6 +115,7 @@ const PlayRegister: React.FC = () => {
   const [playDetailsForMovement, setPlayDetailsForMovement] = useState<MovementDetails>({ position: '', batType: 'ground', outfieldDirection: '' });
   const [pendingOutcome, setPendingOutcome] = useState<{ kind: 'inplay' | 'strikeout' | 'walk'; battingResult?: string } | null>(null);
   const [desktopScale, setDesktopScale] = useState(1);
+  const [runnerMovementOutsAfterOverride, setRunnerMovementOutsAfterOverride] = useState<number | null>(null);
 
   // 投手成績（表示用）
   const pitcherStats = useMemo(() => {
@@ -159,6 +168,7 @@ const PlayRegister: React.FC = () => {
     setBattingResultForMovement('');
     setPlayDetailsForMovement({ position: '', batType: '', outfieldDirection: '' });
     setPendingOutcome(null);
+    setRunnerMovementOutsAfterOverride(null);
   };
 
   const handleInplayCommit = () => {
@@ -184,13 +194,16 @@ const PlayRegister: React.FC = () => {
     setShowRunnerMovement(true);
   };
 
-  const handleRunnerMovement = (battingResult: string, details: MovementDetails) => {
+  const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout'].includes(battingResult);
     const nextO = currentBSO.o + (isOut ? 1 : 0);
+    setRunnerMovementOutsAfterOverride(
+      typeof outsAfterOverride === 'number' ? outsAfterOverride : null
+    );
 
-    // 3アウトチェンジ、またはランナーなしアウト -> 簡易処理
-    if ((!hasRunners && isOut) || (isOut && nextO >= 3)) {
+    // ランナーなしアウト -> 簡易処理
+    if (!hasRunners && isOut) {
         processQuickOut(battingResult, details);
         resetUI();
         return;
@@ -237,10 +250,25 @@ const PlayRegister: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const movementInitialOuts = useMemo(() => {
+  const baseMovementOutsAfter = useMemo(() => {
     const isOut = ['groundout', 'flyout'].includes(battingResultForMovement);
     return Math.min(3, currentBSO.o + (isOut ? 1 : 0));
   }, [battingResultForMovement, currentBSO.o]);
+
+  const movementInitialOuts = currentBSO.o;
+  const movementPresetOutsAfter = runnerMovementOutsAfterOverride ?? baseMovementOutsAfter;
+
+  const battingResultDisplayLabel = useMemo(() => {
+    if (!battingResultForMovement) return '';
+    const definition = BATTING_RESULTS[battingResultForMovement as keyof typeof BATTING_RESULTS];
+    const defaultLabel = definition?.name ?? battingResultForMovement;
+    if (['groundout', 'flyout'].includes(battingResultForMovement) && playDetailsForMovement.position) {
+      const short = POSITIONS[playDetailsForMovement.position]?.shortName || '';
+      if (!short) return defaultLabel;
+      return `${short}${battingResultForMovement === 'groundout' ? 'ゴロ' : '飛'}`;
+    }
+    return defaultLabel;
+  }, [battingResultForMovement, playDetailsForMovement.position]);
 
   const desktopContent = (
     <>
@@ -298,6 +326,8 @@ const PlayRegister: React.FC = () => {
               showPlayResult={showPlayResult}
               currentBSO={currentBSO}
               initialOuts={movementInitialOuts}
+              presetOutsAfter={movementPresetOutsAfter}
+              battingResultLabel={battingResultDisplayLabel}
               pitches={pitches}
               onPitchesChange={setPitches}
               runners={runners}

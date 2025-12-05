@@ -1,7 +1,8 @@
 /**
  * ランナーのアウト理由を入力するダイアログコンポーネント
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { PitchData } from '../../../types/PitchData';
 
 // アウト理由（1球ごと・打撃後共通）
 type OutReason = 'caughtstealing' | 'pickoff' | 'runout' | 'forceout' | 'tagout' | 'leftbase';
@@ -16,6 +17,8 @@ export interface RunnerOut {
 export interface OutReasonResult {
   runnerId: string;
   reason: OutReason;
+  pitchOrder: number | null;
+  eventSource: 'pitch' | 'non_pitch';
   outDetail?: {
     taggedBy?: string;    // 盗塁死: タッチした守備位置
     putoutBy?: string;    // 牽制死: アウトにした守備位置
@@ -32,6 +35,8 @@ interface OutReasonDialogProps {
   context: 'pitch' | 'batting'; // 1球ごと or 打撃後
   onConfirm: (results: OutReasonResult[]) => void;
   onCancel: () => void;
+  pitches?: PitchData[];
+  defaultPitchOrder?: number | null;
 }
 
 const styles = {
@@ -155,8 +160,27 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
   context,
   onConfirm,
   onCancel,
+  pitches = [],
+  defaultPitchOrder = null,
 }) => {
   const [results, setResults] = useState<Record<string, OutReasonResult>>({});
+
+  const pitchOrderOptions = useMemo(() => {
+    const orders = Array.from(new Set(pitches.map(p => p.order))).filter((order) => typeof order === 'number');
+    return orders.sort((a, b) => a - b);
+  }, [pitches]);
+
+  const requiresPitchOrder = (reason?: string) => {
+    if (context !== 'pitch') return false;
+    if (!reason) return false;
+    return ['caughtstealing', 'pickoff'].includes(reason);
+  };
+
+  const resolveDefaultPitchOrder = () => {
+    if (typeof defaultPitchOrder === 'number') return defaultPitchOrder;
+    if (pitchOrderOptions.length === 0) return null;
+    return pitchOrderOptions[pitchOrderOptions.length - 1];
+  };
 
   const pitchOutOptions = [
     { value: 'caughtstealing', label: '盗塁死' },
@@ -173,11 +197,15 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
   ];
 
   const handleReasonSelect = (runnerId: string, reason: string) => {
+    const needsPitchOrder = requiresPitchOrder(reason);
+    const resolvedDefault = needsPitchOrder ? resolveDefaultPitchOrder() : null;
     setResults(prev => ({
       ...prev,
       [runnerId]: {
         runnerId,
         reason: reason as OutReason,
+        pitchOrder: needsPitchOrder ? resolvedDefault : null,
+        eventSource: context === 'pitch' && resolvedDefault !== null ? 'pitch' : 'non_pitch',
         outDetail: {},
       },
     }));
@@ -205,6 +233,12 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
     return outs.every(out => {
       const result = results[out.runnerId];
       if (!result) return false;
+
+      if (requiresPitchOrder(result.reason)) {
+        if (pitchOrderOptions.length > 0 && (result.pitchOrder === null || result.pitchOrder === undefined)) {
+          return false;
+        }
+      }
 
       // 各アウト理由に応じた詳細情報のチェック
       if (result.reason === 'caughtstealing') {
@@ -269,6 +303,48 @@ const OutReasonDialog: React.FC<OutReasonDialogProps> = ({
                   ))}
                 </div>
               </div>
+
+              {requiresPitchOrder(currentReason) && (
+                <div style={styles.detailGroup}>
+                  <div style={styles.detailLabel}>発生した球数 *</div>
+                  <select
+                    value={
+                      results[out.runnerId]?.pitchOrder != null
+                        ? String(results[out.runnerId]?.pitchOrder)
+                        : pitchOrderOptions.length === 0
+                          ? 'none'
+                          : ''
+                    }
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setResults(prev => {
+                        const current = prev[out.runnerId];
+                        if (!current) return prev;
+                        return {
+                          ...prev,
+                          [out.runnerId]: {
+                            ...current,
+                            pitchOrder: value === 'none' ? null : (value ? Number(value) : null),
+                            eventSource: context === 'pitch' && value !== 'none' ? 'pitch' : 'non_pitch',
+                          },
+                        };
+                      });
+                    }}
+                    style={styles.select}
+                  >
+                    {pitchOrderOptions.length > 0 && <option value="">選択してください</option>}
+                    {pitchOrderOptions.map(order => (
+                      <option key={order} value={order}>
+                        {order}球目
+                      </option>
+                    ))}
+                    <option value="none">投球なし</option>
+                  </select>
+                  <div style={{ fontSize: 11, color: '#868e96' }}>
+                    このアウトがどの投球後に起きたかを確認してください
+                  </div>
+                </div>
+              )}
 
               {/* アウト詳細入力 */}
               {currentReason && (

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { RunnerAdvancement } from '../components/play/runner/AdvanceReasonDialog';
-import { RunnerOut } from '../components/play/runner/OutReasonDialog';
+import { RunnerAdvancement, AdvanceReasonResult } from '../components/play/runner/AdvanceReasonDialog';
+import { RunnerOut, OutReasonResult } from '../components/play/runner/OutReasonDialog';
 import { getGameState, updateRunnersRealtime, addRunsRealtime, updateCountsRealtime, closeHalfInningRealtime } from '../services/gameStateService';
+import { RunnerEvent } from '../types/AtBat';
 
 interface UseRunnerManagerProps {
   matchId: string | undefined;
@@ -9,7 +10,48 @@ interface UseRunnerManagerProps {
   setRunners: (runners: { '1': string | null; '2': string | null; '3': string | null }) => void;
   offensePlayers: any[];
   currentBSO: { b: number; s: number; o: number };
+  recordRunnerEvent: (event: RunnerEvent) => void;
 }
+
+const createRunnerEventId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `runner-event-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const mapAdvanceReasonToEventType = (reason: AdvanceReasonResult['reason']) => {
+  switch (reason) {
+    case 'steal':
+      return 'steal';
+    case 'wildpitch':
+      return 'wildpitch';
+    case 'passball':
+      return 'passedball';
+    case 'illegalpitch':
+      return 'illegalpitch';
+    case 'hit':
+    case 'error':
+      return 'advance';
+    default:
+      return 'advance';
+  }
+};
+
+const mapOutReasonToEventType = (reason: OutReasonResult['reason']) => {
+  switch (reason) {
+    case 'caughtstealing':
+      return 'caughtstealing';
+    case 'pickoff':
+      return 'pickoff';
+    case 'runout':
+      return 'runout';
+    case 'leftbase':
+      return 'leftbase';
+    default:
+      return 'out';
+  }
+};
 
 export const useRunnerManager = ({
   matchId,
@@ -17,6 +59,7 @@ export const useRunnerManager = ({
   setRunners,
   offensePlayers,
   currentBSO,
+  recordRunnerEvent,
 }: UseRunnerManagerProps) => {
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
@@ -98,7 +141,7 @@ export const useRunnerManager = ({
     setPendingOuts([]);
   };
 
-  const handleRunnerAdvanceConfirm = (results: any[]) => {
+  const handleRunnerAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     const advs = [...pendingAdvancements];
     const next = { ...previousRunners };
     advs.forEach(adv => {
@@ -108,6 +151,21 @@ export const useRunnerManager = ({
 
     // ランナー更新
     updateRunnersRealtime(matchId!, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
+
+    results.forEach(result => {
+      const adv = advs.find(a => a.runnerId === result.runnerId);
+      if (!adv) return;
+      recordRunnerEvent({
+        id: createRunnerEventId(),
+        pitchSeq: result.pitchOrder ?? null,
+        eventSource: result.eventSource ?? 'pitch',
+        type: mapAdvanceReasonToEventType(result.reason),
+        runnerId: result.runnerId,
+        fromBase: adv.fromBase,
+        toBase: adv.toBase,
+        isOut: false,
+      });
+    });
 
     // 得点加算
     const scoredCount = advs.filter(a => a.toBase === 'home').length;
@@ -123,7 +181,7 @@ export const useRunnerManager = ({
     try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
   };
 
-  const handleRunnerOutConfirm = (results: any[]) => {
+  const handleRunnerOutConfirm = (results: OutReasonResult[]) => {
     const outs = [...pendingOuts];
     const next = { ...previousRunners };
     outs.forEach(out => {
@@ -143,6 +201,32 @@ export const useRunnerManager = ({
       closeHalfInningRealtime(matchId!);
       setRunners({ '1': null, '2': null, '3': null });
     }
+
+    results.forEach(result => {
+      const out = outs.find(o => o.runnerId === result.runnerId);
+      if (!out) return;
+      recordRunnerEvent({
+        id: createRunnerEventId(),
+        pitchSeq: result.pitchOrder ?? null,
+        eventSource: result.eventSource ?? 'pitch',
+        type: mapOutReasonToEventType(result.reason),
+        runnerId: result.runnerId,
+        fromBase: out.fromBase as any,
+        toBase: out.outAtBase as any,
+        isOut: true,
+        outDetail: {
+          base: out.outAtBase,
+          threwPosition: result.outDetail?.threwBy || undefined,
+          caughtPosition:
+            result.outDetail?.caughtBy ||
+            result.outDetail?.taggedBy ||
+            result.outDetail?.putoutBy ||
+            result.outDetail?.forceoutBy ||
+            result.outDetail?.tagoutBy ||
+            undefined,
+        },
+      });
+    });
 
     setRunners(next);
     setShowOutDialog(false);

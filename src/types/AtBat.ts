@@ -57,13 +57,26 @@ export interface PitchRecord {
   velocity?: number | null;
 }
 
-export type RunnerEventType = 'passedball' | 'wildpitch' | 'steal' | 'pickoff' | 'balk' | 'advance' | 'scored' | 'out';
+export type RunnerEventType =
+  | 'passedball'
+  | 'wildpitch'
+  | 'steal'
+  | 'caughtstealing'
+  | 'pickoff'
+  | 'runout'
+  | 'leftbase'
+  | 'balk'
+  | 'advance'
+  | 'scored'
+  | 'illegalpitch'
+  | 'out';
 
 export type BaseType = '1' | '2' | '3' | 'home';
 
 export interface RunnerEvent {
   id: string;
-  pitchSeq: number; // どの投球後のイベントか
+  pitchSeq?: number | null; // どの投球後のイベントか（投球が無い場合はnull）
+  eventSource: 'pitch' | 'non_pitch';
   type: RunnerEventType;
   runnerId: string;
   fromBase: BaseType;

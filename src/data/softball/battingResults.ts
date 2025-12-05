@@ -87,8 +87,18 @@ export const BATTING_RESULTS: Record<BatterResultType, BattingResultDef> = {
     name: '犠打（バント）',
     stats: { isAB: false, isHit: false, isOnBase: false, isSacrifice: true, isFourBall: false, isOut: true }
   },
+  sacrifice_bunt: {
+    code: 'sacrifice_bunt',
+    name: '犠打（バント）',
+    stats: { isAB: false, isHit: false, isOnBase: false, isSacrifice: true, isFourBall: false, isOut: true }
+  },
   sac_fly: {
     code: 'sac_fly',
+    name: '犠飛',
+    stats: { isAB: false, isHit: false, isOnBase: false, isSacrifice: true, isFourBall: false, isOut: true }
+  },
+  sacrifice_fly: {
+    code: 'sacrifice_fly',
     name: '犠飛',
     stats: { isAB: false, isHit: false, isOnBase: false, isSacrifice: true, isFourBall: false, isOut: true }
   },

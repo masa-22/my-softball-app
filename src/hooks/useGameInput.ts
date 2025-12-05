@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../services/gameStateService';
+import { RunnerEvent } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 
 export const useGameInput = (matchId: string | undefined) => {
@@ -15,6 +16,9 @@ export const useGameInput = (matchId: string | undefined) => {
   
   // 投球履歴
   const [pitches, setPitches] = useState<PitchData[]>([]);
+
+  // ランナーイベント（打席内で発生した走塁イベントを一時保持）
+  const [runnerEvents, setRunnerEvents] = useState<RunnerEvent[]>([]);
 
   // gameState の購読（リアルタイム）
   useEffect(() => {
@@ -59,6 +63,14 @@ export const useGameInput = (matchId: string | undefined) => {
     }
   };
 
+  const addRunnerEvent = (event: RunnerEvent) => {
+    setRunnerEvents(prev => [...prev, event]);
+  };
+
+  const clearRunnerEvents = () => {
+    setRunnerEvents([]);
+  };
+
   return {
     runners,
     setRunners,
@@ -70,6 +82,9 @@ export const useGameInput = (matchId: string | undefined) => {
     setCurrentHalf,
     pitches,
     setPitches,
+    runnerEvents,
+    addRunnerEvent,
+    clearRunnerEvents,
     handleCountsChange,
     handleCountsReset
   };

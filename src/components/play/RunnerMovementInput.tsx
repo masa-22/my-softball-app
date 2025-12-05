@@ -10,6 +10,7 @@ import FinalConfirmDialog from './runner/FinalConfirmDialog';
 import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
 import { PitchType } from '../../types/PitchType';
+import OutRunnersSelectionDialog from './runner/OutRunnersSelectionDialog';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -41,6 +42,8 @@ interface RunnerMovementInputProps {
   battingResult?: string; // 追加: 打席結果
   batterId?: string; // 追加: 打者ID
   initialOuts?: number; // 追加: 初期アウトカウント
+  presetOutsAfter?: number | null;
+  battingResultLabel?: string;
   pitches?: PitchData[]; // 追加
   battingOrder?: number; // 追加
   offenseTeamId?: string | null; // 追加: 親から攻撃チームIDをもらう
@@ -242,13 +245,15 @@ const styles = {
   },
 };
 
-const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({ 
-  onComplete, 
+const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
+  onComplete,
   onCancel,
   initialRunners = { '1': null, '2': null, '3': null },
   battingResult = '',
   batterId = '',
   initialOuts = 0,
+  presetOutsAfter = null,
+  battingResultLabel: externalBattingResultLabel,
   pitches = [], // 追加
   battingOrder = 0, // 追加
   offenseTeamId, // 追加: 親から受け取る
@@ -336,6 +341,9 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const [candidateRunners, setCandidateRunners] = useState<Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }>>([]);
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
   const [showFinalConfirm, setShowFinalConfirm] = useState(false); // 追加: 最終確認画面
+  const [showOutRunnerDialog, setShowOutRunnerDialog] = useState(false);
+  const [outDetailsLocked, setOutDetailsLocked] = useState(false);
+  const [selectedOutRunners, setSelectedOutRunners] = useState<Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey }>>([]);
 
   // 打席結果に応じた初期配置を計算
   const getInitialAfterRunners = () => {
@@ -394,7 +402,12 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   const [afterRunners, setAfterRunners] = useState(getInitialAfterRunners());
   const [selectedBase, setSelectedBase] = useState<BaseKey | null>(null);
-  const [outsAfter, setOutsAfter] = useState(initialOuts);
+  const [outsAfter, setOutsAfter] = useState(() => {
+    if (presetOutsAfter != null) {
+      return Math.max(initialOuts, Math.min(3, presetOutsAfter));
+    }
+    return initialOuts;
+  });
   
   // 得点・アウト詳細の状態
   const [outDetails, setOutDetails] = useState<Array<{
@@ -420,6 +433,45 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     if (!player) return '';
     return `${player.familyName} ${player.givenName}`.trim();
   };
+
+  const getRunnerDisplayName = (playerId: string | null) => {
+    if (!playerId) return '';
+    if (playerId === batterId && currentBatter) {
+      return `${currentBatter.familyName} ${currentBatter.givenName}`.trim();
+    }
+    return getPlayerName(playerId);
+  };
+
+  const getPositionLabelByValue = (value: string) => {
+    if (!value) return '-';
+    const option = positionOptions.find((opt) => opt.value === value);
+    return option ? option.label : value;
+  };
+
+  const battingResultLabelMap: Record<string, string> = {
+    single: 'ヒット（シングル）',
+    double: 'ツーベースヒット',
+    triple: 'スリーベースヒット',
+    homerun: 'ホームラン',
+    runninghomerun: 'ランニングホームラン',
+    groundout: 'ゴロアウト',
+    flyout: 'フライアウト',
+    bunt_out: 'バント失敗',
+    sacrifice_bunt: '犠打（バント）',
+    sacrifice_fly: '犠牲フライ',
+    error: 'エラー',
+    walk: '四球',
+    deadball: '死球',
+  };
+
+  const fallbackBattingResultLabel = useMemo(() => {
+    if (!battingResult) return '-';
+    return battingResultLabelMap[battingResult] || battingResult;
+  }, [battingResult]);
+
+  const battingResultLabel = externalBattingResultLabel && externalBattingResultLabel.length > 0
+    ? externalBattingResultLabel
+    : fallbackBattingResultLabel;
 
   const handleAfterBaseClick = (base: BaseKey) => {
     // 本塁も含めて選択可能
@@ -495,11 +547,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const handleCompleteClick = () => {
     // バリデーション
     if (needOutDetails) {
-      // バント失敗の場合は処理した選手も必須
-      const isValid = battingResult === 'bunt_out'
-        ? outDetails.every(d => d.runnerId && d.base && d.threwPosition && d.caughtPosition)
-        : outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
-      
+      const isValid = outDetails.every(d => d.runnerId && d.base && d.threwPosition && d.caughtPosition);
       if (!isValid) {
         alert('アウト詳細をすべて入力してください');
         return;
@@ -603,33 +651,41 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   // アウトが増えた場合の処理
   const outsIncreased = outsAfter - initialOuts;
-  const needOutDetails = outsIncreased > 0;
+  const needOutDetails = outsIncreased > 0 && battingResult === 'groundout';
 
   React.useEffect(() => {
-    if (needOutDetails && outDetails.length < outsIncreased) {
-      // アウト詳細を初期化
-      const newDetails = [];
-      for (let i = 0; i < outsIncreased; i++) {
-        newDetails.push({
-          runnerId: '',
-          base: '',
-          threwPosition: '',
-          caughtPosition: '',
-        });
-      }
-      setOutDetails(newDetails);
+    if (presetOutsAfter == null) return;
+    setOutsAfter((prev) => {
+      const clamped = Math.max(initialOuts, Math.min(3, presetOutsAfter));
+      if (prev === clamped) return prev;
+      return clamped;
+    });
+  }, [presetOutsAfter, initialOuts]);
+
+  React.useEffect(() => {
+    if (outsIncreased === 0) {
+      setOutDetails([]);
+      setOutDetailsLocked(false);
+      setSelectedOutRunners([]);
+      setShowOutRunnerDialog(false);
+      return;
     }
-  }, [outsIncreased, needOutDetails]);
+
+    if (needOutDetails && !outDetailsLocked && !showOutRunnerDialog) {
+      setShowOutRunnerDialog(true);
+    }
+  }, [outsIncreased, needOutDetails, outDetailsLocked, showOutRunnerDialog]);
 
   // アウトになり得る選手リスト（打者 + プレー前のランナー）
   const possibleOutRunners = useMemo(() => {
-    const runners: Array<{ id: string; name: string; label: string }> = [];
+    const runners: Array<{ id: string; name: string; label: string; fromBase: BaseKey }> = [];
     
     if (batterId && currentBatter) {
       runners.push({
         id: batterId,
         name: `${currentBatter.familyName} ${currentBatter.givenName}`.trim(),
         label: '打者',
+        fromBase: 'home',
       });
     }
     
@@ -640,6 +696,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
           id: playerId,
           name: getPlayerName(playerId),
           label: base === '1' ? '一塁走者' : base === '2' ? '二塁走者' : '三塁走者',
+          fromBase: base,
         });
       }
     });
@@ -659,17 +716,79 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     { value: '9', label: '右翼手（RF）' },
   ];
 
-  const baseOptions = [
+  const baseOptions: Array<{ value: BaseKey; label: string }> = [
     { value: '1', label: '一塁' },
     { value: '2', label: '二塁' },
     { value: '3', label: '三塁' },
     { value: 'home', label: 'ホーム' },
   ];
 
-  const handleOutDetailChange = (index: number, field: string, value: string) => {
-    const newDetails = [...outDetails];
-    newDetails[index] = { ...newDetails[index], [field]: value };
-    setOutDetails(newDetails);
+  const outDetailMap = useMemo(() => {
+    const map: Record<string, { threwPosition: string; caughtPosition: string }> = {};
+    outDetails.forEach((detail) => {
+      map[detail.runnerId] = {
+        threwPosition: detail.threwPosition,
+        caughtPosition: detail.caughtPosition,
+      };
+    });
+    return map;
+  }, [outDetails]);
+
+  const outRunnerPresetSelections = useMemo(() => {
+    return selectedOutRunners.map((sel) => {
+      const detail = outDetailMap[sel.runnerId];
+      return {
+        runnerId: sel.runnerId,
+        fromBase: sel.fromBase,
+        outAtBase: sel.outAtBase,
+        threwPosition: detail?.threwPosition,
+        caughtPosition: detail?.caughtPosition,
+      };
+    });
+  }, [selectedOutRunners, outDetailMap]);
+
+  const handleOpenOutSelection = () => {
+    setOutDetailsLocked(false);
+    setShowOutRunnerDialog(true);
+  };
+
+  const handleOutRunnerDialogCancel = () => {
+    setShowOutRunnerDialog(false);
+    setSelectedOutRunners([]);
+    setOutDetails([]);
+    setOutDetailsLocked(false);
+    setOutsAfter(initialOuts);
+  };
+
+  const handleOutRunnerDialogConfirm = (
+    selections: Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey; threwPosition: string; caughtPosition: string }>,
+  ) => {
+    setSelectedOutRunners(selections.map(({ runnerId, fromBase, outAtBase }) => ({ runnerId, fromBase, outAtBase })));
+    setShowOutRunnerDialog(false);
+    const mappedDetails = selections.map((sel) => ({
+      runnerId: sel.runnerId,
+      base: sel.outAtBase,
+      threwPosition: sel.threwPosition,
+      caughtPosition: sel.caughtPosition,
+    }));
+    setOutDetails(mappedDetails);
+    setOutDetailsLocked(true);
+
+    const next = { ...afterRunners };
+    selections.forEach((sel) => {
+      if (sel.fromBase !== 'home') {
+        if (next[sel.fromBase] === sel.runnerId) {
+          next[sel.fromBase] = null;
+        }
+      } else {
+        (['1', '2', '3'] as const).forEach((base) => {
+          if (next[base] === sel.runnerId) {
+            next[base] = null;
+          }
+        });
+      }
+    });
+    setAfterRunners(next);
   };
 
   // ダイアログハンドラ（置換用）
@@ -788,6 +907,20 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         />
       )}
 
+      {/* アウト runner 選択ダイアログ */}
+      {showOutRunnerDialog && needOutDetails && (
+        <OutRunnersSelectionDialog
+          outsNeeded={outsIncreased}
+          candidates={possibleOutRunners}
+          baseOptions={baseOptions}
+          positionOptions={positionOptions}
+          battingResultLabel={battingResultLabel}
+          presetSelections={outRunnerPresetSelections}
+          onConfirm={handleOutRunnerDialogConfirm}
+          onCancel={handleOutRunnerDialogCancel}
+        />
+      )}
+
       {/* 得点確認ダイアログ */}
       {showScoreConfirm && (
         <>
@@ -868,80 +1001,39 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
           <div style={styles.outDetailTitle}>
             アウト詳細を入力 ({outsIncreased}個のアウト)
           </div>
-          {outDetails.map((detail, idx) => (
-            <div key={idx} style={{ ...styles.outDetailForm, marginBottom: idx < outDetails.length - 1 ? 16 : 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#856404', marginBottom: 8 }}>
-                アウト {idx + 1}
-              </div>
-              
-              <div style={styles.formGroup}>
-                <label style={styles.label}>アウトになった選手 *</label>
-                <select
-                  value={detail.runnerId}
-                  onChange={(e) => handleOutDetailChange(idx, 'runnerId', e.target.value)}
-                  style={styles.select}
+          <div style={{ fontSize: 13, color: '#495057', marginBottom: 8 }}>
+            打撃結果: {battingResultLabel}
+          </div>
+          {outDetailsLocked ? (
+            <>
+              {selectedOutRunners.map((selection, idx) => {
+                const detail = outDetailMap[selection.runnerId];
+                return (
+                  <div key={`${selection.runnerId}-${idx}`} style={{ marginBottom: 12, padding: 12, border: '1px solid #ffe8a1', borderRadius: 8, background: '#fff8e1' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      アウト {idx + 1}: {getRunnerDisplayName(selection.runnerId)} （{selection.fromBase === 'home' ? '打者' : baseOptions.find(b => b.value === selection.fromBase)?.label} → {baseOptions.find(b => b.value === selection.outAtBase)?.label}）
+                    </div>
+                    <div style={{ fontSize: 13, color: '#495057' }}>
+                      送球: {getPositionLabelByValue(detail?.threwPosition || '')} / 捕球: {getPositionLabelByValue(detail?.caughtPosition || '')}
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ textAlign: 'center', marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={handleOpenOutSelection}
+                  style={{ ...styles.button('complete'), background: '#4c6ef5' }}
                 >
-                  <option value="">選択してください</option>
-                  {possibleOutRunners.map(runner => (
-                    <option key={runner.id} value={runner.id}>
-                      {runner.label}: {runner.name}
-                    </option>
-                  ))}
-                </select>
+                  アウト詳細を再入力
+                </button>
               </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>アウトになった塁 *</label>
-                <select
-                  value={detail.base}
-                  onChange={(e) => handleOutDetailChange(idx, 'base', e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">選択してください</option>
-                  {baseOptions.map(base => (
-                    <option key={base.value} value={base.value}>
-                      {base.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* バント失敗の場合は処理した選手を必須で選択 */}
-              <div style={styles.formGroup}>
-                <label style={styles.label}>
-                  {battingResult === 'bunt_out' ? '処理した選手 *' : '送球した選手（任意）'}
-                </label>
-                <select
-                  value={detail.threwPosition}
-                  onChange={(e) => handleOutDetailChange(idx, 'threwPosition', e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">{battingResult === 'bunt_out' ? '選択してください' : 'なし'}</option>
-                  {positionOptions.map(pos => (
-                    <option key={pos.value} value={pos.value}>
-                      {pos.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>アウトにした選手 *</label>
-                <select
-                  value={detail.caughtPosition}
-                  onChange={(e) => handleOutDetailChange(idx, 'caughtPosition', e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="">選択してください</option>
-                  {positionOptions.map(pos => (
-                    <option key={pos.value} value={pos.value}>
-                      {pos.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            </>
+          ) : (
+            <div style={{ padding: 12, background: '#f8f9fa', borderRadius: 8, fontSize: 13, color: '#495057' }}>
+              アウト数を増やすと、アウトになった走者と理由を入力するダイアログが開きます。
             </div>
-          ))}
+          )}
         </div>
       )}
 

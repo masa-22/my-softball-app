@@ -22,7 +22,11 @@ interface CenterPanelProps {
   onInplayCommit: () => void;
   onStrikeoutCommit: (isSwinging: boolean) => void;
   onWalkCommit: () => void;
-  onRunnerMovement: (battingResult: string, details: { position: string; batType: string; outfieldDirection: string }) => void;
+  onRunnerMovement: (
+    battingResult: string,
+    details: { position: string; batType: string; outfieldDirection: string },
+    outsAfterOverride?: number,
+  ) => void;
   onRunnersChange: (next: { '1': string | null; '2': string | null; '3': string | null }) => void;
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;
@@ -30,6 +34,8 @@ interface CenterPanelProps {
   offensePlayers: any[];
   offenseTeamId: string | null; // 追加
   initialOuts?: number; // 追加
+  presetOutsAfter?: number | null;
+  battingResultLabel?: string;
   // RunnerStatus制御用（親から）
   baseLabel: (b: '1' | '2' | '3' | 'home') => string;
   getRunnerName: (playerId: string | null) => string;
@@ -88,6 +94,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   onAddOutConfirm,
   onAddOutCancel,
   initialOuts,
+  presetOutsAfter,
+  battingResultLabel,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -99,6 +107,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           battingResult={battingResultForMovement}
           batterId={currentBatterId}
           initialOuts={initialOuts ?? currentBSO.o}
+          presetOutsAfter={presetOutsAfter ?? null}
+          battingResultLabel={battingResultLabel}
           pitches={pitches}
           offenseTeamId={offenseTeamId} // 追加
         />
@@ -159,6 +169,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 bso={currentBSO}
                 runners={runners}
                 offensePlayers={offensePlayers}
+                pitches={pitches}
                 // ラベル/名前解決
                 baseLabel={baseLabel}
                 getRunnerName={getRunnerName}

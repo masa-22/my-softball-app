@@ -6,12 +6,18 @@ import React, { useState, useMemo } from 'react';
 import SafetyBuntDialog from './playresult/SafetyBuntDialog';
 import PlayResultConfirmDialog from './playresult/PlayResultConfirmDialog';
 import PlayResultForm from './playresult/PlayResultForm.tsx';
+import GroundoutOutsDialog from './playresult/GroundoutOutsDialog';
+import { POSITIONS } from '../../data/softball/positions';
 
 interface PlayResultPanelProps {
   onComplete?: () => void;
   strikeoutType?: 'swinging' | 'looking' | null;
   // positionだけでなく詳細オブジェクトを渡すように変更
-  onRunnerMovement?: (battingResult: string, details: { position: string; batType: string; outfieldDirection: string }) => void;
+  onRunnerMovement?: (
+    battingResult: string,
+    details: { position: string; batType: string; outfieldDirection: string },
+    outsAfterOverride?: number,
+  ) => void;
   currentRunners?: { '1': string | null; '2': string | null; '3': string | null };
   currentOuts?: number;
 }
@@ -50,6 +56,16 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
   const [showConfirm, setShowConfirm] = useState(false);
   const [showSafetyBuntDialog, setShowSafetyBuntDialog] = useState(false);
   const [isSafetyBunt, setIsSafetyBunt] = useState(false);
+  const [showGroundoutOutsDialog, setShowGroundoutOutsDialog] = useState(false);
+
+  const handleResultChange = (value: BattingResult) => {
+    setResult(value);
+    if (value === 'groundout') {
+      setBatType('ground');
+    } else if (value === 'flyout') {
+      setBatType('fly');
+    }
+  };
 
   React.useEffect(() => {
     if (strikeoutType === 'swinging') {
@@ -118,7 +134,20 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
 
   const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
   const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(result);
-  const needsBatType = ['single', 'double', 'triple', 'groundout', 'flyout', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
+  const needsBatType = ['single', 'double', 'triple', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
+
+  const triggerRunnerMovement = (outsOverride?: number) => {
+    if (!onRunnerMovement) return;
+    onRunnerMovement(
+      result,
+      {
+        position,
+        batType,
+        outfieldDirection,
+      },
+      outsOverride,
+    );
+  };
 
   const handleSubmit = () => {
     if (!result) return;
@@ -162,14 +191,17 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
       outfieldDirection: outfieldDirection,
     };
 
-    // アウト結果かつランナー不在でも RunnerMovement 経由で親に通知し、親でアウト加算を行う
     if (isOutResult && !hasRunners) {
-      if (onRunnerMovement) onRunnerMovement(result, details);
+      triggerRunnerMovement();
       return;
     }
 
-    // それ以外（ヒット/エラー/振り逃げ/犠打/犠飛、またはアウトでもランナー有）はRunnerMovementへ
-    if (onRunnerMovement) onRunnerMovement(result, details);
+    if (result === 'groundout' && hasRunners) {
+      setShowGroundoutOutsDialog(true);
+      return;
+    }
+
+    triggerRunnerMovement();
   };
 
   const handleCancelConfirm = () => {
@@ -180,6 +212,12 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     const option = resultOptions.find(opt => opt.value === result);
     let label = option ? option.label : '';
     if (result === 'single' && isSafetyBunt) label += '（セーフティバント）';
+    if (['groundout', 'flyout'].includes(result) && position) {
+      const short = POSITIONS[position]?.shortName || getPositionLabel();
+      if (short) {
+        label = `${short}${result === 'groundout' ? 'ゴロ' : '飛'}`;
+      }
+    }
     return label;
   };
 
@@ -206,6 +244,20 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
       />
     );
   }
+  if (showGroundoutOutsDialog) {
+    return (
+      <GroundoutOutsDialog
+        initialOuts={currentOuts}
+        onConfirm={(outs) => {
+          setShowGroundoutOutsDialog(false);
+          triggerRunnerMovement(outs);
+        }}
+        onCancel={() => {
+          setShowGroundoutOutsDialog(false);
+        }}
+      />
+    );
+  }
 
   // 確認画面表示
   if (showConfirm) {
@@ -227,7 +279,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     <PlayResultForm
       strikeoutType={strikeoutType}
       result={result}
-      setResult={(v: string) => setResult(v as BattingResult)}
+      setResult={(v: string) => handleResultChange(v as BattingResult)}
       resultOptions={resultOptions}
       position={position}
       setPosition={(v: string) => setPosition(v as FieldPosition)}
