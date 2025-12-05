@@ -1,9 +1,10 @@
 import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunnersRealtime, addRunsRealtime } from '../services/gameStateService';
 import { getAtBats, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
-import { AtBat, RunnerEvent } from '../types/AtBat';
+import { AtBat, RunnerEvent, FieldingAction } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 import { RunnerMovementResult } from '../components/play/RunnerMovementInput';
+import { LineupEntry } from '../types/Lineup';
 
 type PlayProcessingParams = {
   movementResult?: RunnerMovementResult;
@@ -28,6 +29,8 @@ interface UseGameProcessorProps {
   awayBatIndex: number;
   currentHalf: 'top' | 'bottom';
   advanceBattingOrder: () => void;
+  homeLineup: LineupEntry[];
+  awayLineup: LineupEntry[];
 }
 
 export const useGameProcessor = ({
@@ -45,7 +48,28 @@ export const useGameProcessor = ({
   awayBatIndex,
   currentHalf,
   advanceBattingOrder,
+  homeLineup = [],
+  awayLineup = [],
 }: UseGameProcessorProps) => {
+  const getDefensiveLineup = () => (currentHalf === 'top' ? awayLineup : homeLineup);
+
+  const getDefensivePlayerId = (position?: string) => {
+    if (!position) return undefined;
+    const entry = getDefensiveLineup().find((e) => e.position === position);
+    const playerId = entry?.playerId?.trim();
+    return playerId || undefined;
+  };
+
+  const buildFieldingAction = (
+    position: string,
+    action: FieldingAction['action'],
+    quality: FieldingAction['quality'] = 'clean'
+  ): FieldingAction => ({
+    playerId: getDefensivePlayerId(position),
+    position,
+    action,
+    quality,
+  });
 
   const processPlayResult = (
     params: PlayProcessingParams,
@@ -105,11 +129,7 @@ export const useGameProcessor = ({
           runnerEvents: runnerEvents.slice(),
           playDetails: {
             fielding: [
-              {
-                position: '2', // 捕手
-                action: 'putout',
-                quality: 'clean',
-              }
+              buildFieldingAction('2', 'putout'),
             ],
           },
           timestamp: new Date().toISOString(),
@@ -183,25 +203,24 @@ export const useGameProcessor = ({
              batType: playDetailsForMovement.batType as any,
              direction: playDetailsForMovement.outfieldDirection || playDetailsForMovement.position,
              fielding: (() => {
-               const list: any[] = [];
-               // 1. 打球処理 (fielded)
-               if (playDetailsForMovement.position) {
+               const list: FieldingAction[] = [];
+               const position = playDetailsForMovement.position;
+               if (position) {
                  const hasOutDetails = outDetails && outDetails.length > 0;
                  if (!hasOutDetails && battingResultForMovement === 'flyout') {
-                    list.push({ position: playDetailsForMovement.position, action: 'putout', quality: 'clean' });
+                    list.push(buildFieldingAction(position, 'putout'));
                  } else {
-                    list.push({ position: playDetailsForMovement.position, action: 'fielded', quality: 'clean' });
+                    list.push(buildFieldingAction(position, 'fielded'));
                  }
                }
 
-               // 2. 詳細なアウト記録 (assist / putout)
                if (outDetails) {
                  outDetails.forEach(d => {
                    if (d.threwPosition) {
-                     list.push({ position: d.threwPosition, action: 'assist', quality: 'clean' });
+                     list.push(buildFieldingAction(d.threwPosition, 'assist'));
                    }
                    if (d.caughtPosition) {
-                     list.push({ position: d.caughtPosition, action: 'putout', quality: 'clean' });
+                     list.push(buildFieldingAction(d.caughtPosition, 'putout'));
                    }
                  });
                }
@@ -305,20 +324,20 @@ export const useGameProcessor = ({
           direction: details.outfieldDirection || details.position,
           fielding: (() => {
             if (!details.position) return [];
-            const fielding = [];
+            const fielding: FieldingAction[] = [];
             if (battingResult === 'flyout') {
-              fielding.push({ position: details.position, action: 'putout', quality: 'clean' });
+              fielding.push(buildFieldingAction(details.position, 'putout'));
             } else if (battingResult === 'groundout') {
               if (details.position === '3') {
-                fielding.push({ position: details.position, action: 'putout', quality: 'clean' });
+                fielding.push(buildFieldingAction(details.position, 'putout'));
               } else {
-                fielding.push({ position: details.position, action: 'assist', quality: 'clean' });
-                fielding.push({ position: '3', action: 'putout', quality: 'clean' });
+                fielding.push(buildFieldingAction(details.position, 'assist'));
+                fielding.push(buildFieldingAction('3', 'putout'));
               }
             } else {
-              fielding.push({ position: details.position, action: 'fielded', quality: 'clean' });
+              fielding.push(buildFieldingAction(details.position, 'fielded'));
             }
-            return fielding as any;
+            return fielding;
           })(),
         },
         timestamp: new Date().toISOString(),
