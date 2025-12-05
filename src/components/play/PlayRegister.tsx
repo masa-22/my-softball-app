@@ -18,6 +18,15 @@ import { POSITIONS } from '../../data/softball/positions';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { useBoxScoreData } from '../../hooks/useBoxScoreData';
 import BoxScoreModal from './boxscore/BoxScoreModal';
+import { useStatsData } from '../../hooks/useStatsData';
+import StatsModal from './stats/StatsModal';
+import { usePitcherStatsData, getPitchersForSelection } from '../../hooks/usePitcherStatsData';
+import PitcherStatsModal from './pitcherStats/PitcherStatsModal';
+import WinningPitcherModal from './pitcherStats/WinningPitcherModal';
+import { setWinningPitcher, getWinningPitcher } from '../../services/winningPitcherService';
+import { getGame } from '../../services/gameService';
+import { getGameState } from '../../services/gameStateService';
+import { getLineup } from '../../services/lineupService';
 import SpecialSubstitutionModal from './substitution/SpecialSubstitutionModal';
 import FinishGameButton from './FinishGameButton';
 import { useGameStatus } from '../../hooks/useGameStatus';
@@ -143,6 +152,10 @@ const PlayRegister: React.FC = () => {
   const [desktopScale, setDesktopScale] = useState(1);
   const [runnerMovementOutsAfterOverride, setRunnerMovementOutsAfterOverride] = useState<number | null>(null);
   const [showBoxScore, setShowBoxScore] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showPitcherStats, setShowPitcherStats] = useState(false);
+  const [showWinningPitcherModal, setShowWinningPitcherModal] = useState(false);
+  const [winningPitcherModalSide, setWinningPitcherModalSide] = useState<'home' | 'away' | null>(null);
   const [showSpecialModal, setShowSpecialModal] = useState(false);
   const [specialModalDismissed, setSpecialModalDismissed] = useState(false);
   const specialEntriesKeyRef = useRef<string>('');
@@ -151,6 +164,16 @@ const PlayRegister: React.FC = () => {
     loading: boxScoreLoading,
     refresh: refreshBoxScore,
   } = useBoxScoreData(matchId);
+  const {
+    data: statsData,
+    loading: statsLoading,
+    refresh: refreshStats,
+  } = useStatsData(matchId);
+  const {
+    data: pitcherStatsData,
+    loading: pitcherStatsLoading,
+    refresh: refreshPitcherStats,
+  } = usePitcherStatsData(matchId);
 
   useEffect(() => {
     if (!matchId || gameStatus !== 'SCHEDULED') return;
@@ -256,6 +279,20 @@ const PlayRegister: React.FC = () => {
   };
 
   const handleCloseBoxScore = () => setShowBoxScore(false);
+
+  const handleOpenStats = () => {
+    refreshStats();
+    setShowStats(true);
+  };
+
+  const handleCloseStats = () => setShowStats(false);
+
+  const handleOpenPitcherStats = () => {
+    refreshPitcherStats();
+    setShowPitcherStats(true);
+  };
+
+  const handleClosePitcherStats = () => setShowPitcherStats(false);
 
   const handleOpenSpecialModal = () => {
     setSpecialModalDismissed(false);
@@ -477,6 +514,22 @@ const PlayRegister: React.FC = () => {
               >
                 ボックスを表示
               </button>
+              <button
+                type="button"
+                className="boxscore-button"
+                onClick={handleOpenStats}
+                disabled={!matchId}
+              >
+                打者成績
+              </button>
+              <button
+                type="button"
+                className="boxscore-button"
+                onClick={handleOpenPitcherStats}
+                disabled={!matchId}
+              >
+                投手成績
+              </button>
               {specialEntries.length > 0 && (
                 <button
                   type="button"
@@ -490,7 +543,52 @@ const PlayRegister: React.FC = () => {
               <div style={{ marginLeft: 'auto' }}>
                 <FinishGameButton
                   status={gameStatus}
-                  onFinish={finishGame}
+                  onFinish={async () => {
+                    if (!matchId) return;
+                    const game = getGame(matchId);
+                    if (!game) return;
+                    const gameState = getGameState(matchId);
+                    if (!gameState) return;
+
+                    // 試合終了前に勝利投手の選択が必要かチェック
+                    const atBats = getAtBats(matchId);
+                    const lineup = getLineup(matchId);
+                    
+                    // 勝ちチームを判定
+                    const finalHomeScore = gameState.scores.top_total;
+                    const finalAwayScore = gameState.scores.bottom_total;
+                    const winningTeam = finalHomeScore > finalAwayScore ? 'home' : finalAwayScore > finalHomeScore ? 'away' : null;
+
+                    if (winningTeam) {
+                      // 条件3かどうかをチェック
+                      const winningSide = winningTeam === 'home' ? 'home' : 'away';
+                      const pitchers = getPitchersForSelection(matchId, winningSide);
+                      
+                      // 先発投手を特定
+                      const startingPitcher = pitchers.find((p) => {
+                        const lineupSide = winningSide === 'home' ? lineup.away : lineup.home;
+                        const pitcherEntry = lineupSide.find((e) => e.position === '1');
+                        return pitcherEntry?.playerId === p.playerId;
+                      }) || pitchers[0];
+
+                      const reliefPitchers = pitchers.filter((p) => p.playerId !== startingPitcher?.playerId);
+                      
+                      // 条件3の場合（2人以上の救援投手が出場した場合）
+                      if (reliefPitchers.length >= 2) {
+                        // 既に選択されているかチェック
+                        const savedWinningPitcher = getWinningPitcher(matchId, winningSide);
+                        if (!savedWinningPitcher) {
+                          // モーダルを表示
+                          setWinningPitcherModalSide(winningSide);
+                          setShowWinningPitcherModal(true);
+                          return; // 試合終了はモーダルで選択後に実行
+                        }
+                      }
+                    }
+
+                    // 試合終了
+                    await finishGame();
+                  }}
                   busy={statusTransitioning}
                   disabled={!matchId}
                 />
@@ -527,7 +625,6 @@ const PlayRegister: React.FC = () => {
                 onCountsReset={handleCountsReset}
                 strikeoutType={strikeoutType}
                 offensePlayers={offensePlayers}
-                offenseTeamId={offenseTeamId}
                 baseLabel={runnerManager.baseLabel}
                 getRunnerName={runnerManager.getRunnerName}
                 onRunnerBaseClick={runnerManager.handleRunnerBaseClick}
@@ -606,6 +703,37 @@ const PlayRegister: React.FC = () => {
         loading={boxScoreLoading}
         onClose={handleCloseBoxScore}
       />
+      <StatsModal
+        open={showStats}
+        data={statsData}
+        loading={statsLoading}
+        onClose={handleCloseStats}
+      />
+      <PitcherStatsModal
+        open={showPitcherStats}
+        data={pitcherStatsData}
+        loading={pitcherStatsLoading}
+        onClose={handleClosePitcherStats}
+      />
+      {winningPitcherModalSide && (
+        <WinningPitcherModal
+          open={showWinningPitcherModal}
+          pitchers={getPitchersForSelection(matchId || '', winningPitcherModalSide)}
+          onSelect={(pitcherId) => {
+            if (matchId && winningPitcherModalSide) {
+              setWinningPitcher(matchId, winningPitcherModalSide, pitcherId);
+              setShowWinningPitcherModal(false);
+              setWinningPitcherModalSide(null);
+              // 試合終了を実行
+              finishGame();
+            }
+          }}
+          onCancel={() => {
+            setShowWinningPitcherModal(false);
+            setWinningPitcherModalSide(null);
+          }}
+        />
+      )}
       <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
       {scaled ? (
         <div style={{ width: PLAY_LAYOUT_WIDTH * desktopScale }}>
