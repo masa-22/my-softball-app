@@ -1,15 +1,52 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { getLineup, saveLineup, recordStartersFromLineup, applySubstitutionToLineup } from '../services/lineupService';
+import { getLineup, saveLineup, recordStartersFromLineup } from '../services/lineupService';
 import { getPlayers } from '../services/playerService';
 import { getTeams } from '../services/teamService';
 import { getGame } from '../services/gameService';
-import { getParticipations } from '../services/participationService';
+import { getParticipations, recordSubstitution } from '../services/participationService';
 import { getGameState, updateRunnersRealtime, updateMatchupRealtime } from '../services/gameStateService';
 import { PitchData } from '../types/PitchData';
 import { getAtBats } from '../services/atBatService';
 import { formatAtBatSummary } from '../utils/scoreKeeping';
+import { Player } from '../types/Player';
+import { ParticipationEntry } from '../types/Participation';
+import { PositionDef, POSITION_LIST, POSITIONS } from '../data/softball/positions';
 
 export type RecentResultDisplay = { playId: string; label: string; rbi: number };
+
+export type SpecialEntryRole = 'PH' | 'PR' | 'TR';
+
+export interface PlayerOption {
+  playerId: string;
+  label: string;
+}
+
+export interface PositionOption {
+  code: string;
+  label: string;
+}
+
+export interface SpecialLineupEntry {
+  id: string;
+  side: 'home' | 'away';
+  battingOrder: number;
+  role: SpecialEntryRole;
+  teamName: string;
+  lineupPosition: string;
+  currentPlayerId: string;
+  currentPlayerName: string;
+  previousPlayerId?: string;
+  previousPlayerName?: string;
+  previousPosition?: string;
+  candidatePlayers: PlayerOption[];
+  candidatePositions: string[];
+}
+
+export interface SpecialEntryResolution {
+  entryId: string;
+  selectedPlayerId?: string;
+  selectedPosition?: string;
+}
 
 interface UseLineupManagerProps {
   matchId: string | undefined;
@@ -42,12 +79,19 @@ export const useLineupManager = ({
   const [awayLineupDraft, setAwayLineupDraft] = useState<any[]>([]);
   const [homeTeamName, setHomeTeamName] = useState<string>('先攻');
   const [awayTeamName, setAwayTeamName] = useState<string>('後攻');
+  const [specialEntries, setSpecialEntries] = useState<SpecialLineupEntry[]>([]);
 
   // 差分検出用スナップショット
   const [prevHomeSnapshot, setPrevHomeSnapshot] = useState<any[]>([]);
   const [prevAwaySnapshot, setPrevAwaySnapshot] = useState<any[]>([]);
 
   const lineupInitialized = useRef(false);
+  const specialEntriesRef = useRef<SpecialLineupEntry[]>([]);
+  const prevHalfRef = useRef<'top' | 'bottom' | null>(null);
+
+  useEffect(() => {
+    specialEntriesRef.current = specialEntries;
+  }, [specialEntries]);
 
   // 初期データロード
   useEffect(() => {
@@ -140,6 +184,137 @@ export const useLineupManager = ({
     }
   }, [matchId, currentBatter, currentPitcher]);
 
+  const buildPlayerLabel = (player?: Player | null) => {
+    if (!player) return '';
+    const full = `${player.familyName || ''} ${player.givenName || ''}`.trim();
+    return full || player.playerId || '';
+  };
+
+  const resolvePlayerLabel = (side: 'home' | 'away', playerId?: string | null) => {
+    if (!playerId) return '—';
+    const players = side === 'home' ? homePlayers : awayPlayers;
+    const player = players.find(p => p.playerId === playerId);
+    return buildPlayerLabel(player) || playerId;
+  };
+
+  const buildCandidateOptions = (side: 'home' | 'away'): PlayerOption[] => {
+    const players = side === 'home' ? homePlayers : awayPlayers;
+    return players.map(player => ({
+      playerId: player.playerId,
+      label: buildPlayerLabel(player) || player.playerId,
+    }));
+  };
+
+  const findPreviousParticipant = (
+    entries: ParticipationEntry[],
+    battingOrder: number,
+    currentPlayerId: string
+  ): ParticipationEntry | null => {
+    const history = entries
+      .filter(entry => entry.battingOrder === battingOrder)
+      .sort((a, b) => {
+        const aStart = a.startInning ?? 0;
+        const bStart = b.startInning ?? 0;
+        if (aStart !== bStart) return aStart - bStart;
+        return (a.note || '').localeCompare(b.note || '');
+      });
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      if (history[i].playerId !== currentPlayerId) {
+        return history[i];
+      }
+    }
+    return null;
+  };
+
+  const collectSpecialEntriesForSide = (side: 'home' | 'away'): SpecialLineupEntry[] => {
+    if (!matchId) return [];
+    const participationTable = getParticipations(matchId);
+    const participationList = participationTable ? participationTable[side] : [];
+    const lineupSource = side === 'home' ? homeLineup : awayLineup;
+    const candidatePlayers = buildCandidateOptions(side);
+    const teamLabel = side === 'home' ? homeTeamName : awayTeamName;
+    const positionOptions: string[] = POSITION_LIST.map(position => position.code);
+    const entryMap = new Map<number, SpecialLineupEntry>();
+
+    lineupSource.forEach(entry => {
+      if (!entry) return;
+      const roleFromPosition = (entry.position || '').toUpperCase();
+      if (!['PH', 'PR', 'TR'].includes(roleFromPosition) || !entry.playerId) return;
+      const previousParticipant = findPreviousParticipant(participationList, entry.battingOrder, entry.playerId);
+      entryMap.set(entry.battingOrder, {
+        id: `${side}-${entry.battingOrder}-${entry.playerId}`,
+        side,
+        battingOrder: entry.battingOrder,
+        role: roleFromPosition as SpecialEntryRole,
+        teamName: teamLabel,
+        lineupPosition: entry.position,
+        currentPlayerId: entry.playerId,
+        currentPlayerName: resolvePlayerLabel(side, entry.playerId),
+        previousPlayerId: previousParticipant?.playerId,
+        previousPlayerName: previousParticipant ? resolvePlayerLabel(side, previousParticipant.playerId) : undefined,
+        previousPosition: previousParticipant?.positionAtEnd || previousParticipant?.positionAtStart || '',
+        candidatePlayers,
+        candidatePositions: positionOptions,
+      });
+    });
+
+    participationList
+      .filter(
+        entry =>
+          entry.endInning == null && (entry.status === 'pinch_hitter' || entry.status === 'pinch_runner')
+      )
+      .forEach(entry => {
+        if (!entry.playerId) return;
+        if (entryMap.has(entry.battingOrder)) return;
+        const lineupEntry = lineupSource.find(l => l.battingOrder === entry.battingOrder);
+        if (!lineupEntry) return;
+        const roleFromPosition = (lineupEntry.position || '').toUpperCase();
+
+        // すでに守備位置が決まっている場合はスキップ
+        if (!['PH', 'PR', 'TR'].includes(roleFromPosition)) return;
+
+        const derivedRole: SpecialEntryRole =
+          roleFromPosition === 'TR'
+            ? 'TR'
+            : entry.status === 'pinch_hitter'
+            ? 'PH'
+            : 'PR';
+        const previousParticipant = findPreviousParticipant(participationList, entry.battingOrder, entry.playerId);
+        entryMap.set(entry.battingOrder, {
+          id: `${side}-${entry.battingOrder}-${entry.playerId}-status`,
+          side,
+          battingOrder: entry.battingOrder,
+          role: derivedRole,
+          teamName: teamLabel,
+          lineupPosition: lineupEntry.position,
+          currentPlayerId: entry.playerId,
+          currentPlayerName: resolvePlayerLabel(side, entry.playerId),
+          previousPlayerId: previousParticipant?.playerId,
+          previousPlayerName: previousParticipant ? resolvePlayerLabel(side, previousParticipant.playerId) : undefined,
+          previousPosition: previousParticipant?.positionAtEnd || previousParticipant?.positionAtStart || '',
+          candidatePlayers,
+          candidatePositions: positionOptions,
+        });
+      });
+
+    return Array.from(entryMap.values());
+  };
+
+  useEffect(() => {
+    if (!matchId) return;
+    if (!homeLineup.length && !awayLineup.length) return;
+    if (prevHalfRef.current === null) {
+      prevHalfRef.current = currentHalf;
+      return;
+    }
+    if (prevHalfRef.current !== currentHalf) {
+      const finishedSide = prevHalfRef.current === 'top' ? 'home' : 'away';
+      const entries = collectSpecialEntriesForSide(finishedSide);
+      setSpecialEntries(entries);
+      prevHalfRef.current = currentHalf;
+    }
+  }, [currentHalf, matchId, homeLineup, awayLineup, homePlayers, awayPlayers, homeTeamName, awayTeamName]);
+
   // 編集ハンドラ
   const handlePositionChange = (side: 'home' | 'away', index: number, value: string) => {
     const list = side === 'home' ? [...homeLineupDraft] : [...awayLineupDraft];
@@ -154,10 +329,19 @@ export const useLineupManager = ({
   };
 
   // 保存ロジック
-  const handleSidebarSave = async (side: 'home' | 'away') => {
+  const handleSidebarSave = async (
+    side: 'home' | 'away',
+    options?: { lineupOverride?: any[] }
+  ) => {
     if (!matchId) return;
-    const nextHome = homeLineupDraft.map(entry => ({ ...entry }));
-    const nextAway = awayLineupDraft.map(entry => ({ ...entry }));
+    const nextHome =
+      side === 'home'
+        ? (options?.lineupOverride ?? homeLineupDraft).map(entry => ({ ...entry }))
+        : homeLineupDraft.map(entry => ({ ...entry }));
+    const nextAway =
+      side === 'away'
+        ? (options?.lineupOverride ?? awayLineupDraft).map(entry => ({ ...entry }))
+        : awayLineupDraft.map(entry => ({ ...entry }));
     const updatedLineup = { matchId, home: nextHome, away: nextAway };
     saveLineup(matchId, updatedLineup);
     setHomeLineup(nextHome);
@@ -188,14 +372,15 @@ export const useLineupManager = ({
           const changed = (cur.playerId || '') !== (prev.playerId || '');
           const changedPos = (cur.position || '') !== (prev.position || '');
           if (changed || changedPos) {
-            await applySubstitutionToLineup({
+            recordSubstitution({
               matchId,
               side,
-              battingOrder: cur.battingOrder,
-              inPlayerId: cur.playerId,
+              outPlayerId: prev.playerId || '',
+              inPlayerId: cur.playerId || '',
               inning,
               kind,
               position: cur.position,
+              battingOrder: cur.battingOrder,
             });
 
             // 代走反映
@@ -289,11 +474,31 @@ export const useLineupManager = ({
   // 打順を進める
   const advanceBattingOrder = () => {
     if (currentHalf === 'top') {
-      const length = homeLineup.length || 1;
-      setHomeBatIndex(idx => (idx + 1) % length);
+      const list = homeLineup;
+      const length = list.length || 1;
+      setHomeBatIndex(idx => {
+        let nextIdx = (idx + 1) % length;
+        let attempts = 0;
+        // FP(10番)をスキップ
+        while (list[nextIdx] && list[nextIdx].battingOrder === 10 && attempts < length) {
+          nextIdx = (nextIdx + 1) % length;
+          attempts++;
+        }
+        return nextIdx;
+      });
     } else {
-      const length = awayLineup.length || 1;
-      setAwayBatIndex(idx => (idx + 1) % length);
+      const list = awayLineup;
+      const length = list.length || 1;
+      setAwayBatIndex(idx => {
+        let nextIdx = (idx + 1) % length;
+        let attempts = 0;
+        // FP(10番)をスキップ
+        while (list[nextIdx] && list[nextIdx].battingOrder === 10 && attempts < length) {
+          nextIdx = (nextIdx + 1) % length;
+          attempts++;
+        }
+        return nextIdx;
+      });
     }
   };
 
@@ -325,8 +530,8 @@ export const useLineupManager = ({
         };
       })
       .filter((item): item is RecentResultDisplay => !!item)
-      .reverse()
-      .slice(0, 3);
+      // .reverse() // 古い順に表示するためreverseはしない
+      // .slice(0, 3); // 全打席表示するためsliceはしない
   }, [matchId, currentBatter]);
 
   // 攻撃側チームID
@@ -340,6 +545,81 @@ export const useLineupManager = ({
     if (offenseTeamId == null) return [];
     return getPlayers(offenseTeamId);
   }, [offenseTeamId]);
+
+  const applySpecialEntryResolutions = async (resolutions: SpecialEntryResolution[]) => {
+    if (!matchId || resolutions.length === 0) return;
+
+    const overrides: { home: any[] | null; away: any[] | null } = { home: null, away: null };
+
+    const ensureOverrideList = (side: 'home' | 'away') => {
+      if (side === 'home') {
+        if (!overrides.home) {
+          overrides.home = homeLineupDraft.map(entry => ({ ...entry }));
+        }
+        return overrides.home;
+      }
+      if (!overrides.away) {
+        overrides.away = awayLineupDraft.map(entry => ({ ...entry }));
+      }
+      return overrides.away;
+    };
+
+    const sidesToSave = new Set<'home' | 'away'>();
+
+    resolutions.forEach(resolution => {
+      const entry = specialEntriesRef.current.find(item => item.id === resolution.entryId);
+      if (!entry) return;
+      const targetPlayerId =
+        entry.role === 'TR'
+          ? entry.previousPlayerId || entry.currentPlayerId
+          : resolution.selectedPlayerId || entry.previousPlayerId || entry.currentPlayerId;
+      if (!targetPlayerId) return;
+      const targetPosition =
+        entry.role === 'TR'
+          ? entry.previousPosition || entry.lineupPosition
+          : resolution.selectedPosition || entry.lineupPosition;
+
+      const list = ensureOverrideList(entry.side);
+      const idx = list.findIndex((item: any) => item.battingOrder === entry.battingOrder);
+      if (idx === -1) return;
+      list[idx] = { ...list[idx], playerId: targetPlayerId, position: targetPosition };
+      sidesToSave.add(entry.side);
+    });
+
+    const saveSide = async (side: 'home' | 'away') => {
+      const lineupOverride = side === 'home' ? overrides.home : overrides.away;
+      if (!lineupOverride) {
+        // overrideがなくても、片方だけ更新された場合にもう片方も保存処理（participation同期など）を走らせる必要があるかもしれないが、
+        // 現状の handleSidebarSave は lineupOverride がある場合のみそれを使って保存し、なければ state (Draft) を使う。
+        // ここでは overrides があるサイドのみ保存すれば十分か、それとも両方保存すべきか。
+        // 要望は「両脇のラインナップバーを更新するだけでなく、保存まで行ってください」なので、
+        // 変更があったサイドだけ保存すれば良いはずだが、念のため両方保存するフローにする。
+        
+        // しかし、overridesがない場合（null）に handleSidebarSave を呼ぶと、現在の Draft を保存してしまう。
+        // Draft が意図せず古い状態だったりすると危険だが、Draft は常に最新の UI 状態を保持しているはず。
+        // 安全のため、overrides がある場合のみ保存する。
+        return; 
+      }
+      
+      if (side === 'home') {
+        setHomeLineup(lineupOverride);
+        setHomeLineupDraft(lineupOverride);
+      } else {
+        setAwayLineup(lineupOverride);
+        setAwayLineupDraft(lineupOverride);
+      }
+      await handleSidebarSave(side, { lineupOverride });
+    };
+
+    // 変更があったサイドを特定して保存
+    // sidesToSave には変更があったサイドが入っている
+    for (const side of sidesToSave) {
+      // eslint-disable-next-line no-await-in-loop
+      await saveSide(side);
+    }
+
+    setSpecialEntries([]);
+  };
 
   return {
     match,
@@ -366,6 +646,8 @@ export const useLineupManager = ({
     recentBatterResults,
     offenseTeamId,
     offensePlayers,
+    specialEntries,
+    applySpecialEntryResolutions,
   };
 };
 

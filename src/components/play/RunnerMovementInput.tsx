@@ -47,6 +47,15 @@ interface RunnerMovementInputProps {
   pitches?: PitchData[]; // 追加
   battingOrder?: number; // 追加
   offenseTeamId?: string | null; // 追加: 親から攻撃チームIDをもらう
+  playDetails?: { 
+    position: string; 
+    batType: string; 
+    outfieldDirection: string;
+    fieldingOptions?: {
+      putoutPosition?: string;
+      assistPosition?: string;
+    };
+  }; // 追加: 打球詳細
 }
 
 const styles = {
@@ -257,6 +266,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   pitches = [], // 追加
   battingOrder = 0, // 追加
   offenseTeamId, // 追加: 親から受け取る
+  playDetails, // 追加
 }) => {
   const [beforeRunners] = useState(initialRunners);
   // 追加: 打席結果→進塁数のマッピング（打者・既存ランナーともに同じ距離）
@@ -342,8 +352,22 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
   const [showFinalConfirm, setShowFinalConfirm] = useState(false); // 追加: 最終確認画面
   const [showOutRunnerDialog, setShowOutRunnerDialog] = useState(false);
-  const [outDetailsLocked, setOutDetailsLocked] = useState(false);
-  const [selectedOutRunners, setSelectedOutRunners] = useState<Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey }>>([]);
+  
+  // 自動入力があった場合はロック状態で開始
+  const [outDetailsLocked, setOutDetailsLocked] = useState(() => {
+    return (battingResult === 'flyout' || battingResult === 'sacrifice_fly') && !!batterId && !!playDetails?.position;
+  });
+
+  const [selectedOutRunners, setSelectedOutRunners] = useState<Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey }>>(() => {
+    if ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
+      return [{
+        runnerId: batterId,
+        fromBase: 'home',
+        outAtBase: '1'
+      }];
+    }
+    return [];
+  });
 
   // 打席結果に応じた初期配置を計算
   const getInitialAfterRunners = () => {
@@ -415,7 +439,18 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     base: string;
     threwPosition: string;
     caughtPosition: string;
-  }>>([]);
+  }>>(() => {
+    // フライアウトまたは犠牲フライの場合、自動的に打者アウト・刺殺を設定
+    if ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
+      return [{
+        runnerId: batterId,
+        base: '1', // 打者は一塁でアウト扱い
+        threwPosition: '',
+        caughtPosition: playDetails.position
+      }];
+    }
+    return [];
+  });
 
   const offensePlayers = useMemo(() => {
     if (offenseTeamId == null) return [];
@@ -547,7 +582,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const handleCompleteClick = () => {
     // バリデーション
     if (needOutDetails) {
-      const isValid = outDetails.every(d => d.runnerId && d.base && d.threwPosition && d.caughtPosition);
+      // threwPositionはnull/空文字許容なのでチェックしない
+      const isValid = outDetails.every(d => d.runnerId && d.base && d.caughtPosition);
       if (!isValid) {
         alert('アウト詳細をすべて入力してください');
         return;
@@ -651,7 +687,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   // アウトが増えた場合の処理
   const outsIncreased = outsAfter - initialOuts;
-  const needOutDetails = outsIncreased > 0 && battingResult === 'groundout';
+  const filledOutDetails = outDetails.length;
+  const needOutDetails = outsIncreased > filledOutDetails;
 
   React.useEffect(() => {
     if (presetOutsAfter == null) return;
@@ -776,17 +813,14 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
     const next = { ...afterRunners };
     selections.forEach((sel) => {
-      if (sel.fromBase !== 'home') {
-        if (next[sel.fromBase] === sel.runnerId) {
-          next[sel.fromBase] = null;
+      // アウトになったランナーを盤面から削除
+      // 元いた塁(fromBase)だけでなく、現在いる塁に関わらずそのランナーIDを消去する
+      // (自動進塁などで移動している可能性があるため)
+      (['1', '2', '3'] as const).forEach((base) => {
+        if (next[base] === sel.runnerId) {
+          next[base] = null;
         }
-      } else {
-        (['1', '2', '3'] as const).forEach((base) => {
-          if (next[base] === sel.runnerId) {
-            next[base] = null;
-          }
-        });
-      }
+      });
     });
     setAfterRunners(next);
   };
@@ -1014,7 +1048,11 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
                       アウト {idx + 1}: {getRunnerDisplayName(selection.runnerId)} （{selection.fromBase === 'home' ? '打者' : baseOptions.find(b => b.value === selection.fromBase)?.label} → {baseOptions.find(b => b.value === selection.outAtBase)?.label}）
                     </div>
                     <div style={{ fontSize: 13, color: '#495057' }}>
-                      送球: {getPositionLabelByValue(detail?.threwPosition || '')} / 捕球: {getPositionLabelByValue(detail?.caughtPosition || '')}
+                      {detail?.threwPosition ? (
+                        <>送球: {getPositionLabelByValue(detail.threwPosition)} / </>
+                      ) : null}
+                      捕球: {getPositionLabelByValue(detail?.caughtPosition || '')}
+                      {!detail?.threwPosition && ' （刺殺のみ）'}
                     </div>
                   </div>
                 );

@@ -9,3 +9,4 @@ export interface PitchData {
   result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
 }
 
+

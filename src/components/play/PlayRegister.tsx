@@ -2,7 +2,7 @@
  * 1球・1プレー登録画面のメインコンポーネント
  * - ロジックはカスタムフックに委譲し、Viewの構成に専念
  */
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import ScoreBoard from './ScoreBoard';
 import LeftSidebar from './layout/LeftSidebar';
@@ -10,7 +10,7 @@ import CenterPanel from './layout/CenterPanel';
 import RightSidebar from './layout/RightSidebar';
 import { RunnerMovementResult } from './RunnerMovementInput';
 import { useGameInput } from '../../hooks/useGameInput';
-import { useLineupManager } from '../../hooks/useLineupManager';
+import { useLineupManager, SpecialEntryResolution } from '../../hooks/useLineupManager';
 import { useRunnerManager } from '../../hooks/useRunnerManager';
 import { useGameProcessor } from '../../hooks/useGameProcessor';
 import { getAtBats } from '../../services/atBatService';
@@ -18,13 +18,22 @@ import { POSITIONS } from '../../data/softball/positions';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { useBoxScoreData } from '../../hooks/useBoxScoreData';
 import BoxScoreModal from './boxscore/BoxScoreModal';
+import SpecialSubstitutionModal from './substitution/SpecialSubstitutionModal';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
 const SCALE_BASE_WIDTH = 1400;
 const MOBILE_BREAKPOINT = 768;
 
-type MovementDetails = { position: string; batType: string; outfieldDirection: string };
+type MovementDetails = { 
+  position: string; 
+  batType: string; 
+  outfieldDirection: string;
+  fieldingOptions?: {
+    putoutPosition?: string;
+    assistPosition?: string;
+  };
+};
 
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
@@ -69,6 +78,8 @@ const PlayRegister: React.FC = () => {
     recentBatterResults,
     offensePlayers,
     offenseTeamId,
+    specialEntries,
+    applySpecialEntryResolutions,
   } = useLineupManager({
     matchId,
     currentHalf,
@@ -123,11 +134,30 @@ const PlayRegister: React.FC = () => {
   const [desktopScale, setDesktopScale] = useState(1);
   const [runnerMovementOutsAfterOverride, setRunnerMovementOutsAfterOverride] = useState<number | null>(null);
   const [showBoxScore, setShowBoxScore] = useState(false);
+  const [showSpecialModal, setShowSpecialModal] = useState(false);
+  const [specialModalDismissed, setSpecialModalDismissed] = useState(false);
+  const specialEntriesKeyRef = useRef<string>('');
   const {
     data: boxScoreData,
     loading: boxScoreLoading,
     refresh: refreshBoxScore,
   } = useBoxScoreData(matchId);
+
+  useEffect(() => {
+    const key = specialEntries.map(entry => entry.id).join('|');
+    if (key !== specialEntriesKeyRef.current) {
+      specialEntriesKeyRef.current = key;
+      setSpecialModalDismissed(false);
+    }
+    if (specialEntries.length === 0) {
+      setShowSpecialModal(false);
+      setSpecialModalDismissed(false);
+      return;
+    }
+    if (!specialModalDismissed) {
+      setShowSpecialModal(true);
+    }
+  }, [specialEntries, specialModalDismissed]);
 
   // 投手成績（表示用）
   const pitcherStats = useMemo(() => {
@@ -213,16 +243,33 @@ const PlayRegister: React.FC = () => {
 
   const handleCloseBoxScore = () => setShowBoxScore(false);
 
+  const handleOpenSpecialModal = () => {
+    setSpecialModalDismissed(false);
+    setShowSpecialModal(true);
+  };
+
+  const handleSpecialModalCancel = () => {
+    setShowSpecialModal(false);
+    setSpecialModalDismissed(true);
+  };
+
+  const handleSpecialModalSubmit = async (resolutions: SpecialEntryResolution[]) => {
+    await applySpecialEntryResolutions(resolutions);
+    refreshBoxScore();
+  };
+
   const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
-    const isOut = ['groundout', 'flyout'].includes(battingResult);
+    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
     const nextO = currentBSO.o + (isOut ? 1 : 0);
     setRunnerMovementOutsAfterOverride(
       typeof outsAfterOverride === 'number' ? outsAfterOverride : null
     );
 
     // ランナーなしアウト -> 簡易処理
-    if (!hasRunners && isOut) {
+    // ただし三振の場合は振り逃げの可能性があるためRunnerMovementを表示する
+    const isStrikeout = battingResult.startsWith('strikeout');
+    if (!hasRunners && isOut && !isStrikeout) {
         processQuickOut(battingResult, details);
         resetUI();
         return;
@@ -270,7 +317,7 @@ const PlayRegister: React.FC = () => {
   }, []);
 
   const baseMovementOutsAfter = useMemo(() => {
-    const isOut = ['groundout', 'flyout'].includes(battingResultForMovement);
+    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResultForMovement);
     return Math.min(3, currentBSO.o + (isOut ? 1 : 0));
   }, [battingResultForMovement, currentBSO.o]);
 
@@ -329,6 +376,7 @@ const PlayRegister: React.FC = () => {
           font-weight: 600;
           cursor: pointer;
           transition: background-color 0.2s ease;
+          margin-right: 8px;
         }
 
         .boxscore-button:hover {
@@ -337,6 +385,27 @@ const PlayRegister: React.FC = () => {
 
         .boxscore-button:disabled {
           background-color: #adb5bd;
+          cursor: not-allowed;
+        }
+
+        .special-button {
+          border: 1px solid #f08c00;
+          background-color: #fff4e6;
+          color: #d9480f;
+          padding: 8px 16px;
+          border-radius: 999px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .special-button:hover {
+          background-color: #ffe8cc;
+          border-color: #e8590c;
+        }
+
+        .special-button:disabled {
+          opacity: 0.6;
           cursor: not-allowed;
         }
 
@@ -369,6 +438,16 @@ const PlayRegister: React.FC = () => {
               >
                 ボックスを表示
               </button>
+              {specialEntries.length > 0 && (
+                <button
+                  type="button"
+                  className="special-button"
+                  onClick={handleOpenSpecialModal}
+                  disabled={showSpecialModal}
+                >
+                  交代処理 ({specialEntries.length})
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -385,6 +464,8 @@ const PlayRegister: React.FC = () => {
               battingResultLabel={battingResultDisplayLabel}
               pitches={pitches}
               onPitchesChange={setPitches}
+              offenseTeamId={offenseTeamId}
+              playDetails={playDetailsForMovement}
               runners={runners}
               currentBatterId={currentBatter?.playerId}
               battingResultForMovement={battingResultForMovement}
@@ -459,6 +540,12 @@ const PlayRegister: React.FC = () => {
 
   return (
     <>
+      <SpecialSubstitutionModal
+        open={showSpecialModal && specialEntries.length > 0}
+        entries={specialEntries}
+        onSubmit={handleSpecialModalSubmit}
+        onCancel={handleSpecialModalCancel}
+      />
       <BoxScoreModal
         open={showBoxScore}
         data={boxScoreData}

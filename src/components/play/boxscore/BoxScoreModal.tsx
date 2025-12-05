@@ -29,24 +29,39 @@ const headerCellStyle: React.CSSProperties = {
   textAlign: 'center',
 };
 
-const renderRow = (row: BoxScoreRowData) => (
-  <tr key={row.key} style={{ backgroundColor: row.isSubstitute ? '#fff5f5' : '#fff' }}>
-    <td style={{ ...cellStyle, width: 40, textAlign: 'center', fontWeight: 600 }}>
-      {row.isSubstitute ? '' : row.battingOrder}
-    </td>
+const getInningCellStyle = (row: BoxScoreRowData, inning: number): React.CSSProperties => {
+  const baseStyle: React.CSSProperties = { ...cellStyle, textAlign: 'center', minWidth: 48 };
+  const status = row.inningStyles[inning];
+  if (status === 'rbi') {
+    return { ...baseStyle, backgroundColor: '#d0ebff', color: '#0b7285', fontWeight: 600 };
+  }
+  if (status === 'hit') {
+    return { ...baseStyle, backgroundColor: '#ffe3e3', color: '#c92a2a', fontWeight: 600 };
+  }
+  return baseStyle;
+};
+
+const renderRow = (row: BoxScoreRowData) => {
+  const orderDisplay = row.orderLabel ?? '';
+  return (
+    <tr key={row.key}>
+      <td style={{ ...cellStyle, width: 40, textAlign: 'center', fontWeight: 600 }}>
+        {orderDisplay}
+      </td>
     <td style={{ ...cellStyle, width: 64, textAlign: 'center', fontWeight: 600 }}>
       {row.positionLabel || '-'}
     </td>
     <td style={{ ...cellStyle, minWidth: 140 }}>
       <span>{row.name || '未設定'}</span>
     </td>
-    {INNING_HEADERS.map((inning) => (
-      <td key={inning} style={{ ...cellStyle, textAlign: 'center', minWidth: 48 }}>
-        {row.resultsByInning[inning] || ''}
-      </td>
-    ))}
-  </tr>
-);
+      {INNING_HEADERS.map((inning) => (
+        <td key={inning} style={getInningCellStyle(row, inning)}>
+          {row.resultsByInning[inning] || ''}
+        </td>
+      ))}
+    </tr>
+  );
+};
 
 const renderTeamBlock = (team: BoxScoreTeamData) => (
   <div key={team.side} style={{ marginBottom: 28 }}>

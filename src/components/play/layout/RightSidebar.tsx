@@ -66,11 +66,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
               <div style={{ marginBottom: 4 }}>直近打席</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                 {recentBatterResults.map((result) => {
-                  const isHit = /ヒット|ヒット（|ツーベース|スリーベース|ホームラン|ランニングホームラン/.test(result.label);
+                  const isHit = /ヒット|ヒット（|ツーベース|スリーベース|ホームラン|ランニングホームラン|安|2|3|本|走本/.test(result.label);
                   const baseLabelStyle: React.CSSProperties = {
                     fontSize: 13,
                     fontWeight: result.rbi > 0 ? 700 : 600,
-                    color: isHit ? '#c92a2a' : '#212529',
+                    color: isHit ? '#fff' : '#212529',
+                    backgroundColor: isHit ? '#e03131' : 'transparent',
+                    padding: isHit ? '2px 6px' : '0',
+                    borderRadius: isHit ? '4px' : '0',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
@@ -79,7 +82,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
                     <span key={result.playId} style={baseLabelStyle}>
                       <span>{result.label}</span>
                       {result.rbi > 0 && (
-                        <span style={{ color: '#212529' }}>+{result.rbi}</span>
+                        <span style={{ color: isHit ? '#fff' : '#212529' }}>+{result.rbi}</span>
                       )}
                     </span>
                   );

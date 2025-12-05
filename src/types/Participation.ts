@@ -17,3 +17,4 @@ export type ParticipationTable = {
   away: ParticipationEntry[];
 };
 
+

@@ -17,3 +17,4 @@ export interface TournamentRegisterData {
   type: Tournament['type'];
 }
 
+

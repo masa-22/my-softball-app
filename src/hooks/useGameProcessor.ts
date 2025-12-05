@@ -11,7 +11,15 @@ type PlayProcessingParams = {
   pendingOutcome: { kind: 'inplay' | 'strikeout' | 'walk'; battingResult?: string } | null;
   strikeoutType: 'swinging' | 'looking' | null;
   battingResultForMovement: string;
-  playDetailsForMovement: { position: string; batType: string; outfieldDirection: string };
+  playDetailsForMovement: { 
+    position: string; 
+    batType: string; 
+    outfieldDirection: string;
+    fieldingOptions?: {
+      putoutPosition?: string;
+      assistPosition?: string;
+    };
+  };
 };
 
 interface UseGameProcessorProps {
@@ -205,7 +213,32 @@ export const useGameProcessor = ({
              fielding: (() => {
                const list: FieldingAction[] = [];
                const position = playDetailsForMovement.position;
-               if (position) {
+               
+               if (playDetailsForMovement.fieldingOptions) {
+                 // 明示的な守備オプションがある場合（ファーストゴロの分岐など）
+                 if (position) {
+                    // 補殺がある場合は、捕球記録(fielded)も残すのが一般的だが、
+                    // システム上 putout/assist があれば fielded は表示されないかもしれない。
+                    // 一旦、捕球者としてfieldedを追加しておく。
+                    // ただし、putoutPositionと同じ場合は重複するかもしれないので調整。
+                    // 既存ロジックでは flyout の場合 putout のみで fielded なし。
+                    // groundout の場合 assist + putout(3)。
+                    // ここではシンプルに構成する。
+                    
+                    // 1. 捕球
+                    // putoutPosition が自分自身なら putout が捕球を兼ねるため fielded 不要とする流儀もあるが、
+                    // ここでは念のためアシストの場合のみ fielded をつけるか？
+                    // いや、fielded は常に記録しておいたほうが無難。
+                    list.push(buildFieldingAction(position, 'fielded'));
+                 }
+                 
+                 if (playDetailsForMovement.fieldingOptions.assistPosition) {
+                   list.push(buildFieldingAction(playDetailsForMovement.fieldingOptions.assistPosition, 'assist'));
+                 }
+                 if (playDetailsForMovement.fieldingOptions.putoutPosition) {
+                   list.push(buildFieldingAction(playDetailsForMovement.fieldingOptions.putoutPosition, 'putout'));
+                 }
+               } else if (position) {
                  const hasOutDetails = outDetails && outDetails.length > 0;
                  if (!hasOutDetails && battingResultForMovement === 'flyout') {
                     list.push(buildFieldingAction(position, 'putout'));
@@ -272,7 +305,15 @@ export const useGameProcessor = ({
   // 3アウトチェンジ簡易処理 (ランナーなしアウト等)
   const processQuickOut = (
     battingResult: string,
-    details: { position: string; batType: string; outfieldDirection: string }
+    details: { 
+      position: string; 
+      batType: string; 
+      outfieldDirection: string;
+      fieldingOptions?: {
+        putoutPosition?: string;
+        assistPosition?: string;
+      };
+    }
   ) => {
       if (!matchId) return;
       const gs = getGameState(matchId);
@@ -325,6 +366,18 @@ export const useGameProcessor = ({
           fielding: (() => {
             if (!details.position) return [];
             const fielding: FieldingAction[] = [];
+            
+            if (details.fieldingOptions) {
+               fielding.push(buildFieldingAction(details.position, 'fielded'));
+               if (details.fieldingOptions.assistPosition) {
+                 fielding.push(buildFieldingAction(details.fieldingOptions.assistPosition, 'assist'));
+               }
+               if (details.fieldingOptions.putoutPosition) {
+                 fielding.push(buildFieldingAction(details.fieldingOptions.putoutPosition, 'putout'));
+               }
+               return fielding;
+            }
+
             if (battingResult === 'flyout') {
               fielding.push(buildFieldingAction(details.position, 'putout'));
             } else if (battingResult === 'groundout') {
