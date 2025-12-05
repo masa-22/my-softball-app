@@ -1,7 +1,7 @@
 import React from 'react';
 import StrikeZoneGrid from './StrikeZoneGrid';
 import PitchResultSelector from './PitchResultSelector';
-import { PitchType } from '../common/PitchTypeSelector';
+import { PitchType } from '../../../types/PitchType';
 
 interface StrikeZonePanelProps {
   pitches: Array<{ id: number; x: number; y: number; type: PitchType; order: number; result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'; }>;
