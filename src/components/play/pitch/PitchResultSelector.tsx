@@ -3,7 +3,7 @@
  * スイング・見逃し・ボール・インプレイ・デッドボール・ファウルを選択
  */
 import React from 'react';
-import { PitchType } from '../common/PitchTypeSelector';
+import { PitchType } from '../../../types/PitchType';
 
 interface PitchResultSelectorProps {
   selectedPitchType: PitchType;
