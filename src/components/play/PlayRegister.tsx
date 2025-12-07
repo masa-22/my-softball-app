@@ -88,6 +88,7 @@ const PlayRegister: React.FC = () => {
     awayLineup,
     homeTeamName,
     awayTeamName,
+    allAtBats,
     handlePositionChange,
     handlePlayerChange,
     handleSidebarSave,
@@ -156,6 +157,7 @@ const PlayRegister: React.FC = () => {
   const [showPitcherStats, setShowPitcherStats] = useState(false);
   const [showWinningPitcherModal, setShowWinningPitcherModal] = useState(false);
   const [winningPitcherModalSide, setWinningPitcherModalSide] = useState<'home' | 'away' | null>(null);
+  const [winningPitcherModalPitchers, setWinningPitcherModalPitchers] = useState<Array<{ playerId: string; player: any | undefined }>>([]);
   const [showSpecialModal, setShowSpecialModal] = useState(false);
   const [specialModalDismissed, setSpecialModalDismissed] = useState(false);
   const specialEntriesKeyRef = useRef<string>('');
@@ -198,9 +200,8 @@ const PlayRegister: React.FC = () => {
 
   // 投手成績（表示用）
   const pitcherStats = useMemo(() => {
-    if (!matchId || !currentPitcher) return { inningStr: '0', total: 0, strikes: 0, balls: 0, inning: 1, half: 'top' as 'top' | 'bottom' };
+    if (!matchId || !currentPitcher || !Array.isArray(allAtBats)) return { inningStr: '0', total: 0, strikes: 0, balls: 0, inning: 1, half: 'top' as 'top' | 'bottom' };
     
-    const allAtBats = getAtBats(matchId);
     const pitcherAtBats = allAtBats.filter(a => a.pitcherId === currentPitcher.playerId);
     
     let totalOuts = 0;
@@ -237,7 +238,7 @@ const PlayRegister: React.FC = () => {
     });
 
     return { inningStr, total, strikes, balls, inning: currentInning, half: currentH };
-  }, [matchId, currentPitcher, pitches, currentInningVal, currentHalf]);
+  }, [matchId, currentPitcher, allAtBats, pitches, currentInningVal, currentHalf]);
 
   // UI Handlers
   const resetUI = () => {
@@ -317,9 +318,46 @@ const PlayRegister: React.FC = () => {
       typeof outsAfterOverride === 'number' ? outsAfterOverride : null
     );
 
+    // 2アウトでのフライアウトはRunnerMovementに移らず、自動的にアウトを加算しランナーを動かさずに保存
+    if (currentBSO.o === 2 && battingResult === 'flyout') {
+      // ランナーを動かさずに現在の位置を保持
+      const movementResult: RunnerMovementResult = {
+        afterRunners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+        outsAfter: 3,
+        scoredRunners: [],
+        outDetails: [],
+      };
+      processPlayResult({
+        movementResult,
+        pendingOutcome: undefined,
+        strikeoutType: null,
+        battingResultForMovement: battingResult,
+        playDetailsForMovement: details,
+      },
+      resetUI, // onComplete
+      resetUI  // onCancel
+      );
+      return;
+    }
+
     // ランナーなしアウト -> 簡易処理
-    // ただし三振の場合は振り逃げの可能性があるためRunnerMovementを表示する
     const isStrikeout = battingResult.startsWith('strikeout');
+    // ランナーがいない場合の三振はRunnerMovementに移さず、直接処理する
+    if (!hasRunners && isStrikeout) {
+        // 三振は捕手に刺殺が記録される（useGameProcessorで処理）
+        processPlayResult({
+          movementResult: undefined,
+          pendingOutcome: { kind: 'strikeout' },
+          strikeoutType,
+          battingResultForMovement: '',
+          playDetailsForMovement: { position: '', batType: '', outfieldDirection: '' },
+        }, 
+        resetUI, // onComplete
+        resetUI  // onCancel
+        );
+        return;
+    }
+    
     if (!hasRunners && isOut && !isStrikeout) {
         processQuickOut(battingResult, details);
         resetUI();
@@ -366,6 +404,24 @@ const PlayRegister: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // 勝利投手モーダル用の投手リストを取得
+  useEffect(() => {
+    if (!matchId || !winningPitcherModalSide) {
+      setWinningPitcherModalPitchers([]);
+      return;
+    }
+    const loadPitchers = async () => {
+      try {
+        const pitchers = await getPitchersForSelection(matchId, winningPitcherModalSide);
+        setWinningPitcherModalPitchers(pitchers);
+      } catch (error) {
+        console.error('Error loading pitchers for selection:', error);
+        setWinningPitcherModalPitchers([]);
+      }
+    };
+    loadPitchers();
+  }, [matchId, winningPitcherModalSide]);
 
   const baseMovementOutsAfter = useMemo(() => {
     const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResultForMovement);
@@ -545,14 +601,14 @@ const PlayRegister: React.FC = () => {
                   status={gameStatus}
                   onFinish={async () => {
                     if (!matchId) return;
-                    const game = getGame(matchId);
+                    const game = await getGame(matchId);
                     if (!game) return;
-                    const gameState = getGameState(matchId);
+                    const gameState = await getGameState(matchId);
                     if (!gameState) return;
 
                     // 試合終了前に勝利投手の選択が必要かチェック
-                    const atBats = getAtBats(matchId);
-                    const lineup = getLineup(matchId);
+                    const atBats = await getAtBats(matchId);
+                    const lineup = await getLineup(matchId);
                     
                     // 勝ちチームを判定
                     const finalHomeScore = gameState.scores.top_total;
@@ -562,7 +618,7 @@ const PlayRegister: React.FC = () => {
                     if (winningTeam) {
                       // 条件3かどうかをチェック
                       const winningSide = winningTeam === 'home' ? 'home' : 'away';
-                      const pitchers = getPitchersForSelection(matchId, winningSide);
+                      const pitchers = await getPitchersForSelection(matchId, winningSide);
                       
                       // 先発投手を特定
                       const startingPitcher = pitchers.find((p) => {
@@ -576,12 +632,20 @@ const PlayRegister: React.FC = () => {
                       // 条件3の場合（2人以上の救援投手が出場した場合）
                       if (reliefPitchers.length >= 2) {
                         // 既に選択されているかチェック
-                        const savedWinningPitcher = getWinningPitcher(matchId, winningSide);
-                        if (!savedWinningPitcher) {
-                          // モーダルを表示
+                        try {
+                          const savedWinningPitcher = await getWinningPitcher(matchId, winningSide);
+                          if (!savedWinningPitcher) {
+                            // モーダルを表示
+                            setWinningPitcherModalSide(winningSide);
+                            setShowWinningPitcherModal(true);
+                            return; // 試合終了はモーダルで選択後に実行
+                          }
+                        } catch (error) {
+                          console.error('Error getting winning pitcher:', error);
+                          // エラーが発生した場合もモーダルを表示
                           setWinningPitcherModalSide(winningSide);
                           setShowWinningPitcherModal(true);
-                          return; // 試合終了はモーダルで選択後に実行
+                          return;
                         }
                       }
                     }
@@ -718,10 +782,14 @@ const PlayRegister: React.FC = () => {
       {winningPitcherModalSide && (
         <WinningPitcherModal
           open={showWinningPitcherModal}
-          pitchers={getPitchersForSelection(matchId || '', winningPitcherModalSide)}
-          onSelect={(pitcherId) => {
+          pitchers={winningPitcherModalPitchers}
+          onSelect={async (pitcherId) => {
             if (matchId && winningPitcherModalSide) {
-              setWinningPitcher(matchId, winningPitcherModalSide, pitcherId);
+              try {
+                await setWinningPitcher(matchId, winningPitcherModalSide, pitcherId);
+              } catch (error) {
+                console.error('Error setting winning pitcher:', error);
+              }
               setShowWinningPitcherModal(false);
               setWinningPitcherModalSide(null);
               // 試合終了を実行

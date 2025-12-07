@@ -12,6 +12,8 @@ import {
   GameView,
   GameCreateInput
 } from '../types/Game';
+import { db } from '../firebaseConfig';
+import { collection, doc, getDoc, setDoc, updateDoc, getDocs, query } from 'firebase/firestore';
 
 // 動的データは完全委譲
 import {
@@ -31,47 +33,47 @@ import {
 
 // 出場記録はこのサービスでは保持・投影しない（UIは直接 participationService を利用）
 
-let games: Record<string, Game> = {};
-
-const load = () => {
-  try {
-    const raw = localStorage.getItem('games');
-    if (raw) {
-      games = JSON.parse(raw);
-      return;
-    }
-  } catch (e) {
-    console.warn('games load error', e);
-  }
-  games = {};
-  persist();
-};
-
-const persist = () => {
-  try {
-    localStorage.setItem('games', JSON.stringify(games));
-  } catch (e) {
-    console.warn('games save error', e);
-  }
-};
-
-// 初期ロード
-load();
+const GAMES_COLLECTION = 'games';
 
 /**
  * 静的データ取得
  */
-export const getGame = (gameId: string): Game | null => games[gameId] || null;
+export const getGame = async (gameId: string): Promise<Game | null> => {
+  try {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (gameSnap.exists()) {
+      return gameSnap.data() as Game;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting game:', error);
+    throw error;
+  }
+};
 
 /**
  * 全ゲーム取得（静的）
  */
-export const getGames = (): Game[] => Object.values(games);
+export const getGames = async (): Promise<Game[]> => {
+  try {
+    const gamesRef = collection(db, GAMES_COLLECTION);
+    const gamesSnapshot = await getDocs(gamesRef);
+    const gamesList: Game[] = [];
+    gamesSnapshot.forEach((doc) => {
+      gamesList.push(doc.data() as Game);
+    });
+    return gamesList;
+  } catch (error) {
+    console.error('Error getting games:', error);
+    throw error;
+  }
+};
 
 /**
  * ゲーム作成（静的のみ）
  */
-export const createGame = (data: {
+export const createGame = async (data: {
   gameId: string;
   date: string;
   tournamentId: string;
@@ -82,122 +84,145 @@ export const createGame = (data: {
   bottomTeamId: string;
   bottomTeamName: string;
   bottomTeamShortName: string;
-}): Game => {
-  const game: Game = {
-    gameId: data.gameId,
-    date: data.date,
-    status: 'SCHEDULED',
-    tournament: { id: data.tournamentId, name: data.tournamentName },
-    topTeam: { id: data.topTeamId, name: data.topTeamName, shortName: data.topTeamShortName },
-    bottomTeam: { id: data.bottomTeamId, name: data.bottomTeamName, shortName: data.bottomTeamShortName },
-  };
-  games[game.gameId] = game;
-  persist();
-  // 動的初期化
-  initGameState(game.gameId);
-  return game;
+}): Promise<Game> => {
+  try {
+    const game: Game = {
+      gameId: data.gameId,
+      date: data.date,
+      status: 'SCHEDULED',
+      tournament: { id: data.tournamentId, name: data.tournamentName },
+      topTeam: { id: data.topTeamId, name: data.topTeamName, shortName: data.topTeamShortName },
+      bottomTeam: { id: data.bottomTeamId, name: data.bottomTeamName, shortName: data.bottomTeamShortName },
+    };
+    const gameRef = doc(db, GAMES_COLLECTION, game.gameId);
+    await setDoc(gameRef, game);
+    // 動的初期化
+    await initGameState(game.gameId);
+    return game;
+  } catch (error) {
+    console.error('Error creating game:', error);
+    throw error;
+  }
 };
 
 /**
  * 静的データ更新
  */
-export const updateGame = (gameId: string, updates: Partial<Game>): Game | null => {
-  const current = games[gameId];
-  if (!current) return null;
-  games[gameId] = { ...current, ...updates };
-  persist();
-  return games[gameId];
+export const updateGame = async (gameId: string, updates: Partial<Game>): Promise<Game | null> => {
+  try {
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+    const gameSnap = await getDoc(gameRef);
+    if (!gameSnap.exists()) {
+      return null;
+    }
+    await updateDoc(gameRef, updates);
+    const updatedSnap = await getDoc(gameRef);
+    return updatedSnap.data() as Game;
+  } catch (error) {
+    console.error('Error updating game:', error);
+    throw error;
+  }
 };
 
 /**
  * 静的＋動的の統合ビュー（UI向け）
  */
-export const getGameView = (gameId: string): GameView | null => {
-  const base = games[gameId];
-  if (!base) return null;
-  const st = getGameState(gameId) || initGameState(gameId);
+export const getGameView = async (gameId: string): Promise<GameView | null> => {
+  try {
+    const base = await getGame(gameId);
+    if (!base) return null;
+    const st = await getGameState(gameId) || await initGameState(gameId);
 
-  const inningKeys = Object.keys(st.scores.innings).map(Number).sort((a, b) => a - b);
-  const topScores: number[] = [];
-  const bottomScores: number[] = [];
-  inningKeys.forEach(k => {
-    const cell = st.scores.innings[String(k)];
-    topScores[k - 1] = cell?.top ?? 0;
-    bottomScores[k - 1] = cell?.bottom ?? 0;
-  });
+    const inningKeys = Object.keys(st.scores.innings).map(Number).sort((a, b) => a - b);
+    const topScores: number[] = [];
+    const bottomScores: number[] = [];
+    inningKeys.forEach(k => {
+      const cell = st.scores.innings[String(k)];
+      topScores[k - 1] = cell?.top ?? 0;
+      bottomScores[k - 1] = cell?.bottom ?? 0;
+    });
 
-  return {
-    ...base,
-    realtime: {
-      status: st.status,
-      currentInning: st.current_inning,
-      topOrBottom: st.top_bottom,
-      balls: st.counts.b,
-      strikes: st.counts.s,
-      outs: st.counts.o,
-      runners: { '1': st.runners['1b'], '2': st.runners['2b'], '3': st.runners['3b'] },
-      score: { top: st.scores.top_total, bottom: st.scores.bottom_total },
-      inningScores: { top: topScores, bottom: bottomScores },
-      matchup: { pitcherId: st.matchup.pitcher_id, batterId: st.matchup.batter_id },
-      lastUpdated: st.last_updated,
-    },
-  };
+    return {
+      ...base,
+      realtime: {
+        status: st.status,
+        currentInning: st.current_inning,
+        topOrBottom: st.top_bottom,
+        balls: st.counts.b,
+        strikes: st.counts.s,
+        outs: st.counts.o,
+        runners: { '1': st.runners['1b'], '2': st.runners['2b'], '3': st.runners['3b'] },
+        score: { top: st.scores.top_total, bottom: st.scores.bottom_total },
+        inningScores: { top: topScores, bottom: bottomScores },
+        matchup: { pitcherId: st.matchup.pitcher_id, batterId: st.matchup.batter_id },
+        lastUpdated: st.last_updated,
+      },
+    };
+  } catch (error) {
+    console.error('Error getting game view:', error);
+    throw error;
+  }
 };
 
 /**
  * 動的データの窓口（完全委譲）
  */
-export const setGameStatus = (gameId: string, status: GameRealtimeStatus): GameState | null => {
-  const g = games[gameId];
-  if (g) {
-    g.status = status === 'scheduled' ? 'SCHEDULED' : status === 'in_progress' ? 'PLAYING' : 'FINISHED';
-    persist();
+export const setGameStatus = async (gameId: string, status: GameRealtimeStatus): Promise<GameState | null> => {
+  try {
+    const g = await getGame(gameId);
+    if (g) {
+      const newStatus = status === 'scheduled' ? 'SCHEDULED' : status === 'in_progress' ? 'PLAYING' : 'FINISHED';
+      await updateGame(gameId, { status: newStatus });
+    }
+    return await updateGameStateStatus(gameId, status);
+  } catch (error) {
+    console.error('Error setting game status:', error);
+    throw error;
   }
-  return updateGameStateStatus(gameId, status);
 };
 
-export const setInningHalf = (gameId: string, inning: number, half: 'top' | 'bottom'): GameState | null => {
-  return setInningAndHalf(gameId, inning, half);
+export const setInningHalf = async (gameId: string, inning: number, half: 'top' | 'bottom'): Promise<GameState | null> => {
+  return await setInningAndHalf(gameId, inning, half);
 };
 
-export const updateCount = (
+export const updateCount = async (
   gameId: string,
   updates: { balls?: number; strikes?: number; outs?: number }
-): GameState | null => {
-  const st = getGameState(gameId) || initGameState(gameId);
+): Promise<GameState | null> => {
+  const st = await getGameState(gameId) || await initGameState(gameId);
   const next = { b: updates.balls ?? st.counts.b, s: updates.strikes ?? st.counts.s, o: updates.outs ?? st.counts.o };
-  return updateCountsRealtime(gameId, next);
+  return await updateCountsRealtime(gameId, next);
 };
 
-export const resetCount = (gameId: string): GameState | null => resetCountsRealtime(gameId);
+export const resetCount = async (gameId: string): Promise<GameState | null> => await resetCountsRealtime(gameId);
 
-export const updateRunners = (
+export const updateRunners = async (
   gameId: string,
   runners: { '1': string | null; '2': string | null; '3': string | null }
-): GameState | null => {
-  return updateRunnersRealtime(gameId, { '1b': runners['1'], '2b': runners['2'], '3b': runners['3'] });
+): Promise<GameState | null> => {
+  return await updateRunnersRealtime(gameId, { '1b': runners['1'], '2b': runners['2'], '3b': runners['3'] });
 };
 
-export const addScore = (gameId: string, half: 'top' | 'bottom', runs: number): GameState | null => {
-  return addRunsRealtime(gameId, half, runs);
+export const addScore = async (gameId: string, half: 'top' | 'bottom', runs: number): Promise<GameState | null> => {
+  return await addRunsRealtime(gameId, half, runs);
 };
 
-export const advanceInning = (gameId: string): GameState | null => closeHalfInningRealtime(gameId);
+export const advanceInning = async (gameId: string): Promise<GameState | null> => await closeHalfInningRealtime(gameId);
 
-export const updateMatchup = (
+export const updateMatchup = async (
   gameId: string,
   matchup: { pitcherId?: string | null; batterId?: string | null }
-): GameState | null => {
-  return updateMatchupRealtime(gameId, { pitcher_id: matchup.pitcherId ?? null, batter_id: matchup.batterId ?? null });
+): Promise<GameState | null> => {
+  return await updateMatchupRealtime(gameId, { pitcher_id: matchup.pitcherId ?? null, batter_id: matchup.batterId ?? null });
 };
 
 /**
  * 試合登録ユーティリティ（静的作成のみ）
  */
-export const ensureGameCreated = (data: GameCreateInput): Game => {
-  const existing = getGame(data.gameId);
+export const ensureGameCreated = async (data: GameCreateInput): Promise<Game> => {
+  const existing = await getGame(data.gameId);
   if (existing) return existing;
-  return createGame({
+  return await createGame({
     gameId: data.gameId,
     date: data.date,
     tournamentId: data.tournamentId,

@@ -6,7 +6,7 @@ import { getGame } from '../services/gameService';
 import { getParticipations, recordSubstitution } from '../services/participationService';
 import { getGameState, updateRunnersRealtime, updateMatchupRealtime } from '../services/gameStateService';
 import { PitchData } from '../types/PitchData';
-import { getAtBats } from '../services/atBatService';
+import { useAtBats } from './useAtBats';
 import { formatAtBatSummary } from '../utils/scoreKeeping';
 import { Player } from '../types/Player';
 import { ParticipationEntry } from '../types/Participation';
@@ -80,6 +80,7 @@ export const useLineupManager = ({
   const [homeTeamName, setHomeTeamName] = useState<string>('先攻');
   const [awayTeamName, setAwayTeamName] = useState<string>('後攻');
   const [specialEntries, setSpecialEntries] = useState<SpecialLineupEntry[]>([]);
+  const allAtBats = useAtBats(matchId);
 
   // 差分検出用スナップショット
   const [prevHomeSnapshot, setPrevHomeSnapshot] = useState<any[]>([]);
@@ -96,48 +97,60 @@ export const useLineupManager = ({
   // 初期データロード
   useEffect(() => {
     if (!matchId) return;
-    const g = getGame(matchId);
-    setMatch(g ? {
-      id: g.gameId,
-      homeTeamId: g.topTeam.id,
-      awayTeamId: g.bottomTeam.id,
-      date: g.date,
-      startTime: '',
-    } : null);
+    
+    const loadData = async () => {
+      try {
+        const g = await getGame(matchId);
+        if (!g) {
+          console.error('Game not found:', matchId);
+          return;
+        }
+        
+        setMatch({
+          id: g.gameId,
+          homeTeamId: g.topTeam.id,
+          awayTeamId: g.bottomTeam.id,
+          date: g.date,
+          startTime: '',
+        });
 
-    const l = getLineup(matchId);
-    setLineup(l);
+        const l = await getLineup(matchId);
+        setLineup(l);
 
-    if (g && l) {
-      const homePs = getPlayers(g.topTeam.id);
-      const awayPs = getPlayers(g.bottomTeam.id);
-      setHomePlayers(homePs);
-      setAwayPlayers(awayPs);
+        const homePs = await getPlayers(g.topTeam.id);
+        const awayPs = await getPlayers(g.bottomTeam.id);
+        setHomePlayers(homePs);
+        setAwayPlayers(awayPs);
 
-      // 初期打者・投手の設定
-      const batterEntry = l.home[0];
-      const pitcherEntry = l.away.find((e: any) => e.position === '1');
-      const batter = homePs.find(p => p.playerId === batterEntry?.playerId) || null;
-      const pitcher = awayPs.find(p => p.playerId === pitcherEntry?.playerId) || null;
-      setCurrentBatter(batter);
-      setCurrentPitcher(pitcher);
-      setPitches([]);
+        // 初期打者・投手の設定
+        const batterEntry = l.home[0];
+        const pitcherEntry = l.away.find((e: any) => e.position === '1');
+        const batter = homePs.find(p => p.playerId === batterEntry?.playerId) || null;
+        const pitcher = awayPs.find(p => p.playerId === pitcherEntry?.playerId) || null;
+        setCurrentBatter(batter);
+        setCurrentPitcher(pitcher);
+        setPitches([]);
 
-      // サイドバー用state初期化
-      setHomeLineup(l.home);
-      setAwayLineup(l.away);
-      setHomeLineupDraft(l.home.map((entry: any) => ({ ...entry })));
-      setAwayLineupDraft(l.away.map((entry: any) => ({ ...entry })));
-      setPrevHomeSnapshot(l.home.map((entry: any) => ({ ...entry })));
-      setPrevAwaySnapshot(l.away.map((entry: any) => ({ ...entry })));
+        // サイドバー用state初期化
+        setHomeLineup(l.home);
+        setAwayLineup(l.away);
+        setHomeLineupDraft(l.home.map((entry: any) => ({ ...entry })));
+        setAwayLineupDraft(l.away.map((entry: any) => ({ ...entry })));
+        setPrevHomeSnapshot(l.home.map((entry: any) => ({ ...entry })));
+        setPrevAwaySnapshot(l.away.map((entry: any) => ({ ...entry })));
 
-      // チーム名
-      const teams = getTeams();
-      const homeTeam = teams.find(t => String(t.id) === String(g.topTeam.id));
-      const awayTeam = teams.find(t => String(t.id) === String(g.bottomTeam.id));
-      setHomeTeamName(homeTeam ? homeTeam.teamName : '先攻');
-      setAwayTeamName(awayTeam ? awayTeam.teamName : '後攻');
-    }
+        // チーム名
+        const teams = await getTeams();
+        const homeTeam = teams.find(t => String(t.id) === String(g.topTeam.id));
+        const awayTeam = teams.find(t => String(t.id) === String(g.bottomTeam.id));
+        setHomeTeamName(homeTeam ? homeTeam.teamName : '先攻');
+        setAwayTeamName(awayTeam ? awayTeam.teamName : '後攻');
+      } catch (error) {
+        console.error('Error loading lineup data:', error);
+      }
+    };
+    
+    loadData();
   }, [matchId]);
 
   // 初期化時の打順インデックスリセット
@@ -147,6 +160,9 @@ export const useLineupManager = ({
     setAwayBatIndex(0);
     lineupInitialized.current = true;
   }, [lineup]);
+
+  // atBatsの読み込み
+  // atBatsはuseAtBatsフックでリアルタイム購読（ポーリング不要）
 
   // 現在の half と打順に応じて currentBatter を更新
   useEffect(() => {
@@ -171,7 +187,6 @@ export const useLineupManager = ({
     setCurrentPitcher(pitcher);
   }, [currentHalf, homeLineup, awayLineup, homePlayers, awayPlayers]);
 
-  // game_states.matchup のリアルタイム更新
   useEffect(() => {
     if (!matchId) return;
     const batterId = currentBatter?.playerId ?? null;
@@ -226,10 +241,10 @@ export const useLineupManager = ({
     return null;
   };
 
-  const collectSpecialEntriesForSide = (side: 'home' | 'away'): SpecialLineupEntry[] => {
+  const collectSpecialEntriesForSide = async (side: 'home' | 'away'): Promise<SpecialLineupEntry[]> => {
     if (!matchId) return [];
-    const participationTable = getParticipations(matchId);
-    const participationList = participationTable ? participationTable[side] : [];
+    const participationTable = await getParticipations(matchId);
+    const participationList = Array.isArray(participationTable?.[side]) ? participationTable[side] : [];
     const lineupSource = side === 'home' ? homeLineup : awayLineup;
     const candidatePlayers = buildCandidateOptions(side);
     const teamLabel = side === 'home' ? homeTeamName : awayTeamName;
@@ -309,8 +324,12 @@ export const useLineupManager = ({
     }
     if (prevHalfRef.current !== currentHalf) {
       const finishedSide = prevHalfRef.current === 'top' ? 'home' : 'away';
-      const entries = collectSpecialEntriesForSide(finishedSide);
-      setSpecialEntries(entries);
+      collectSpecialEntriesForSide(finishedSide).then(entries => {
+        setSpecialEntries(entries);
+      }).catch(error => {
+        console.error('Error collecting special entries:', error);
+        setSpecialEntries([]);
+      });
       prevHalfRef.current = currentHalf;
     }
   }, [currentHalf, matchId, homeLineup, awayLineup, homePlayers, awayPlayers, homeTeamName, awayTeamName]);
@@ -352,12 +371,12 @@ export const useLineupManager = ({
 
     // participation 同期
     try {
-      const table = getParticipations(matchId);
+      const table = await getParticipations(matchId);
       const noStartersYet = (table.home.length === 0 && table.away.length === 0);
       if (noStartersYet) {
         await recordStartersFromLineup(matchId);
       } else {
-        const gs = getGameState(matchId);
+        const gs = await getGameState(matchId);
         const inning = gs?.current_inning ?? 1;
         const kind: 'pinch_hitter' | 'pinch_runner' = 'pinch_hitter';
 
@@ -403,7 +422,7 @@ export const useLineupManager = ({
 
     // 整合性チェック
     try {
-      const gs = getGameState(matchId);
+      const gs = await getGameState(matchId);
       const half = gs?.top_bottom ?? currentHalf;
 
       // 投手
@@ -516,8 +535,7 @@ export const useLineupManager = ({
 
   // 現在打者の過去打席結果
   const recentBatterResults = useMemo<RecentResultDisplay[]>(() => {
-    if (!matchId || !currentBatter) return [];
-    const allAtBats = getAtBats(matchId);
+    if (!matchId || !currentBatter || !Array.isArray(allAtBats)) return [];
     return allAtBats
       .filter(a => a.batterId === currentBatter.playerId && a.type === 'bat')
       .map(atBat => {
@@ -532,7 +550,7 @@ export const useLineupManager = ({
       .filter((item): item is RecentResultDisplay => !!item)
       // .reverse() // 古い順に表示するためreverseはしない
       // .slice(0, 3); // 全打席表示するためsliceはしない
-  }, [matchId, currentBatter]);
+  }, [matchId, currentBatter, allAtBats]);
 
   // 攻撃側チームID
   const offenseTeamId = useMemo(() => {
@@ -543,8 +561,13 @@ export const useLineupManager = ({
   // 攻撃側選手リスト
   const offensePlayers = useMemo(() => {
     if (offenseTeamId == null) return [];
-    return getPlayers(offenseTeamId);
-  }, [offenseTeamId]);
+    // homePlayersとawayPlayersから選択
+    if (currentHalf === 'top') {
+      return homePlayers;
+    } else {
+      return awayPlayers;
+    }
+  }, [offenseTeamId, currentHalf, homePlayers, awayPlayers]);
 
   const applySpecialEntryResolutions = async (resolutions: SpecialEntryResolution[]) => {
     if (!matchId || resolutions.length === 0) return;
@@ -636,6 +659,7 @@ export const useLineupManager = ({
     awayLineupDraft,
     homeTeamName,
     awayTeamName,
+    allAtBats,
     setHomeBatIndex,
     setAwayBatIndex,
     handlePositionChange,

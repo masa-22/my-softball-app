@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getGameState, updateCountsRealtime, resetCountsRealtime } from '../services/gameStateService';
+import { subscribeGameState, updateCountsRealtime, resetCountsRealtime } from '../services/gameStateService';
 import { RunnerEvent } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 
@@ -20,23 +20,30 @@ export const useGameInput = (matchId: string | undefined) => {
   // ランナーイベント（打席内で発生した走塁イベントを一時保持）
   const [runnerEvents, setRunnerEvents] = useState<RunnerEvent[]>([]);
 
-  // gameState の購読（リアルタイム）
+  // gameState の購読（リアルタイムリスナー）
   useEffect(() => {
     if (!matchId) return;
-    const update = () => {
-      const gs = getGameState(matchId);
+    
+    const unsubscribe = subscribeGameState(matchId, (gs) => {
       if (gs) {
-        setRunners({ '1': gs.runners['1b'], '2': gs.runners['2b'], '3': gs.runners['3b'] });
-        setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
-        setCurrentInningVal(gs.current_inning);
-        setCurrentHalf(gs.top_bottom);
+        setRunners({ 
+          '1': gs.runners?.['1b'] ?? null, 
+          '2': gs.runners?.['2b'] ?? null, 
+          '3': gs.runners?.['3b'] ?? null 
+        });
+        setCurrentBSO({ 
+          b: gs.counts?.b ?? 0, 
+          s: gs.counts?.s ?? 0, 
+          o: gs.counts?.o ?? 0 
+        });
+        setCurrentInningVal(gs.current_inning ?? 1);
+        setCurrentHalf(gs.top_bottom ?? 'top');
       }
+    });
+
+    return () => {
+      unsubscribe();
     };
-    update();
-    const t = window.setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { window.clearInterval(t); window.removeEventListener('storage', onStorage); };
   }, [matchId]);
 
   // ランナー変更ハンドラ
@@ -55,12 +62,7 @@ export const useGameInput = (matchId: string | undefined) => {
   const handleCountsReset = () => {
     if (!matchId) return;
     resetCountsRealtime(matchId);
-    const gs = getGameState(matchId);
-    if (gs) {
-      setCurrentBSO({ b: gs.counts.b, s: gs.counts.s, o: gs.counts.o });
-    } else {
-      setCurrentBSO({ b: 0, s: 0, o: 0 });
-    }
+    // リアルタイムリスナーが自動的に更新するため、手動更新は不要
   };
 
   const addRunnerEvent = (event: RunnerEvent) => {

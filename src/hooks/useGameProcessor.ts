@@ -79,15 +79,25 @@ export const useGameProcessor = ({
     quality,
   });
 
-  const processPlayResult = (
+  const processPlayResult = async (
     params: PlayProcessingParams,
     onComplete: () => void,
     onCancel: () => void
   ) => {
     const { movementResult, pendingOutcome, strikeoutType, battingResultForMovement, playDetailsForMovement } = params;
 
-    if (!matchId) return;
-    const gs = getGameState(matchId);
+    console.log('[atBat] processPlayResult called:', {
+      hasMovementResult: !!movementResult,
+      pendingOutcome: pendingOutcome?.kind,
+      battingResultForMovement,
+      matchId
+    });
+
+    if (!matchId) {
+      console.warn('[atBat] No matchId, skipping atBat save');
+      return;
+    }
+    const gs = await getGameState(matchId);
     const currentO = gs?.counts.o ?? 0;
 
     // 1. 三振 (RunnerMovementなし)
@@ -104,9 +114,14 @@ export const useGameProcessor = ({
           result: p.result,
         }));
 
-        const newIndex = getAtBats(matchId).length + 1;
+        const existingAtBats = await getAtBats(matchId);
+        const newIndex = existingAtBats.length + 1;
         const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
 
+        const batterId = currentBatter?.playerId || '';
+        if (!batterId) {
+          console.warn('Warning: currentBatter is not set when saving atBat (strikeout)');
+        }
         const atBat: AtBat = {
           playId: newPlayId,
           matchId,
@@ -114,7 +129,7 @@ export const useGameProcessor = ({
           inning: currentInningInfo.inning,
           topOrBottom: currentInningInfo.half,
           type: 'bat',
-          batterId: currentBatter?.playerId || '',
+          batterId,
           pitcherId: currentPitcher?.playerId || '',
           battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
           result: {
@@ -142,7 +157,13 @@ export const useGameProcessor = ({
           },
           timestamp: new Date().toISOString(),
         };
-        saveAtBat(atBat);
+        try {
+          console.log('[atBat] Saving strikeout atBat:', { playId: atBat.playId, batterId: atBat.batterId, index: atBat.index });
+          await saveAtBat(atBat);
+          console.log('[atBat] Successfully saved strikeout atBat:', atBat.playId);
+        } catch (error) {
+          console.error('[atBat] Error saving atBat (strikeout):', error, atBat);
+        }
         clearRunnerEvents();
         // -----------------------
 
@@ -152,6 +173,93 @@ export const useGameProcessor = ({
           setRunners({ '1': null, '2': null, '3': null });
         }
     } 
+    // 1-2. 四死球 (RunnerMovementなしの場合のフォールバック)
+    else if (!movementResult && pendingOutcome?.kind === 'walk' && battingResultForMovement) {
+        // --- at_bats 保存処理 (四死球) ---
+        const pitchRecords = pitches.map(p => ({
+          seq: p.order,
+          type: p.type,
+          course: calculateCourse(p.x, p.y),
+          x: toPercentage(p.x, ZONE_WIDTH),
+          y: toPercentage(p.y, ZONE_HEIGHT),
+          result: p.result,
+        }));
+
+        const existingAtBats = await getAtBats(matchId);
+        const newIndex = existingAtBats.length + 1;
+        const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
+
+        const batterId = currentBatter?.playerId || '';
+        if (!batterId) {
+          console.warn('Warning: currentBatter is not set when saving atBat (walk)');
+        }
+
+        // 四死球の場合のランナー配置を計算（押し出し処理）
+        const afterRunners = { ...runners };
+        if (batterId) {
+          // 押し出し処理
+          if (runners['1']) {
+            afterRunners['2'] = runners['1'];
+            if (runners['2']) {
+              afterRunners['3'] = runners['2'];
+            }
+          }
+          afterRunners['1'] = batterId;
+        }
+
+        const atBat: AtBat = {
+          playId: newPlayId,
+          matchId,
+          index: newIndex,
+          inning: currentInningInfo.inning,
+          topOrBottom: currentInningInfo.half,
+          type: 'bat',
+          batterId,
+          pitcherId: currentPitcher?.playerId || '',
+          battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
+          result: {
+            type: battingResultForMovement as any,
+          },
+          situationBefore: {
+            outs: currentO,
+            runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
+            balls: currentBSO.b,
+            strikes: currentBSO.s,
+          },
+          situationAfter: {
+            outs: currentO,
+            runners: { '1': afterRunners['1'], '2': afterRunners['2'], '3': afterRunners['3'] },
+            balls: 0,
+            strikes: 0,
+          },
+          scoredRunners: [],
+          pitches: pitchRecords,
+          runnerEvents: runnerEvents.slice(),
+          playDetails: {
+            batType: playDetailsForMovement.batType as any,
+          },
+          timestamp: new Date().toISOString(),
+        };
+        try {
+          console.log('[atBat] Saving walk atBat:', { playId: atBat.playId, batterId: atBat.batterId, index: atBat.index, result: atBat.result?.type });
+          await saveAtBat(atBat);
+          console.log('[atBat] Successfully saved walk atBat:', atBat.playId);
+        } catch (error) {
+          console.error('[atBat] Error saving atBat (walk):', error, atBat);
+        }
+        clearRunnerEvents();
+        // -----------------------
+
+        // ランナー配置更新
+        updateRunnersRealtime(matchId, {
+          '1b': afterRunners['1'],
+          '2b': afterRunners['2'],
+          '3b': afterRunners['3'],
+        });
+
+        // カウントリセット
+        updateCountsRealtime(matchId, { o: currentO, b: 0, s: 0 });
+    }
     // 2. RunnerMovementあり (インプレイ、四死球など)
     else if (movementResult) {
         const { afterRunners, outsAfter, scoredRunners, outDetails } = movementResult;
@@ -178,9 +286,14 @@ export const useGameProcessor = ({
           atBatResult.rbi = scoredRunners.length;
         }
 
-        const newIndex = getAtBats(matchId).length + 1;
+        const existingAtBats = await getAtBats(matchId);
+        const newIndex = existingAtBats.length + 1;
         const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
 
+        const batterId = currentBatter?.playerId || '';
+        if (!batterId) {
+          console.warn('Warning: currentBatter is not set when saving atBat (movement)');
+        }
         const atBat: AtBat = {
           playId: newPlayId,
           matchId,
@@ -188,7 +301,7 @@ export const useGameProcessor = ({
           inning: currentInningInfo.inning,
           topOrBottom: currentInningInfo.half,
           type: 'bat',
-          batterId: currentBatter?.playerId || '',
+          batterId,
           pitcherId: currentPitcher?.playerId || '',
           battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
           result: atBatResult,
@@ -262,7 +375,13 @@ export const useGameProcessor = ({
           },
           timestamp: new Date().toISOString(),
         };
-        saveAtBat(atBat);
+        try {
+          console.log('[atBat] Saving movement atBat:', { playId: atBat.playId, batterId: atBat.batterId, index: atBat.index, result: atBat.result?.type });
+          await saveAtBat(atBat);
+          console.log('[atBat] Successfully saved movement atBat:', atBat.playId);
+        } catch (error) {
+          console.error('[atBat] Error saving atBat (movement):', error, atBat);
+        }
         clearRunnerEvents();
         
         // ランナー配置更新
@@ -274,27 +393,34 @@ export const useGameProcessor = ({
 
         // 得点更新
         if (scoredRunners.length > 0) {
-          const half = getGameState(matchId)?.top_bottom || 'top';
+          const gsForHalf = await getGameState(matchId);
+          const half = gsForHalf?.top_bottom || 'top';
           addRunsRealtime(matchId, half, scoredRunners.length);
         }
 
         // アウト更新
-        updateCountsRealtime(matchId, { o: outsAfter, b: 0, s: 0 }); // カウントもリセット
+        const finalOutsAfter = typeof outsAfter === 'number' ? outsAfter : currentO;
+        console.log('[atBat] Updating outs:', { currentO, outsAfter, finalOutsAfter, battingResult: battingResultForMovement });
+        updateCountsRealtime(matchId, { o: finalOutsAfter, b: 0, s: 0 }); // カウントもリセット
 
         // チェンジ判定
-        if (outsAfter >= 3) {
+        if (finalOutsAfter >= 3) {
+          console.log('[atBat] Closing half inning due to 3 outs');
           closeHalfInningRealtime(matchId);
           setRunners({ '1': null, '2': null, '3': null });
         }
-        
-        try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
     } else {
          // キャンセルなどで何もしない場合
+         console.warn('[atBat] No atBat saved - no matching condition:', {
+           hasMovementResult: !!movementResult,
+           pendingOutcome: pendingOutcome?.kind,
+           battingResultForMovement
+         });
     }
 
     // 打順前進（確定タイミング）
-    // movementResultがある、または三振確定の場合のみ進める
-    if (movementResult || (!movementResult && pendingOutcome?.kind === 'strikeout')) {
+    // movementResultがある、または三振確定の場合、または四死球確定の場合、または打席結果がある場合は進める
+    if (movementResult || (!movementResult && pendingOutcome?.kind === 'strikeout') || (!movementResult && pendingOutcome?.kind === 'walk') || battingResultForMovement) {
         advanceBattingOrder();
         onComplete();
     } else {
@@ -303,7 +429,7 @@ export const useGameProcessor = ({
   };
 
   // 3アウトチェンジ簡易処理 (ランナーなしアウト等)
-  const processQuickOut = (
+  const processQuickOut = async (
     battingResult: string,
     details: { 
       position: string; 
@@ -316,7 +442,7 @@ export const useGameProcessor = ({
     }
   ) => {
       if (!matchId) return;
-      const gs = getGameState(matchId);
+      const gs = await getGameState(matchId);
       const currentO = gs?.counts.o ?? 0;
       
       const pitchRecords = pitches.map(p => ({
@@ -328,9 +454,14 @@ export const useGameProcessor = ({
         result: p.result,
       }));
 
-      const newIndex = getAtBats(matchId).length + 1;
+      const existingAtBats = await getAtBats(matchId);
+      const newIndex = existingAtBats.length + 1;
       const newPlayId = `${matchId}_${String(newIndex).padStart(3, '0')}`;
 
+      const batterId = currentBatter?.playerId || '';
+      if (!batterId) {
+        console.warn('Warning: currentBatter is not set when saving atBat (quickOut)');
+      }
       const atBat: AtBat = {
         playId: newPlayId,
         matchId,
@@ -338,7 +469,7 @@ export const useGameProcessor = ({
         inning: currentInningInfo.inning,
         topOrBottom: currentInningInfo.half,
         type: 'bat',
-        batterId: currentBatter?.playerId || '',
+        batterId,
         pitcherId: currentPitcher?.playerId || '',
         battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1, 
         result: {
@@ -395,7 +526,13 @@ export const useGameProcessor = ({
         },
         timestamp: new Date().toISOString(),
       };
-      saveAtBat(atBat);
+      try {
+        console.log('[atBat] Saving quickOut atBat:', { playId: atBat.playId, batterId: atBat.batterId, index: atBat.index, result: atBat.result?.type });
+        await saveAtBat(atBat);
+        console.log('[atBat] Successfully saved quickOut atBat:', atBat.playId);
+      } catch (error) {
+        console.error('[atBat] Error saving atBat (quickOut):', error, atBat);
+      }
       clearRunnerEvents();
 
       const newO = Math.min(3, currentO + 1);

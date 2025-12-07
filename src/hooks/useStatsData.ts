@@ -4,6 +4,7 @@ import { getLineup } from '../services/lineupService';
 import { getParticipations } from '../services/participationService';
 import { getPlayers } from '../services/playerService';
 import { getAtBats } from '../services/atBatService';
+import { useAtBats } from './useAtBats';
 import { POSITIONS } from '../data/softball/positions';
 import { BATTING_RESULTS } from '../data/softball/battingResults';
 import { LineupEntry } from '../types/Lineup';
@@ -441,15 +442,14 @@ const buildRowsForSide = ({
   return rows;
 };
 
-const buildStatsData = (matchId: string): StatsData | null => {
-  const game = getGame(matchId);
-  if (!game) return null;
+const buildStatsData = async (matchId: string, atBats: AtBat[]): Promise<StatsData | null> => {
+  const game = await getGame(matchId);
+  if (!game || !game.topTeam || !game.bottomTeam) return null;
 
-  const lineup = getLineup(matchId);
-  const participations = getParticipations(matchId);
-  const atBats = getAtBats(matchId);
-  const homePlayers = getPlayers(game.topTeam.id);
-  const awayPlayers = getPlayers(game.bottomTeam.id);
+  const lineup = await getLineup(matchId);
+  const participations = await getParticipations(matchId);
+  const homePlayers = await getPlayers(game.topTeam.id);
+  const awayPlayers = await getPlayers(game.bottomTeam.id);
 
   const homeTeam: StatsTeamData = {
     teamName: game.topTeam.name,
@@ -481,19 +481,25 @@ const buildStatsData = (matchId: string): StatsData | null => {
 export const useStatsData = (matchId?: string) => {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(false);
+  const atBats = useAtBats(matchId);
 
   const loadData = useCallback(
-    (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean; atBats?: AtBat[] }) => {
       if (!matchId) {
         setData(null);
         setLoading(false);
+        return;
+      }
+      const currentAtBats = options?.atBats ?? atBats;
+      if (currentAtBats.length === 0) {
+        // atBatsがまだ取得されていない場合は待機
         return;
       }
       if (!options?.silent) {
         setLoading(true);
       }
       try {
-        const next = buildStatsData(matchId);
+        const next = await buildStatsData(matchId, currentAtBats);
         setData(next);
       } catch (error) {
         console.warn('stats load error', error);
@@ -503,28 +509,32 @@ export const useStatsData = (matchId?: string) => {
         }
       }
     },
-    [matchId]
+    [matchId, atBats]
   );
 
+  // atBatsが変更されたときに統計データを再計算
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (atBats.length > 0) {
+      loadData({ silent: true, atBats });
+    }
+  }, [atBats, loadData]);
 
   useEffect(() => {
     if (!matchId) return;
-    const interval = setInterval(() => loadData({ silent: true }), 1500);
+
+    // lineupsとparticipationsの変更はstorageイベントで検知（将来的にはリアルタイム対応も検討）
     const onStorage = (event: StorageEvent) => {
       if (!event.key) return;
-      if (['softball_app_at_bats', 'lineups', 'participations'].includes(event.key)) {
-        loadData({ silent: true });
+      if (['lineups', 'participations'].includes(event.key)) {
+        loadData({ silent: true, atBats });
       }
     };
     window.addEventListener('storage', onStorage);
+
     return () => {
-      clearInterval(interval);
       window.removeEventListener('storage', onStorage);
     };
-  }, [matchId, loadData]);
+  }, [matchId, loadData, atBats]);
 
   const refresh = useCallback(() => loadData(), [loadData]);
 

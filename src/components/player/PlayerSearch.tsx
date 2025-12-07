@@ -11,7 +11,17 @@ const PlayerSearch: React.FC = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setTeams(getTeams());
+    const loadTeams = async () => {
+      try {
+        const teamsData = await getTeams();
+        setTeams(teamsData);
+      } catch (error) {
+        console.error('Error loading teams:', error);
+        setTeams([]);
+      }
+    };
+    
+    loadTeams();
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {

@@ -12,8 +12,20 @@ const TeamSearch: React.FC = () => {
   const [affiliations, setAffiliations] = useState<string[]>([]);
 
   useEffect(() => {
-    setPrefectures(getPrefectures());
-    setAffiliations(getAffiliations());
+    const loadData = async () => {
+      try {
+        const prefs = await getPrefectures();
+        const affs = await getAffiliations();
+        setPrefectures(prefs);
+        setAffiliations(affs);
+      } catch (error) {
+        console.error('Error loading prefectures and affiliations:', error);
+        setPrefectures([]);
+        setAffiliations([]);
+      }
+    };
+    
+    loadData();
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {

@@ -14,6 +14,7 @@ interface PlayerFormData {
 
 const PlayerBulkRegister: React.FC = () => {
   const [teams, setTeams] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [players, setPlayers] = useState<PlayerFormData[]>([
     { teamId: '', familyName: '', givenName: '', throwing: '右', batting: '右', entryYear: '' }
   ]);
@@ -24,12 +25,30 @@ const PlayerBulkRegister: React.FC = () => {
   const [pendingPlayers, setPendingPlayers] = useState<PlayerFormData[]>([]);
 
   useEffect(() => {
-    const ts = getTeams();
-    setTeams(ts);
+    const loadTeams = async () => {
+      try {
+        const ts = await getTeams();
+        setTeams(ts);
+      } catch (error) {
+        console.error('Error loading teams:', error);
+        setTeams([]);
+      }
+    };
+    
+    loadTeams();
   }, []);
 
+  // チーム選択時にすべての選手行のteamIdを更新
+  useEffect(() => {
+    if (selectedTeamId) {
+      setPlayers(prevPlayers => 
+        prevPlayers.map(player => ({ ...player, teamId: selectedTeamId }))
+      );
+    }
+  }, [selectedTeamId]);
+
   const addPlayerRow = () => {
-    setPlayers([...players, { teamId: '', familyName: '', givenName: '', throwing: '右', batting: '右', entryYear: '' }]);
+    setPlayers([...players, { teamId: selectedTeamId, familyName: '', givenName: '', throwing: '右', batting: '右', entryYear: '' }]);
   };
 
   const removePlayerRow = (index: number) => {
@@ -47,10 +66,12 @@ const PlayerBulkRegister: React.FC = () => {
   const validatePlayers = (): { valid: boolean; errors: string[] } => {
     const errors: string[] = [];
     
+    if (!selectedTeamId) {
+      errors.push('チームを選択してください。');
+      return { valid: false, errors };
+    }
+    
     players.forEach((player, index) => {
-      if (!player.teamId) {
-        errors.push(`${index + 1}行目: チームを選択してください。`);
-      }
       if (!player.familyName || !player.givenName) {
         errors.push(`${index + 1}行目: 苗字と名前を入力してください。`);
       }
@@ -58,7 +79,7 @@ const PlayerBulkRegister: React.FC = () => {
         errors.push(`${index + 1}行目: 利き手と利き打ちを選択してください。`);
       }
       
-      const selectedTeam = teams.find(t => String(t.id) === String(player.teamId));
+      const selectedTeam = teams.find(t => String(t.id) === String(selectedTeamId));
       if (selectedTeam && selectedTeam.affiliation === '大学' && !player.entryYear) {
         errors.push(`${index + 1}行目: 大学チームの場合、入学年度を入力してください。`);
       }
@@ -99,9 +120,8 @@ const PlayerBulkRegister: React.FC = () => {
     for (let i = 0; i < pendingPlayers.length; i++) {
       const player = pendingPlayers[i];
       try {
-        const selectedTeam = teams.find(t => String(t.id) === String(player.teamId));
         await registerPlayer({
-          teamId: player.teamId,
+          teamId: selectedTeamId,
           familyName: player.familyName,
           givenName: player.givenName,
           throwing: player.throwing,
@@ -121,7 +141,7 @@ const PlayerBulkRegister: React.FC = () => {
         setError(`${results.failed}名の登録に失敗しました。\n${results.errors.join('\n')}`);
       }
       // フォームをリセット
-      setPlayers([{ teamId: '', familyName: '', givenName: '', throwing: '右', batting: '右', entryYear: '' }]);
+      setPlayers([{ teamId: selectedTeamId, familyName: '', givenName: '', throwing: '右', batting: '右', entryYear: '' }]);
     } else {
       setError(`すべての登録に失敗しました。\n${results.errors.join('\n')}`);
     }
@@ -134,6 +154,8 @@ const PlayerBulkRegister: React.FC = () => {
     return teams.find(t => String(t.id) === String(teamId));
   };
 
+  const selectedTeam = getSelectedTeam(selectedTeamId);
+
   return (
     <div>
       <h2>選手一括登録</h2>
@@ -141,11 +163,24 @@ const PlayerBulkRegister: React.FC = () => {
       {message && <p style={{ color: 'green' }}>{message}</p>}
       
       <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>チーム</label>
+          <select
+            value={selectedTeamId}
+            onChange={(e) => setSelectedTeamId(e.target.value)}
+            style={{ width: '100%', padding: '8px', boxSizing: 'border-box', fontSize: '16px' }}
+          >
+            <option value="">チームを選択</option>
+            {teams.map(t => (
+              <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>
+            ))}
+          </select>
+        </div>
+
         <div style={{ marginBottom: '20px', overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ccc', minWidth: '800px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #ccc', minWidth: '700px' }}>
             <thead>
               <tr style={{ background: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>チーム</th>
                 <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>苗字</th>
                 <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>名前</th>
                 <th style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'left' }}>利き手</th>
@@ -156,21 +191,8 @@ const PlayerBulkRegister: React.FC = () => {
             </thead>
             <tbody>
               {players.map((player, index) => {
-                const selectedTeam = getSelectedTeam(player.teamId);
                 return (
                   <tr key={index}>
-                    <td style={{ border: '1px solid #ccc', padding: '4px' }}>
-                      <select
-                        value={player.teamId}
-                        onChange={(e) => updatePlayer(index, 'teamId', e.target.value)}
-                        style={{ width: '100%', padding: '6px', boxSizing: 'border-box' }}
-                      >
-                        <option value="">チームを選択</option>
-                        {teams.map(t => (
-                          <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>
-                        ))}
-                      </select>
-                    </td>
                     <td style={{ border: '1px solid #ccc', padding: '4px' }}>
                       <input
                         value={player.familyName}
@@ -287,12 +309,14 @@ const PlayerBulkRegister: React.FC = () => {
         <Modal onClose={() => setConfirmOpen(false)}>
           <div>
             <h3>登録内容の確認</h3>
+            <p style={{ marginBottom: '8px' }}>
+              <strong>チーム:</strong> {selectedTeam ? `${selectedTeam.teamName} (${selectedTeam.teamAbbr})` : selectedTeamId}
+            </p>
             <p style={{ marginBottom: '16px' }}>以下の {pendingPlayers.length} 名の選手を登録しますか？</p>
             <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '16px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                 <thead>
                   <tr style={{ background: '#f0f0f0' }}>
-                    <th style={{ border: '1px solid #ccc', padding: '6px', textAlign: 'left' }}>チーム</th>
                     <th style={{ border: '1px solid #ccc', padding: '6px', textAlign: 'left' }}>苗字</th>
                     <th style={{ border: '1px solid #ccc', padding: '6px', textAlign: 'left' }}>名前</th>
                     <th style={{ border: '1px solid #ccc', padding: '6px', textAlign: 'left' }}>利き手</th>
@@ -302,12 +326,8 @@ const PlayerBulkRegister: React.FC = () => {
                 </thead>
                 <tbody>
                   {pendingPlayers.map((player, index) => {
-                    const team = teams.find(t => String(t.id) === String(player.teamId));
                     return (
                       <tr key={index}>
-                        <td style={{ border: '1px solid #ccc', padding: '6px' }}>
-                          {team ? `${team.teamName} (${team.teamAbbr})` : player.teamId}
-                        </td>
                         <td style={{ border: '1px solid #ccc', padding: '6px' }}>{player.familyName}</td>
                         <td style={{ border: '1px solid #ccc', padding: '6px' }}>{player.givenName}</td>
                         <td style={{ border: '1px solid #ccc', padding: '6px' }}>{player.throwing}</td>

@@ -1,5 +1,4 @@
 import React, { ReactNode } from 'react';
-import PropTypes from 'prop-types';
 
 interface Props {
   isOpen?: boolean;
@@ -56,16 +55,6 @@ const Modal: React.FC<Props> = ({ isOpen = true, onClose, children }) => {
       </div>
     </div>
   );
-};
-
-Modal.propTypes = {
-  isOpen: PropTypes.bool,
-  onClose: PropTypes.func.isRequired,
-  children: PropTypes.node.isRequired,
-};
-
-Modal.defaultProps = {
-  isOpen: true,
 };
 
 export default Modal;

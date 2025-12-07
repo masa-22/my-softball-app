@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, User } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
+import LoadingIndicator from '../components/common/LoadingIndicator';
 
 // Context の型定義
 interface AuthContextType {
@@ -71,7 +72,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <LoadingIndicator /> : children}
     </AuthContext.Provider>
   );
 };

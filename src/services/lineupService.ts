@@ -1,30 +1,8 @@
 import { Lineup, LineupEntry } from '../types/Lineup';
+import { db } from '../firebaseConfig';
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
 
-let lineups: Record<string, Lineup> = {}; // key: matchId
-
-const load = () => {
-  try {
-    const raw = localStorage.getItem('lineups');
-    if (raw) {
-      lineups = JSON.parse(raw);
-      return;
-    }
-  } catch (e) {
-    console.warn('lineups load error', e);
-  }
-  lineups = {};
-  persist();
-};
-
-const persist = () => {
-  try {
-    localStorage.setItem('lineups', JSON.stringify(lineups));
-  } catch (e) {
-    console.warn('lineups save error', e);
-  }
-};
-
-load();
+const LINEUPS_COLLECTION = 'lineups';
 
 const createEmptyLineup = (): LineupEntry[] => {
   return Array.from({ length: 10 }, (_, i) => ({
@@ -34,17 +12,35 @@ const createEmptyLineup = (): LineupEntry[] => {
   }));
 };
 
-export const getLineup = (matchId: string): Lineup => {
-  if (!lineups[matchId]) {
-    lineups[matchId] = { home: createEmptyLineup(), away: createEmptyLineup() };
-    persist();
+export const getLineup = async (matchId: string): Promise<Lineup> => {
+  try {
+    const lineupRef = doc(db, LINEUPS_COLLECTION, matchId);
+    const lineupSnap = await getDoc(lineupRef);
+    if (lineupSnap.exists()) {
+      return lineupSnap.data() as Lineup;
+    }
+    // 存在しない場合は空のラインナップを作成して保存
+    const emptyLineup: Lineup = {
+      matchId,
+      home: createEmptyLineup(),
+      away: createEmptyLineup()
+    };
+    await setDoc(lineupRef, emptyLineup);
+    return emptyLineup;
+  } catch (error) {
+    console.error('Error getting lineup:', error);
+    throw error;
   }
-  return lineups[matchId];
 };
 
-export const saveLineup = (matchId: string, lineup: Lineup): void => {
-  lineups[matchId] = lineup;
-  persist();
+export const saveLineup = async (matchId: string, lineup: Lineup): Promise<void> => {
+  try {
+    const lineupRef = doc(db, LINEUPS_COLLECTION, matchId);
+    await setDoc(lineupRef, { ...lineup, matchId });
+  } catch (error) {
+    console.error('Error saving lineup:', error);
+    throw error;
+  }
 };
 
 // ▼ 修正: participationService は動的インポート（.ts拡張子に統一し、未存在でもビルドを通す）
@@ -83,7 +79,7 @@ const ensureParticipationModule = async (): Promise<ParticipationModule | null> 
 
 // スタメン確定時の記録（存在すれば委譲）
 export const recordStartersFromLineup = async (matchId: string): Promise<void> => {
-  const lineup = getLineup(matchId);
+  const lineup = await getLineup(matchId);
   const mod = await ensureParticipationModule();
   if (mod) {
     await mod.recordStarters(matchId, lineup);
@@ -101,7 +97,7 @@ export const applySubstitutionToLineup = async (params: {
   position?: string;            // 守備が変わる場合
   note?: string;
 }): Promise<void> => {
-  const lineup = getLineup(params.matchId);
+  const lineup = await getLineup(params.matchId);
   const list = params.side === 'home' ? lineup.home : lineup.away;
   const idx = list.findIndex(e => e.battingOrder === params.battingOrder);
   if (idx === -1) return;
@@ -127,5 +123,5 @@ export const applySubstitutionToLineup = async (params: {
   // ラインナップ更新
   list[idx].playerId = params.inPlayerId;
   if (params.position) list[idx].position = params.position;
-  saveLineup(params.matchId, lineup);
+  await saveLineup(params.matchId, lineup);
 };

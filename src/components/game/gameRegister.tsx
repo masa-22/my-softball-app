@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
-import { ensureGameCreated, type GameCreateInput } from '../../services/gameService';
+import { ensureGameCreated } from '../../services/gameService';
+import { type GameCreateInput } from '../../types/Game';
 import Modal from '../common/Modal';
 
 const MatchRegister: React.FC = () => {
@@ -23,8 +24,20 @@ const MatchRegister: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setTournaments(getTournaments());
-    setTeams(getTeams());
+    const loadData = async () => {
+      try {
+        const tournamentsData = await getTournaments();
+        const teamsData = await getTeams();
+        setTournaments(tournamentsData);
+        setTeams(teamsData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setTournaments([]);
+        setTeams([]);
+      }
+    };
+    
+    loadData();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -57,9 +70,11 @@ const MatchRegister: React.FC = () => {
       const awayId = String(pending.awayTeamId);
       const gameId = `g_${tid}_${dateStr}_${homeId}_${awayId}`;
 
-      const tObj = getTournaments().find(t => String(t.id) === String(pending.tournamentId));
-      const home = getTeams().find(t => String(t.id) === String(pending.homeTeamId));
-      const away = getTeams().find(t => String(t.id) === String(pending.awayTeamId));
+      const tournamentsData = await getTournaments();
+      const teamsData = await getTeams();
+      const tObj = tournamentsData.find(t => String(t.id) === String(pending.tournamentId));
+      const home = teamsData.find(t => String(t.id) === String(pending.homeTeamId));
+      const away = teamsData.find(t => String(t.id) === String(pending.awayTeamId));
 
       const input: GameCreateInput = {
         gameId,
@@ -74,7 +89,7 @@ const MatchRegister: React.FC = () => {
         bottomTeamShortName: away ? away.teamAbbr : '',
       };
 
-      const g = ensureGameCreated(input);
+      const g = await ensureGameCreated(input);
 
       setMessage(`試合を登録しました（Game ID: ${g.gameId}）`);
       setTournamentId('');
@@ -109,7 +124,7 @@ const MatchRegister: React.FC = () => {
         <div style={{ marginBottom:12 }}>
           <label>所属大会</label>
           <select value={tournamentId} onChange={(e)=>setTournamentId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
-            <option value="">大会を選択</option>
+            <option key="tournament-default" value="">大会を選択</option>
             {tournaments.map(t => <option key={t.id} value={t.id}>{t.year} {t.name}</option>)}
           </select>
         </div>
@@ -128,14 +143,14 @@ const MatchRegister: React.FC = () => {
           <div style={{ flex:1 }}>
             <label>先攻チーム</label>
             <select value={homeTeamId} onChange={(e)=>setHomeTeamId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
-              <option value="">先攻を選択</option>
+              <option key="home-team-default" value="">先攻を選択</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>)}
             </select>
           </div>
           <div style={{ flex:1 }}>
             <label>後攻チーム</label>
             <select value={awayTeamId} onChange={(e)=>setAwayTeamId(e.target.value)} style={{ width:'100%', padding:8, boxSizing: 'border-box' }}>
-              <option value="">後攻を選択</option>
+              <option key="away-team-default" value="">後攻を選択</option>
               {teams.map(t => <option key={t.id} value={t.id}>{t.teamName} ({t.teamAbbr})</option>)}
             </select>
           </div>

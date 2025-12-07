@@ -141,7 +141,7 @@ export const useRunnerManager = ({
     setPendingOuts([]);
   };
 
-  const handleRunnerAdvanceConfirm = (results: AdvanceReasonResult[]) => {
+  const handleRunnerAdvanceConfirm = async (results: AdvanceReasonResult[]) => {
     const advs = [...pendingAdvancements];
     const next = { ...previousRunners };
     advs.forEach(adv => {
@@ -170,7 +170,8 @@ export const useRunnerManager = ({
     // 得点加算
     const scoredCount = advs.filter(a => a.toBase === 'home').length;
     if (scoredCount > 0) {
-      const half = getGameState(matchId!)?.top_bottom || 'top';
+      const gs = await getGameState(matchId!);
+      const half = gs?.top_bottom || 'top';
       addRunsRealtime(matchId!, half, scoredCount);
     }
 
@@ -178,10 +179,9 @@ export const useRunnerManager = ({
     setRunners(next);
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
-    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
   };
 
-  const handleRunnerOutConfirm = (results: OutReasonResult[]) => {
+  const handleRunnerOutConfirm = async (results: OutReasonResult[]) => {
     const outs = [...pendingOuts];
     const next = { ...previousRunners };
     outs.forEach(out => {
@@ -192,7 +192,7 @@ export const useRunnerManager = ({
     updateRunnersRealtime(matchId!, { '1b': next['1'], '2b': next['2'], '3b': next['3'] });
 
     // アウト更新とイニング進行
-    const gs = getGameState(matchId!);
+    const gs = await getGameState(matchId!);
     const currentO = gs?.counts.o ?? 0;
     const addO = outs.length;
     const newO = Math.min(3, currentO + addO);
@@ -231,7 +231,6 @@ export const useRunnerManager = ({
     setRunners(next);
     setShowOutDialog(false);
     setPendingOuts([]);
-    try { window.dispatchEvent(new Event('game_states_updated')); } catch {}
   };
 
   const handleAddOutClick = () => setShowAddOutDialog(true);

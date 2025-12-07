@@ -11,10 +11,15 @@ export interface GameState {
   scores: {
     top_total: number;
     bottom_total: number;
-    innings: Record<string, { top: number | null; bottom: number | null }>;
+    innings: Record<string, { 
+      top: number | null; 
+      bottom: number | null;
+      leftOnBase?: { top: number; bottom: number };
+    }>;
   };
   last_updated: string;
 }
+
 
 
 

@@ -17,8 +17,20 @@ const MatchSearch: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    setTournaments(getTournaments());
-    setTeams(getTeams());
+    const loadData = async () => {
+      try {
+        const tournamentsData = await getTournaments();
+        const teamsData = await getTeams();
+        setTournaments(tournamentsData);
+        setTeams(teamsData);
+      } catch (error) {
+        console.error('Error loading data:', error);
+        setTournaments([]);
+        setTeams([]);
+      }
+    };
+    
+    loadData();
   }, []);
 
   const handleSearch = async (e?: React.FormEvent) => {
@@ -26,7 +38,7 @@ const MatchSearch: React.FC = () => {
     try {
       setError('');
       setLoading(true);
-      const allGames = getGames();
+      const allGames = await getGames();
       const teamNameQ = (teamName || '').trim().toLowerCase();
       const filtered = allGames.filter(g => {
         const okTournament = tournamentId ? String(g.tournament.id) === String(tournamentId) : true;
@@ -60,13 +72,20 @@ const MatchSearch: React.FC = () => {
   const findTournament = (id: string) => tournaments.find(t => String(t.id) === String(id));
   const findTeam = (id: string | number) => teams.find(t => String(t.id) === String(id));
 
-  const handleMatchClick = (gameId: string) => {
-    const lineup = getLineup(gameId);
-    const isHomeComplete = lineup.home.every(e => e.position && e.playerId);
-    const isAwayComplete = lineup.away.every(e => e.position && e.playerId);
-    if (isHomeComplete && isAwayComplete) {
-      navigate(`/game/${gameId}/play`);
-    } else {
+  const handleMatchClick = async (gameId: string) => {
+    try {
+      const lineup = await getLineup(gameId);
+      const isHomeComplete = lineup.home.every(e => e.position && e.playerId);
+      const isAwayComplete = lineup.away.every(e => e.position && e.playerId);
+      if (isHomeComplete && isAwayComplete) {
+        navigate(`/game/${gameId}/play`);
+      } else {
+        navigate(`/game/${gameId}/lineup`);
+      }
+    } catch (err) {
+      console.error('Error loading lineup:', err);
+      setError('ラインナップの読み込みに失敗しました。');
+      // エラーが発生してもスタメン入力画面に遷移
       navigate(`/game/${gameId}/lineup`);
     }
   };

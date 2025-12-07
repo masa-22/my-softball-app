@@ -13,17 +13,25 @@ const TeamPlayerList: React.FC<TeamPlayerListProps> = ({ teamId, onClose }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadData = () => {
-      const teamData = getTeams().find(t => String(t.id) === String(teamId));
-      setTeam(teamData || null);
-      
-      const playerList = getPlayers(teamId);
-      setPlayers(playerList.sort((a, b) => {
-        const nameA = `${a.familyName || ''} ${a.givenName || ''}`.trim();
-        const nameB = `${b.familyName || ''} ${b.givenName || ''}`.trim();
-        return nameA.localeCompare(nameB);
-      }));
-      setLoading(false);
+    const loadData = async () => {
+      try {
+        const teamsData = await getTeams();
+        const teamData = teamsData.find(t => String(t.id) === String(teamId));
+        setTeam(teamData || null);
+        
+        const playerList = await getPlayers(teamId);
+        setPlayers(playerList.sort((a, b) => {
+          const nameA = `${a.familyName || ''} ${a.givenName || ''}`.trim();
+          const nameB = `${b.familyName || ''} ${b.givenName || ''}`.trim();
+          return nameA.localeCompare(nameB);
+        }));
+      } catch (error) {
+        console.error('Error loading team and players:', error);
+        setTeam(null);
+        setPlayers([]);
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadData();

@@ -3,6 +3,7 @@ import { getGame } from '../services/gameService';
 import { getGameState } from '../services/gameStateService';
 import { getPlayers } from '../services/playerService';
 import { getAtBats } from '../services/atBatService';
+import { useAtBats } from './useAtBats';
 import { getLineup } from '../services/lineupService';
 import { getWinningPitcher } from '../services/winningPitcherService';
 import { BATTING_RESULTS } from '../data/softball/battingResults';
@@ -146,7 +147,7 @@ const calculatePitcherStats = (
   playerId: string,
   atBats: AtBat[],
   side: Side,
-  gameState: ReturnType<typeof getGameState> | null
+  gameState: Awaited<ReturnType<typeof getGameState>> | null
 ): PitcherStats => {
   const stats: PitcherStats = {
     winLoss: '-',
@@ -264,7 +265,7 @@ const calculatePitcherStats = (
 const getStartingPitcher = (
   side: Side,
   atBats: AtBat[],
-  lineup: ReturnType<typeof getLineup> | null
+  lineup: Awaited<ReturnType<typeof getLineup>> | null
 ): string | null => {
   // lineupから先発投手を取得（position === '1'）
   if (lineup) {
@@ -336,7 +337,7 @@ const getPitcherChanges = (
 const getScoreAtAtBat = (
   atBatIndex: number,
   atBats: AtBat[],
-  gameState: ReturnType<typeof getGameState> | null
+  gameState: Awaited<ReturnType<typeof getGameState>> | null
 ): { home: number; away: number } => {
   let homeScore = 0;
   let awayScore = 0;
@@ -360,8 +361,8 @@ const getScoreAtAtBat = (
 const determineWinningPitcher = (
   side: Side,
   atBats: AtBat[],
-  gameState: ReturnType<typeof getGameState> | null,
-  lineup: ReturnType<typeof getLineup> | null,
+  gameState: Awaited<ReturnType<typeof getGameState>> | null,
+  lineup: Awaited<ReturnType<typeof getLineup>> | null,
   allPitchers: string[]
 ): string | null => {
   if (!gameState || gameState.status !== 'finished') return null;
@@ -455,7 +456,7 @@ const determineWinningPitcher = (
 const determineLosingPitcher = (
   side: Side,
   atBats: AtBat[],
-  gameState: ReturnType<typeof getGameState> | null
+  gameState: Awaited<ReturnType<typeof getGameState>> | null
 ): string | null => {
   if (!gameState || gameState.status !== 'finished') return null;
 
@@ -548,7 +549,7 @@ const determineLosingPitcher = (
   return null;
 };
 
-const buildPitcherRowsForSide = ({
+const buildPitcherRowsForSide = async ({
   side,
   players,
   atBats,
@@ -559,10 +560,10 @@ const buildPitcherRowsForSide = ({
   side: Side;
   players: Player[];
   atBats: AtBat[];
-  gameState: ReturnType<typeof getGameState> | null;
-  lineup: ReturnType<typeof getLineup> | null;
+  gameState: Awaited<ReturnType<typeof getGameState>> | null;
+  lineup: Awaited<ReturnType<typeof getLineup>> | null;
   matchId: string;
-}): PitcherStatsRowData[] => {
+}): Promise<PitcherStatsRowData[]> => {
   const rows: PitcherStatsRowData[] = [];
   const pitchersSet = new Set<string>();
 
@@ -587,9 +588,13 @@ const buildPitcherRowsForSide = ({
   
   // 条件3の場合、既に選択されている勝利投手を取得
   if (!winningPitcher && gameState?.status === 'finished') {
-    const savedWinningPitcher = getWinningPitcher(matchId, side);
-    if (savedWinningPitcher && allPitcherIds.includes(savedWinningPitcher)) {
-      winningPitcher = savedWinningPitcher;
+    try {
+      const savedWinningPitcher = await getWinningPitcher(matchId, side);
+      if (savedWinningPitcher && allPitcherIds.includes(savedWinningPitcher)) {
+        winningPitcher = savedWinningPitcher;
+      }
+    } catch (error) {
+      console.error('Error getting winning pitcher:', error);
     }
   }
   
@@ -645,20 +650,26 @@ const buildPitcherRowsForSide = ({
   return rows;
 };
 
-const buildPitcherStatsData = (matchId: string): PitcherStatsData | null => {
-  const game = getGame(matchId);
-  if (!game) return null;
+const buildPitcherStatsData = async (matchId: string, atBats: AtBat[]): Promise<PitcherStatsData | null> => {
+  const game = await getGame(matchId);
+  if (!game || !game.topTeam || !game.bottomTeam) return null;
 
-  const gameState = getGameState(matchId);
-  const atBats = getAtBats(matchId);
-  const lineup = getLineup(matchId);
-  const homePlayers = getPlayers(game.topTeam.id);
-  const awayPlayers = getPlayers(game.bottomTeam.id);
+  let gameState = null;
+  try {
+    gameState = await getGameState(matchId);
+  } catch (error) {
+    console.warn('Error getting game state (may be permission issue):', error);
+    // gameStateが取得できない場合でも続行
+  }
+
+  const lineup = await getLineup(matchId);
+  const homePlayers = await getPlayers(game.topTeam.id);
+  const awayPlayers = await getPlayers(game.bottomTeam.id);
 
   const homeTeam: PitcherStatsTeamData = {
     teamName: game.topTeam.name,
     side: 'home',
-    rows: buildPitcherRowsForSide({
+    rows: await buildPitcherRowsForSide({
       side: 'home',
       players: homePlayers,
       atBats,
@@ -671,7 +682,7 @@ const buildPitcherStatsData = (matchId: string): PitcherStatsData | null => {
   const awayTeam: PitcherStatsTeamData = {
     teamName: game.bottomTeam.name,
     side: 'away',
-    rows: buildPitcherRowsForSide({
+    rows: await buildPitcherRowsForSide({
       side: 'away',
       players: awayPlayers,
       atBats,
@@ -687,19 +698,25 @@ const buildPitcherStatsData = (matchId: string): PitcherStatsData | null => {
 export const usePitcherStatsData = (matchId?: string) => {
   const [data, setData] = useState<PitcherStatsData | null>(null);
   const [loading, setLoading] = useState(false);
+  const atBats = useAtBats(matchId);
 
   const loadData = useCallback(
-    (options?: { silent?: boolean }) => {
+    async (options?: { silent?: boolean; atBats?: AtBat[] }) => {
       if (!matchId) {
         setData(null);
         setLoading(false);
+        return;
+      }
+      const currentAtBats = options?.atBats ?? atBats;
+      if (currentAtBats.length === 0) {
+        // atBatsがまだ取得されていない場合は待機
         return;
       }
       if (!options?.silent) {
         setLoading(true);
       }
       try {
-        const next = buildPitcherStatsData(matchId);
+        const next = await buildPitcherStatsData(matchId, currentAtBats);
         setData(next);
       } catch (error) {
         console.warn('pitcher stats load error', error);
@@ -709,28 +726,15 @@ export const usePitcherStatsData = (matchId?: string) => {
         }
       }
     },
-    [matchId]
+    [matchId, atBats]
   );
 
+  // atBatsが変更されたときに統計データを再計算
   useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  useEffect(() => {
-    if (!matchId) return;
-    const interval = setInterval(() => loadData({ silent: true }), 1500);
-    const onStorage = (event: StorageEvent) => {
-      if (!event.key) return;
-      if (['softball_app_at_bats', 'game_states'].includes(event.key)) {
-        loadData({ silent: true });
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, [matchId, loadData]);
+    if (atBats.length > 0) {
+      loadData({ silent: true, atBats });
+    }
+  }, [atBats, loadData]);
 
   const refresh = useCallback(() => loadData(), [loadData]);
 
@@ -738,12 +742,12 @@ export const usePitcherStatsData = (matchId?: string) => {
 };
 
 // 条件3の場合に使用する、登板した投手のリストを取得
-export const getPitchersForSelection = (matchId: string, side: Side): Array<{ playerId: string; player: Player | undefined }> => {
-  const game = getGame(matchId);
-  if (!game) return [];
+export const getPitchersForSelection = async (matchId: string, side: Side): Promise<Array<{ playerId: string; player: Player | undefined }>> => {
+  const game = await getGame(matchId);
+  if (!game || !game.topTeam || !game.bottomTeam) return [];
 
-  const atBats = getAtBats(matchId);
-  const players = side === 'home' ? getPlayers(game.topTeam.id) : getPlayers(game.bottomTeam.id);
+  const atBats = await getAtBats(matchId);
+  const players = side === 'home' ? await getPlayers(game.topTeam.id) : await getPlayers(game.bottomTeam.id);
   const pitchersSet = new Set<string>();
 
   atBats.forEach((atBat) => {

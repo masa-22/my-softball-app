@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { getPendingUsers, getAllUsers, approveUser, UserApproval } from '../../services/userApprovalService';
+import { getPendingUsers, getAllUsers, approveUser, updateUserRole, UserApproval, type UserRole } from '../../services/userApprovalService';
 import LoadingIndicator from '../common/LoadingIndicator';
 
 const UserApprovalManagement: React.FC = () => {
@@ -35,7 +35,7 @@ const UserApprovalManagement: React.FC = () => {
     }
   };
 
-  const handleApprove = async (userId: string) => {
+  const handleApprove = async (userId: string, role: UserRole = 'viewer') => {
     if (!currentUser) {
       setError('ログインが必要です。');
       return;
@@ -44,12 +44,43 @@ const UserApprovalManagement: React.FC = () => {
     try {
       setError('');
       setMessage('');
-      await approveUser(userId, currentUser.uid);
-      setMessage(`ユーザー（${userId}）を承認しました。`);
+      await approveUser(userId, currentUser.uid, role);
+      setMessage(`ユーザーを承認しました（役割: ${getRoleLabel(role)}）。`);
       await loadUsers();
     } catch (err: any) {
       console.error(err);
       setError('承認処理に失敗しました。');
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, role: UserRole) => {
+    if (!currentUser) {
+      setError('ログインが必要です。');
+      return;
+    }
+
+    try {
+      setError('');
+      setMessage('');
+      await updateUserRole(userId, role, currentUser.uid);
+      setMessage(`ユーザーの役割を更新しました（役割: ${getRoleLabel(role)}）。`);
+      await loadUsers();
+    } catch (err: any) {
+      console.error(err);
+      setError('役割の更新に失敗しました。');
+    }
+  };
+
+  const getRoleLabel = (role?: UserRole): string => {
+    switch (role) {
+      case 'admin':
+        return '管理者';
+      case 'editor':
+        return '編集者';
+      case 'viewer':
+        return '閲覧者';
+      default:
+        return '未設定';
     }
   };
 
@@ -113,6 +144,7 @@ const UserApprovalManagement: React.FC = () => {
                   <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>メールアドレス</th>
                   <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>登録日時</th>
                   <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>承認状態</th>
+                  <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>役割</th>
                   {activeTab === 'pending' && (
                     <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'center' }}>操作</th>
                   )}
@@ -120,6 +152,7 @@ const UserApprovalManagement: React.FC = () => {
                     <>
                       <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>承認日時</th>
                       <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'left' }}>承認者</th>
+                      <th style={{ border: '1px solid #ccc', padding: '10px', textAlign: 'center' }}>操作</th>
                     </>
                   )}
                 </tr>
@@ -146,23 +179,63 @@ const UserApprovalManagement: React.FC = () => {
                         {user.approved ? '承認済み' : '承認待ち'}
                       </span>
                     </td>
-                    {activeTab === 'pending' && (
-                      <td style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => handleApprove(user.userId)}
+                    <td style={{ border: '1px solid #ccc', padding: '8px' }}>
+                      {user.approved ? (
+                        <select
+                          value={user.role || 'viewer'}
+                          onChange={(e) => handleUpdateRole(user.userId, e.target.value as UserRole)}
                           style={{
-                            padding: '6px 12px',
-                            background: '#27ae60',
-                            color: '#fff',
-                            border: 'none',
+                            padding: '4px 8px',
                             borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            fontSize: '13px'
+                            border: '1px solid #ccc',
+                            fontSize: '13px',
+                            cursor: 'pointer'
                           }}
                         >
-                          承認
-                        </button>
+                          <option value="viewer">閲覧者</option>
+                          <option value="editor">編集者</option>
+                          <option value="admin">管理者</option>
+                        </select>
+                      ) : (
+                        <span style={{ color: '#999', fontSize: '13px' }}>—</span>
+                      )}
+                    </td>
+                    {activeTab === 'pending' && (
+                      <td style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <select
+                            id={`role-${user.userId}`}
+                            defaultValue="viewer"
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #ccc',
+                              fontSize: '13px'
+                            }}
+                          >
+                            <option value="viewer">閲覧者</option>
+                            <option value="editor">編集者</option>
+                            <option value="admin">管理者</option>
+                          </select>
+                          <button
+                            onClick={() => {
+                              const roleSelect = document.getElementById(`role-${user.userId}`) as HTMLSelectElement;
+                              handleApprove(user.userId, roleSelect.value as UserRole);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#27ae60',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 'bold',
+                              fontSize: '13px'
+                            }}
+                          >
+                            承認
+                          </button>
+                        </div>
                       </td>
                     )}
                     {activeTab === 'all' && (
@@ -172,6 +245,18 @@ const UserApprovalManagement: React.FC = () => {
                         </td>
                         <td style={{ border: '1px solid #ccc', padding: '8px', fontSize: '13px', color: '#666' }}>
                           {user.approvedBy || '—'}
+                        </td>
+                        <td style={{ border: '1px solid #ccc', padding: '8px', textAlign: 'center' }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: user.role === 'admin' ? '#f39c12' : user.role === 'editor' ? '#3498db' : '#95a5a6',
+                            color: '#fff',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}>
+                            {getRoleLabel(user.role)}
+                          </span>
                         </td>
                       </>
                     )}

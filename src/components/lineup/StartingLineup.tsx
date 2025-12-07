@@ -27,28 +27,47 @@ const StartingLineup: React.FC = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!matchId) return;
-    // games から取得
-    const g = getGame(matchId);
-    if (!g) {
-      setError('試合が見つかりません。');
-      return;
-    }
-    setGame(g);
+    const loadData = async () => {
+      if (!matchId) {
+        setError('試合IDが指定されていません。');
+        return;
+      }
+      try {
+        setError('');
+        // games から取得
+        const g = await getGame(matchId);
+        if (!g) {
+          setError(`試合が見つかりません。試合ID: ${matchId}`);
+          return;
+        }
+        setGame(g);
 
-    const teams = getTeams();
-    // 先攻 = top, 後攻 = bottom
-    const home = teams.find(t => String(t.id) === String(g.topTeam.id));
-    const away = teams.find(t => String(t.id) === String(g.bottomTeam.id));
-    setHomeTeam(home);
-    setAwayTeam(away);
+        const teamsData = await getTeams();
+        // 先攻 = top, 後攻 = bottom
+        const home = teamsData.find(t => String(t.id) === String(g.topTeam.id));
+        const away = teamsData.find(t => String(t.id) === String(g.bottomTeam.id));
+        setHomeTeam(home || null);
+        setAwayTeam(away || null);
 
-    if (home) setHomePlayers(getPlayers(home.id));
-    if (away) setAwayPlayers(getPlayers(away.id));
+        if (home) {
+          const homePlayersData = await getPlayers(home.id);
+          setHomePlayers(homePlayersData);
+        }
+        if (away) {
+          const awayPlayersData = await getPlayers(away.id);
+          setAwayPlayers(awayPlayersData);
+        }
 
-    const lineup = getLineup(matchId);
-    setHomeLineup(lineup.home);
-    setAwayLineup(lineup.away);
+        const lineup = await getLineup(matchId);
+        setHomeLineup(lineup.home);
+        setAwayLineup(lineup.away);
+      } catch (err: any) {
+        console.error('Error loading lineup data:', err);
+        setError(`データの読み込みに失敗しました: ${err.message || '不明なエラー'}`);
+      }
+    };
+    
+    loadData();
   }, [matchId]);
 
   const handlePositionChange = (side: 'home' | 'away', index: number, value: string) => {
@@ -70,6 +89,15 @@ const StartingLineup: React.FC = () => {
     const used = new Set<string>();
     target.forEach(entry => {
       if (entry.position) used.add(entry.position);
+    });
+    return used;
+  };
+
+  const getUsedPlayers = (side: 'home' | 'away'): Set<string> => {
+    const target = side === 'home' ? homeLineup : awayLineup;
+    const used = new Set<string>();
+    target.forEach(entry => {
+      if (entry.playerId) used.add(entry.playerId);
     });
     return used;
   };
@@ -104,7 +132,7 @@ const StartingLineup: React.FC = () => {
     return <div style={{ padding: 20 }}>{error || '読み込み中...'}</div>;
   }
 
-  const renderLineupTable = (side: 'home' | 'away', lineup: any[], players: any[], usedPositions: Set<string>) => {
+  const renderLineupTable = (side: 'home' | 'away', lineup: any[], players: any[], usedPositions: Set<string>, usedPlayers: Set<string>) => {
     return (
       <div style={{ width: '100%', overflowX: 'auto' }}>
         <table style={{ width: '100%', minWidth: 320, borderCollapse: 'collapse', border: '1px solid #ccc' }}>
@@ -145,11 +173,14 @@ const StartingLineup: React.FC = () => {
                       style={{ width: '100%', padding: 4, boxSizing: 'border-box' }}
                     >
                       <option value="">選択</option>
-                      {players.map(p => (
-                        <option key={p.playerId} value={p.playerId}>
-                          {p.familyName} {p.givenName}
-                        </option>
-                      ))}
+                      {players.map(p => {
+                        const isUsed = usedPlayers.has(p.playerId) && p.playerId !== entry.playerId;
+                        return (
+                          <option key={p.playerId} value={p.playerId} disabled={isUsed}>
+                            {p.familyName} {p.givenName}
+                          </option>
+                        );
+                      })}
                     </select>
                   </td>
                 </tr>
@@ -207,8 +238,10 @@ const StartingLineup: React.FC = () => {
     );
   };
 
-  const homeUsed = getUsedPositions('home');
-  const awayUsed = getUsedPositions('away');
+  const homeUsedPositions = getUsedPositions('home');
+  const awayUsedPositions = getUsedPositions('away');
+  const homeUsedPlayers = getUsedPlayers('home');
+  const awayUsedPlayers = getUsedPlayers('away');
 
   return (
     <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', padding: 20, boxSizing: 'border-box' }}>
@@ -225,14 +258,14 @@ const StartingLineup: React.FC = () => {
           <h2 style={{ textAlign: 'center' }}>
             {awayTeam ? `${awayTeam.teamName} (後攻)` : '後攻チーム'}
           </h2>
-          {renderLineupTable('away', awayLineup, awayPlayers, awayUsed)}
+          {renderLineupTable('away', awayLineup, awayPlayers, awayUsedPositions, awayUsedPlayers)}
         </div>
 
         <div style={{ flex: '1 1 320px', minWidth: 0 }}>
           <h2 style={{ textAlign: 'center' }}>
             {homeTeam ? `${homeTeam.teamName} (先攻)` : '先攻チーム'}
           </h2>
-          {renderLineupTable('home', homeLineup, homePlayers, homeUsed)}
+          {renderLineupTable('home', homeLineup, homePlayers, homeUsedPositions, homeUsedPlayers)}
         </div>
       </div>
 

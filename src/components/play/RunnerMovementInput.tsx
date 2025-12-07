@@ -382,6 +382,18 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       return after;
     }
 
+    // ゴロアウトの場合、打者走者を1塁に、その他ランナーを1塁だけ進塁
+    if (battingResult === 'groundout' && batterId) {
+      const after = { ...initialRunners };
+      // 打者走者を1塁に配置
+      after['1'] = batterId;
+      // 既存ランナーを1塁だけ進塁
+      if (initialRunners['1']) after['2'] = initialRunners['1'];
+      if (initialRunners['2']) after['3'] = initialRunners['2'];
+      // 3塁ランナーはそのまま（ホームインしない）
+      return after;
+    }
+
     // エラー・四死球の場合の特別ルール（押し出しのみ進塁）
     if (battingResult === 'error' || battingResult === 'walk' || battingResult === 'deadball') {
       if (!batterId) return { ...initialRunners };
@@ -430,6 +442,11 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     if (presetOutsAfter != null) {
       return Math.max(initialOuts, Math.min(3, presetOutsAfter));
     }
+    // presetOutsAfterがnullの場合でも、アウト結果に基づいて自動的に設定
+    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
+    if (isOut) {
+      return Math.min(3, initialOuts + 1);
+    }
     return initialOuts;
   });
   
@@ -452,9 +469,23 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
     return [];
   });
 
-  const offensePlayers = useMemo(() => {
-    if (offenseTeamId == null) return [];
-    return getPlayers(offenseTeamId);
+  const [offensePlayers, setOffensePlayers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (offenseTeamId == null) {
+      setOffensePlayers([]);
+      return;
+    }
+    const loadPlayers = async () => {
+      try {
+        const players = await getPlayers(offenseTeamId);
+        setOffensePlayers(players);
+      } catch (error) {
+        console.error('Error loading players:', error);
+        setOffensePlayers([]);
+      }
+    };
+    loadPlayers();
   }, [offenseTeamId]);
 
   const currentBatter = useMemo(() => {

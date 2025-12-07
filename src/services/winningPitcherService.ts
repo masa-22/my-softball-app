@@ -1,41 +1,38 @@
-const STORAGE_KEY = 'softball_app_winning_pitchers';
+import { db } from '../firebaseConfig';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-type WinningPitchersByMatch = Record<string, { home?: string; away?: string }>;
+const WINNING_PITCHERS_COLLECTION = 'winningPitchers';
 
-let winningPitchersByMatch: WinningPitchersByMatch = {};
+type WinningPitchersData = { home?: string; away?: string };
 
-const load = () => {
+export const getWinningPitcher = async (matchId: string, side: 'home' | 'away'): Promise<string | null> => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      winningPitchersByMatch = JSON.parse(raw);
-      return;
+    const pitcherRef = doc(db, WINNING_PITCHERS_COLLECTION, matchId);
+    const pitcherSnap = await getDoc(pitcherRef);
+    if (pitcherSnap.exists()) {
+      const data = pitcherSnap.data() as WinningPitchersData;
+      return data[side] || null;
     }
-  } catch (e) {
-    console.warn('winning_pitchers load error', e);
+    return null;
+  } catch (error) {
+    console.error('Error getting winning pitcher:', error);
+    throw error;
   }
-  winningPitchersByMatch = {};
 };
 
-const persist = () => {
+export const setWinningPitcher = async (matchId: string, side: 'home' | 'away', pitcherId: string): Promise<void> => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(winningPitchersByMatch));
-  } catch (e) {
-    console.warn('winning_pitchers save error', e);
+    const pitcherRef = doc(db, WINNING_PITCHERS_COLLECTION, matchId);
+    const pitcherSnap = await getDoc(pitcherRef);
+    if (pitcherSnap.exists()) {
+      await updateDoc(pitcherRef, { [side]: pitcherId });
+    } else {
+      const data: WinningPitchersData = { [side]: pitcherId };
+      await setDoc(pitcherRef, data);
+    }
+  } catch (error) {
+    console.error('Error setting winning pitcher:', error);
+    throw error;
   }
-};
-
-load();
-
-export const getWinningPitcher = (matchId: string, side: 'home' | 'away'): string | null => {
-  return winningPitchersByMatch[matchId]?.[side] || null;
-};
-
-export const setWinningPitcher = (matchId: string, side: 'home' | 'away', pitcherId: string): void => {
-  if (!winningPitchersByMatch[matchId]) {
-    winningPitchersByMatch[matchId] = {};
-  }
-  winningPitchersByMatch[matchId][side] = pitcherId;
-  persist();
 };
 
