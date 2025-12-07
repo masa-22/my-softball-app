@@ -167,9 +167,16 @@ export const useGameProcessor = ({
         clearRunnerEvents();
         // -----------------------
 
+        // ランナー配置更新（三振の場合はランナーは動かないが、残塁計算のために明示的に更新）
+        await updateRunnersRealtime(matchId, {
+          '1b': runners['1'],
+          '2b': runners['2'],
+          '3b': runners['3'],
+        });
+
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
-          closeHalfInningRealtime(matchId);
+          await closeHalfInningRealtime(matchId);
           setRunners({ '1': null, '2': null, '3': null });
         }
     } 

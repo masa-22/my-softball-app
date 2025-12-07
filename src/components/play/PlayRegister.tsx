@@ -342,6 +342,22 @@ const PlayRegister: React.FC = () => {
 
     // ランナーなしアウト -> 簡易処理
     const isStrikeout = battingResult.startsWith('strikeout');
+    
+    // 2アウトでの三振はRunnerMovementに移らず、自動的にアウトを加算（捕手に刺殺）
+    if (currentBSO.o === 2 && isStrikeout) {
+      // 三振は捕手に刺殺が記録される（useGameProcessorで処理）
+      processPlayResult({
+        movementResult: undefined,
+        pendingOutcome: { kind: 'strikeout' },
+        strikeoutType,
+        battingResultForMovement: '',
+        playDetailsForMovement: { position: '', batType: '', outfieldDirection: '' },
+      }, 
+      resetUI, // onComplete
+      resetUI  // onCancel
+      );
+      return;
+    }
     // ランナーがいない場合の三振はRunnerMovementに移さず、直接処理する
     if (!hasRunners && isStrikeout) {
         // 三振は捕手に刺殺が記録される（useGameProcessorで処理）
