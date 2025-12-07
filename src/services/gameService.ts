@@ -14,6 +14,7 @@ import {
 } from '../types/Game';
 import { db } from '../firebaseConfig';
 import { collection, doc, getDoc, setDoc, updateDoc, getDocs, query } from 'firebase/firestore';
+import { warnBeforeWrite } from '../utils/devWarning';
 
 // 動的データは完全委譲
 import {
@@ -86,6 +87,9 @@ export const createGame = async (data: {
   bottomTeamShortName: string;
 }): Promise<Game> => {
   try {
+    // 開発モードで本番データへの書き込み警告
+    warnBeforeWrite('ゲーム作成', GAMES_COLLECTION, data.gameId);
+    
     const game: Game = {
       gameId: data.gameId,
       date: data.date,
@@ -110,6 +114,9 @@ export const createGame = async (data: {
  */
 export const updateGame = async (gameId: string, updates: Partial<Game>): Promise<Game | null> => {
   try {
+    // 開発モードで本番データへの書き込み警告
+    warnBeforeWrite('ゲーム更新', GAMES_COLLECTION, gameId);
+    
     const gameRef = doc(db, GAMES_COLLECTION, gameId);
     const gameSnap = await getDoc(gameRef);
     if (!gameSnap.exists()) {

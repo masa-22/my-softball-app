@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
+import { logConnectionStatus } from "./utils/devWarning";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCig0k-trclZCICTCbN-sX45MzRZrKdA20",
@@ -85,4 +86,6 @@ if (useEmulator) {
   }
 } else {
   console.log('🌐 Using production Firebase (emulator disabled)');
+  // 開発モードで本番Firebaseに接続している場合の警告を表示
+  logConnectionStatus();
 }

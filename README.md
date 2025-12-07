@@ -1,5 +1,29 @@
 # 成績集計システム
-## 開発理念・背景
+
+## 目次
+
+- [プロジェクト概要](#プロジェクト概要)
+  - [開発理念・背景](#開発理念背景)
+  - [実現したいこと](#実現したいこと)
+  - [実現環境について](#実現環境について)
+- [クイックスタート](#クイックスタート)
+  - [前提条件](#前提条件)
+  - [ローカル開発環境のセットアップ](#ローカル開発環境のセットアップ)
+- [Firebase デプロイ手順](#firebase-デプロイ手順)
+  - [本番環境へのデプロイ](#本番環境へのデプロイ)
+- [管理者登録・ユーザー管理](#管理者登録ユーザー管理)
+  - [一人目の管理者を登録する手順](#一人目の管理者を登録する手順)
+  - [既存の管理者による追加ユーザーの承認](#既存の管理者による追加ユーザーの承認)
+  - [ユーザーの役割について](#ユーザーの役割について)
+- [テスト手順](#テスト手順)
+- [開発・デプロイフロー](#開発デプロイフロー)
+- [技術スタック](#技術スタック)
+
+---
+
+## プロジェクト概要
+
+### 開発理念・背景
 
 ### 開発理念
 
@@ -28,48 +52,36 @@
 
 - データベース内のデータから**自動で成績を算出・取得**する機能を実現
 - 将来的には**AI問い合わせ型**で成績分析・検索ができるようにする
----
-# 実現環境について
-## 開発環境
+
+### 実現環境について
+
+#### 開発環境
 - 当初はレンタルサーバー上での開発予定であったが、ログインの融通性や今後の拡張性から**Firebase**での開発に切り替えた
 - **Firebase**はnoSQL形式でデータを管理するため、そこが難しい
-## 使っている技術？
-- フロントエンドは**React**を用いて開発を行う
----
-## 完成予定
+#### 使用技術
+
+- **フロントエンド**: React + Vite
+- **バックエンド**: Firebase (Firestore, Authentication, Hosting)
+- **開発言語**: TypeScript（推奨）
+
+#### 完成予定
 
 - **2026年シーズン開始時**から本格活用を目指す
 - 理想は **2026年2月初旬完成**
 - **2025年内に入力部は完成させる！！**
 
-# React + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
 ---
 
-# Firebase デプロイ手順
+## クイックスタート
 
-## 前提条件
+### 前提条件
 
+- Firebase CLIがインストールされていること
 - Firebase CLIがインストールされていること
 - Firebaseプロジェクトが作成済みであること
 - 本プロジェクトのFirebaseプロジェクトID: `tus-softball-datasystem`
 
-## ローカル開発環境のセットアップ
+### ローカル開発環境のセットアップ
 
 ### 1. 依存関係のインストール
 
@@ -132,7 +144,117 @@ VITE_USE_EMULATOR=false npm run dev
 
 **重要**: エミュレータを使用している場合、Firebase Consoleで作成した本番環境のユーザーではログインできません。エミュレータを使用する場合は、エミュレータ内でユーザーを作成するか、本番環境に接続するように環境変数を設定してください。
 
-## 本番環境へのデプロイ
+#### ローカル開発で本番Firestoreデータを扱う方法
+
+ローカル開発環境でも本番のFirestoreデータを扱いたい場合、以下の方法があります。
+
+##### 方法1: 本番プロジェクトに直接接続（推奨・シンプル）
+
+**メリット:**
+- ✅ 常に最新の本番データにアクセスできる
+- ✅ 設定が簡単
+- ✅ データの同期が不要
+
+**デメリット:**
+- ⚠️ 誤って本番データを変更するリスクがある
+- ⚠️ 本番環境への負荷がかかる可能性
+
+**手順:**
+
+1. `.env` ファイルを作成（プロジェクトルートに）
+2. 以下の内容を追加：
+   ```
+   VITE_USE_EMULATOR=false
+   ```
+3. アプリケーションを再起動
+
+**注意事項:**
+- 本番データへの書き込み操作には十分注意してください
+- 開発中は可能な限り読み取り専用で操作することを推奨します
+- テストデータを作成する場合は、本番データと区別できるように命名規則を統一してください
+
+**開発モードでの書き込み警告機能:**
+- 本番Firebaseに接続している場合、書き込み操作時にコンソールに警告が表示されます
+- アプリ起動時にも接続状態の警告が表示されます
+- 主要なサービス（`gameService.ts`など）に警告機能が実装されています
+- 他のサービスファイルにも同様の警告を追加する場合は、`src/utils/devWarning.ts`の`warnBeforeWrite`関数を使用してください
+
+**使用例:**
+```typescript
+import { warnBeforeWrite } from '../utils/devWarning';
+
+export const createData = async (data: SomeData) => {
+  // 書き込み前に警告を表示
+  warnBeforeWrite('データ作成', 'collectionName', data.id);
+  
+  const ref = doc(db, 'collectionName', data.id);
+  await setDoc(ref, data);
+};
+```
+
+##### 方法2: 開発用Firebaseプロジェクトを作成（より安全）
+
+**メリット:**
+- ✅ 本番データを誤って変更するリスクがない
+- ✅ 自由にテストデータを作成・削除できる
+- ✅ 本番環境への負荷をかけない
+
+**デメリット:**
+- ⚠️ 本番データとの同期が必要
+- ⚠️ 設定がやや複雑
+
+**手順:**
+
+1. **開発用Firebaseプロジェクトを作成**
+   - Firebase Consoleで新しいプロジェクトを作成（例: `tus-softball-datasystem-dev`）
+   - Firestore Databaseを有効化
+   - Authenticationを有効化
+
+2. **本番データをエクスポート**
+   ```bash
+   # 本番プロジェクトに切り替え
+   firebase use tus-softball-datasystem
+   
+   # Firestoreデータをエクスポート
+   gcloud firestore export gs://[バケット名]/backup --project=tus-softball-datasystem
+   ```
+
+3. **開発プロジェクトにインポート**
+   ```bash
+   # 開発プロジェクトに切り替え
+   firebase use tus-softball-datasystem-dev
+   
+   # データをインポート
+   gcloud firestore import gs://[バケット名]/backup --project=tus-softball-datasystem-dev
+   ```
+
+4. **環境変数でプロジェクトを切り替え**
+   - `.env.development` ファイルを作成
+   - 開発用プロジェクトの設定を追加（将来的に実装予定）
+
+**定期的な同期:**
+- 本番データが更新されたら、定期的に開発プロジェクトにインポートする
+- スクリプト化して自動化することも可能
+
+##### 方法3: 本番プロジェクトに接続 + 書き込み制限（推奨・バランス型）
+
+本番プロジェクトに接続しつつ、開発モードでの書き込み操作を警告または制限する仕組みを追加します。
+
+**実装例（将来的に実装予定）:**
+- 開発モードでは、書き込み操作前に確認ダイアログを表示
+- 特定のコレクション（テスト用）のみ書き込み可能にする
+- 本番データへの書き込みをログに記録
+
+**現在の推奨事項:**
+- 方法1を使用し、開発中は慎重に操作する
+- 重要な操作（削除、大量更新など）は事前に確認する
+- 定期的にバックアップを取得する
+
+---
+
+## Firebase デプロイ手順
+
+### 本番環境へのデプロイ
 
 ### 1. Firebase CLIにログイン
 
@@ -184,7 +306,9 @@ firebase deploy --only hosting
 firebase deploy
 ```
 
-## Firebase Authentication で管理者を登録する手順
+---
+
+## 管理者登録・ユーザー管理
 
 ### 一人目の管理者を登録する手順（最初の管理者）
 
@@ -366,7 +490,7 @@ Firebase Consoleでユーザーを作成しても、自動的には承認レコ�
    **方法C: 管理者画面から承認**
    - 既存のユーザー承認管理画面を使用して、承認レコードを作成・承認する
 
-### 3. ユーザーの役割について
+### ユーザーの役割について
 
 システムでは以下の4つのステータスが設定できます：
 
@@ -398,10 +522,12 @@ Firebase Consoleでユーザーを作成しても、自動的には承認レコ�
 - 承認済みユーザーの役割は管理者ページから変更できます
 - 最初の管理者を作成する場合は、Firestore Consoleで `role` フィールドに `admin` を設定してください
 
-### 4. 管理者権限の設定
+#### 管理者権限の設定
 
 現在のセキュリティルールでは、認証済みユーザーはすべて読み書き可能です。
 将来的には、Firestoreセキュリティルールで役割ベースのアクセス制御を実装する予定です。
+
+---
 
 ## テスト手順
 
@@ -439,7 +565,9 @@ Firebase Consoleでユーザーを作成しても、自動的には承認レコ�
 2. 上記と同様の機能をテスト
 3. Firestore Consoleでデータが正しく保存されていることを確認
 
-## 今後の開発・デプロイフロー
+---
+
+## 開発・デプロイフロー
 
 ### ローカル開発
 
@@ -491,8 +619,64 @@ Firebase Consoleでユーザーを作成しても、自動的には承認レコ�
    firebase deploy
    ```
 
+### リポジトリ管理について
+
+#### デプロイ用とローカル用に分けるべきか？
+
+**推奨: 1つのリポジトリで管理**
+
+一般的には、デプロイ用とローカル用にリポジトリを分ける必要はありません。以下の理由から、1つのリポジトリで管理することを推奨します：
+
+**1つのリポジトリで管理するメリット:**
+- ✅ コードの重複を避けられる
+- ✅ 変更の同期が容易
+- ✅ ブランチ戦略（main/develop）で環境を分離できる
+- ✅ CI/CDパイプラインの設定が簡単
+- ✅ メンテナンスが容易
+
+**分離を検討する場合:**
+以下のような特殊な要件がある場合のみ、分離を検討してください：
+- デプロイ用と開発用で完全に異なるコードベースが必要
+- セキュリティ上の理由でコードを分離する必要がある
+- 異なるチームが完全に独立して開発する必要がある
+
+**推奨される管理方法:**
+1. **ブランチ戦略**: `main`（本番）、`develop`（開発）、`feature/*`（機能開発）
+2. **環境変数**: `.env.production`、`.env.development`で環境を切り替え
+3. **Firebaseプロジェクト**: 本番用と開発用で別のFirebaseプロジェクトを使用
+4. **CI/CD**: GitHub Actionsなどで自動デプロイを設定
+
 ### 注意事項
 
 - **本番環境のデータ**: 新しいプロジェクトに移行する場合、既存のデータは移行されません。必要に応じてデータのエクスポート・インポートを行ってください。
 - **セキュリティルール**: 新しいプロジェクトでは、セキュリティルールを再デプロイしてください。
 - **認証設定**: Firebase Authenticationの設定（プロバイダーなど）を新しいプロジェクトで再設定してください。
+
+---
+
+## 技術スタック
+
+### フロントエンド
+
+- **React**: UIライブラリ
+- **Vite**: ビルドツール・開発サーバー
+  - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) - Fast Refresh対応
+  - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) - SWC版（オプション）
+
+### バックエンド・インフラ
+
+- **Firebase**
+  - **Firestore**: NoSQLデータベース
+  - **Authentication**: ユーザー認証
+  - **Hosting**: 静的サイトホスティング
+  - **Firebase Emulator Suite**: ローカル開発用エミュレータ
+
+### 開発ツール
+
+- **ESLint**: コード品質チェック
+- **TypeScript**: 型安全性（推奨）
+
+### 補足
+
+- React Compilerは現在有効化されていません（パフォーマンスへの影響を考慮）
+- TypeScriptの統合については、[Vite TypeScriptテンプレート](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts)を参照してください
