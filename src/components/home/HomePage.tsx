@@ -5,7 +5,8 @@ import { searchTeams, getPrefectures, getAffiliations } from '../../services/tea
 import TeamPlayerList from './TeamPlayerList';
 import Modal from '../common/Modal';
 import PendingApproval from './PendingApproval';
-import { getUserApprovalStatus } from '../../services/userApprovalService';
+import LoadingIndicator from '../common/LoadingIndicator';
+import { getUserApprovalStatus, isAdmin, type UserApproval } from '../../services/userApprovalService';
 
 const HomePage: React.FC = () => {
   const { currentUser } = useAuth();
@@ -23,8 +24,21 @@ const HomePage: React.FC = () => {
   const [playerListOpen, setPlayerListOpen] = useState(false);
 
   useEffect(() => {
-    setPrefectures(getPrefectures());
-    setAffiliations(getAffiliations());
+    const loadPrefecturesAndAffiliations = async () => {
+      try {
+        const prefs = await getPrefectures();
+        const affs = await getAffiliations();
+        setPrefectures(prefs);
+        setAffiliations(affs);
+      } catch (error) {
+        console.error('Error loading prefectures and affiliations:', error);
+        // エラーが発生した場合は空配列を設定
+        setPrefectures([]);
+        setAffiliations([]);
+      }
+    };
+    
+    loadPrefecturesAndAffiliations();
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -69,34 +83,60 @@ const HomePage: React.FC = () => {
     setSelectedTeamId(null);
   };
 
-  // 認証待ち状態をチェック
-  const [isPendingApproval, setIsPendingApproval] = useState(false);
+  // 認証状態をチェック
+  const [approvalStatus, setApprovalStatus] = useState<'loading' | 'none' | 'pending' | 'approved' | null>(null);
   const [checkingApproval, setCheckingApproval] = useState(false);
+  const [userApproval, setUserApproval] = useState<UserApproval | null>(null);
 
   useEffect(() => {
     const checkApprovalStatus = async () => {
       if (currentUser) {
         setCheckingApproval(true);
+        setApprovalStatus('loading');
         try {
-          const approvalStatus = await getUserApprovalStatus(currentUser.uid);
-          setIsPendingApproval(approvalStatus ? !approvalStatus.approved : false);
+          const status = await getUserApprovalStatus(currentUser.uid);
+          setUserApproval(status);
+          if (status === null) {
+            // 承認レコードがない場合（Firebase Consoleで作成したユーザーなど）
+            setApprovalStatus('none');
+          } else if (!status.approved) {
+            // 承認待ち
+            setApprovalStatus('pending');
+          } else {
+            // 承認済み
+            setApprovalStatus('approved');
+          }
         } catch (error) {
           console.error('Error checking approval status:', error);
-          setIsPendingApproval(false);
+          setApprovalStatus('none');
+          setUserApproval(null);
         } finally {
           setCheckingApproval(false);
         }
       } else {
-        setIsPendingApproval(false);
+        setApprovalStatus(null);
+        setUserApproval(null);
       }
     };
 
     checkApprovalStatus();
   }, [currentUser]);
 
-  // 認証待ちの場合は専用画面を表示
-  if (currentUser && isPendingApproval && !checkingApproval) {
-    return <PendingApproval />;
+  // 承認状態をチェック中はローディング表示
+  if (currentUser && checkingApproval) {
+    return <LoadingIndicator />;
+  }
+
+  // 承認状態に応じて画面を表示
+  if (currentUser && !checkingApproval) {
+    if (approvalStatus === 'pending' || approvalStatus === 'none') {
+      return <PendingApproval hasApprovalRecord={approvalStatus === 'pending'} />;
+    }
+    // approvalStatus === 'approved' の場合は通常のホームページを表示（後続のreturnで処理）
+    // approvalStatus === null の場合はまだチェックが完了していない可能性があるので、ローディング表示
+    if (approvalStatus === null) {
+      return <LoadingIndicator />;
+    }
   }
 
   if (!currentUser) {
@@ -280,6 +320,35 @@ const HomePage: React.FC = () => {
           >
             👥 選手管理
           </button>
+          
+          {/* 管理者用ボタン */}
+          {isAdmin(userApproval) && (
+            <button
+              onClick={() => navigate('/admin/users')}
+              style={{
+                padding: '15px 30px',
+                background: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                transition: 'transform 0.2s, box-shadow 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+              }}
+            >
+              ⚙️ 管理者ページ
+            </button>
+          )}
         </div>
       </div>
 

@@ -2,18 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { GameStatus } from '../types/Game';
 import { getGame, setGameStatus } from '../services/gameService';
 
-const STORAGE_KEYS = ['games', 'game_states'];
+const STORAGE_KEYS = ['games'];
 
 export const useGameStatus = (gameId?: string) => {
   const [status, setStatus] = useState<GameStatus | null>(null);
   const [transitioning, setTransitioning] = useState(false);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
     if (!gameId) {
       setStatus(null);
       return;
     }
-    const game = getGame(gameId);
+    const game = await getGame(gameId);
     setStatus(game?.status ?? null);
   }, [gameId]);
 
@@ -39,31 +39,36 @@ export const useGameStatus = (gameId?: string) => {
 
   const startIfScheduled = useCallback(async () => {
     if (!gameId) return;
-    const game = getGame(gameId);
+    const game = await getGame(gameId);
     if (!game || game.status !== 'SCHEDULED') return;
     setTransitioning(true);
     try {
-      setGameStatus(gameId, 'in_progress');
-      setStatus('PLAYING');
+      await setGameStatus(gameId, 'in_progress');
+      await refresh();
+    } catch (error) {
+      console.error('Error starting game:', error);
     } finally {
       setTransitioning(false);
     }
-  }, [gameId]);
+  }, [gameId, refresh]);
 
   const finishGame = useCallback(async () => {
     if (!gameId) return false;
-    const game = getGame(gameId);
+    const game = await getGame(gameId);
     if (!game) return false;
     if (game.status === 'FINISHED') return true;
     setTransitioning(true);
     try {
-      setGameStatus(gameId, 'finished');
-      setStatus('FINISHED');
+      await setGameStatus(gameId, 'finished');
+      await refresh();
       return true;
+    } catch (error) {
+      console.error('Error finishing game:', error);
+      return false;
     } finally {
       setTransitioning(false);
     }
-  }, [gameId]);
+  }, [gameId, refresh]);
 
   return {
     status,

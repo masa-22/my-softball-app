@@ -94,7 +94,7 @@ const SignupForm: React.FC<Props> = ({ switchTo, onClose }) => {
 
       <div style={{ margin: '20px 0', textAlign: 'center', color: '#888' }}>または</div>
 
-      <GoogleLoginButton onClose={onClose} />
+      <GoogleLoginButton onClose={onClose} isSignup={true} />
 
       <div style={{ marginTop: '15px', textAlign: 'center' }}>
         <a href="/login" onClick={handleOpenLogin} style={{ color: '#3498db', textDecoration: 'none', cursor: 'pointer' }}>

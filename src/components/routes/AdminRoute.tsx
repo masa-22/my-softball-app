@@ -2,27 +2,26 @@ import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import LoadingIndicator from '../common/LoadingIndicator';
-import { getUserApprovalStatus } from '../../services/userApprovalService';
+import { getUserApprovalStatus, isAdmin } from '../../services/userApprovalService';
 
 interface Props {
   children: ReactNode;
 }
 
-const PrivateRoute: React.FC<Props> = ({ children }) => {
+const AdminRoute: React.FC<Props> = ({ children }) => {
   const { currentUser, loading } = useAuth();
   const [approvalLoading, setApprovalLoading] = useState(true);
-  const [isApproved, setIsApproved] = useState(false);
+  const [isUserAdmin, setIsUserAdmin] = useState(false);
 
   useEffect(() => {
-    const checkApproval = async () => {
+    const checkAdminStatus = async () => {
       if (currentUser) {
         try {
           const approvalStatus = await getUserApprovalStatus(currentUser.uid);
-          // 承認レコードがない場合はfalse、ある場合はapprovedの値を確認
-          setIsApproved(approvalStatus !== null && approvalStatus.approved === true);
+          setIsUserAdmin(isAdmin(approvalStatus));
         } catch (error) {
-          console.error('Error checking approval status:', error);
-          setIsApproved(false);
+          console.error('Error checking admin status:', error);
+          setIsUserAdmin(false);
         } finally {
           setApprovalLoading(false);
         }
@@ -31,7 +30,7 @@ const PrivateRoute: React.FC<Props> = ({ children }) => {
       }
     };
 
-    checkApproval();
+    checkAdminStatus();
   }, [currentUser]);
 
   if (loading || approvalLoading) {
@@ -42,14 +41,12 @@ const PrivateRoute: React.FC<Props> = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (!isApproved) {
+  if (!isUserAdmin) {
     return (
       <div style={{ width: '95%', maxWidth: '800px', margin: '0 auto', padding: '40px 20px', textAlign: 'center' }}>
-        <h1 style={{ color: '#e74c3c', marginBottom: '20px' }}>アクセスできません</h1>
+        <h1 style={{ color: '#e74c3c', marginBottom: '20px' }}>アクセス権限がありません</h1>
         <p style={{ fontSize: '18px', color: '#666', marginBottom: '30px' }}>
-          アカウントがまだ承認されていません。
-          <br />
-          管理者による承認が完了するまでお待ちください。
+          このページは管理者のみがアクセスできます。
         </p>
         <button
           onClick={() => window.location.href = '/'}
@@ -73,4 +70,5 @@ const PrivateRoute: React.FC<Props> = ({ children }) => {
   return <>{children}</>;
 };
 
-export default PrivateRoute;
+export default AdminRoute;
+

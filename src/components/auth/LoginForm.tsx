@@ -32,8 +32,41 @@ const LoginForm: React.FC<Props> = ({ switchTo, onClose }) => {
       if (onClose) onClose();
       navigate('/');
     } catch (e: any) {
-      console.error(e);
-      setError('ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
+      console.error('Login error:', e);
+      let errorMessage = 'ログインに失敗しました。';
+      
+      // Firebase エラーコードに基づいて詳細なメッセージを表示
+      if (e.code) {
+        switch (e.code) {
+          case 'auth/user-not-found':
+            errorMessage = 'このメールアドレスは登録されていません。';
+            break;
+          case 'auth/wrong-password':
+            errorMessage = 'パスワードが正しくありません。';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'メールアドレスの形式が正しくありません。';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'このアカウントは無効化されています。';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'ログイン試行回数が多すぎます。しばらく待ってから再度お試しください。';
+            break;
+          case 'auth/network-request-failed':
+            errorMessage = 'ネットワークエラーが発生しました。接続を確認してください。';
+            break;
+          case 'auth/operation-not-allowed':
+            errorMessage = 'このログイン方法は許可されていません。';
+            break;
+          default:
+            errorMessage = `ログインに失敗しました。(${e.code || '不明なエラー'})`;
+        }
+      } else {
+        errorMessage = 'ログインに失敗しました。メールアドレスまたはパスワードを確認してください。';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

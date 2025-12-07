@@ -5,9 +5,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 // import { getMatches } from '../../services/matchService';
 import { getTeams } from '../../services/teamService';
-import { getGameState } from '../../services/gameStateService';
+import { subscribeGameState, GameState } from '../../services/gameStateService';
 import { getGame } from '../../services/gameService';
-import { getAtBats } from '../../services/atBatService';
+import { useAtBats } from '../../hooks/useAtBats';
 import { AtBat } from '../../types/AtBat';
 
 const MAX_INNINGS = 7;
@@ -16,8 +16,8 @@ const ScoreBoard: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const [homeName, setHomeName] = useState<string>('先攻');
   const [awayName, setAwayName] = useState<string>('後攻');
-  const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
-  const [atBats, setAtBats] = useState<AtBat[]>([]);
+  const [state, setState] = useState<GameState | null>(null);
+  const atBats = useAtBats(matchId);
 
   const inningActivity = useMemo(() => {
     const map: Record<number, { top: boolean; bottom: boolean }> = {};
@@ -41,51 +41,48 @@ const ScoreBoard: React.FC = () => {
   }, [atBats]);
 
   useEffect(() => {
+    const loadGameData = async () => {
+      if (!matchId) return;
+
+      try {
+        // ▼ gamesからチーム名取得
+        const g = await getGame(matchId);
+        if (g) {
+          const teams = await getTeams();
+          const home = teams.find(t => String(t.id) === String(g.topTeam.id));
+          const away = teams.find(t => String(t.id) === String(g.bottomTeam.id));
+          setHomeName(home ? home.teamName : g.topTeam.name);
+          setAwayName(away ? away.teamName : g.bottomTeam.name);
+        }
+      } catch (error) {
+        console.error('Error loading game data:', error);
+      }
+    };
+    
+    loadGameData();
+  }, [matchId]);
+
+  useEffect(() => {
     if (!matchId) return;
 
-    // ▼ gamesからチーム名取得
-    const g = getGame(matchId);
-    if (g) {
-      const teams = getTeams();
-      const home = teams.find(t => String(t.id) === String(g.topTeam.id));
-      const away = teams.find(t => String(t.id) === String(g.bottomTeam.id));
-      setHomeName(home ? home.teamName : g.topTeam.name);
-      setAwayName(away ? away.teamName : g.bottomTeam.name);
-    }
-
-    const update = () => {
-      setState(getGameState(matchId));
-      setAtBats(getAtBats(matchId));
-    };
-    update();
-
-    const t = setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'game_states' || e.key === 'softball_app_at_bats') update();
-    };
-    window.addEventListener('storage', onStorage);
+    // gameStateをリアルタイム購読（Realtime Databaseリスナー）
+    const unsubscribeGameState = subscribeGameState(matchId, (gameState) => {
+      setState(gameState);
+    });
 
     return () => {
-      clearInterval(t);
-      window.removeEventListener('storage', onStorage);
+      unsubscribeGameState();
     };
   }, [matchId]);
 
-  if (!state) {
-    return (
-      <div style={{ padding: 8, background: '#fafafa', border: '1px solid #eee', marginBottom: 12 }}>
-        スコアボード（読み込み中）
-      </div>
-    );
-  }
-
-  const current = { inning: state.current_inning, half: state.top_bottom };
-  const totals = { home: state.scores.top_total, away: state.scores.bottom_total };
-  const isFinished = state.status === 'finished';
+  // stateがnullの場合は初期状態を使用
+  const current = state ? { inning: state.current_inning, half: state.top_bottom } : { inning: 1, half: 'top' as 'top' | 'bottom' };
+  const totals = state ? { home: state.scores.top_total, away: state.scores.bottom_total } : { home: 0, away: 0 };
+  const isFinished = state ? state.status === 'finished' : false;
 
   const inningCols = Array.from({ length: MAX_INNINGS }, (_, i) => i + 1);
   const getHalfDisplay = (half: 'top' | 'bottom', inning: number): string | number => {
-    const rec = state.scores.innings[String(inning)];
+    const rec = state?.scores.innings[String(inning)];
     const activity = inningActivity[inning] || { top: false, bottom: false };
     const finishedHyphen =
       isFinished && (recordedMaxInning === 0 || inning > recordedMaxInning);

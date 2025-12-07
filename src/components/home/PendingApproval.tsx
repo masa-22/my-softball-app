@@ -3,7 +3,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { getUserApprovalStatus } from '../../services/userApprovalService';
 
-const PendingApproval: React.FC = () => {
+interface PendingApprovalProps {
+  hasApprovalRecord?: boolean;
+}
+
+const PendingApproval: React.FC<PendingApprovalProps> = ({ hasApprovalRecord = true }) => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [pendingData, setPendingData] = useState<{ email: string; timestamp: string } | null>(null);
@@ -14,10 +18,16 @@ const PendingApproval: React.FC = () => {
       if (currentUser) {
         try {
           const approvalStatus = await getUserApprovalStatus(currentUser.uid);
-          if (approvalStatus && !approvalStatus.approved) {
+          if (approvalStatus) {
             setPendingData({
               email: approvalStatus.email,
               timestamp: approvalStatus.createdAt?.toDate?.()?.toISOString() || new Date().toISOString()
+            });
+          } else if (!hasApprovalRecord) {
+            // 承認レコードがない場合、ユーザーのメールアドレスを表示
+            setPendingData({
+              email: currentUser.email || 'メールアドレス未設定',
+              timestamp: new Date().toISOString()
             });
           }
         } catch (error) {
@@ -31,7 +41,7 @@ const PendingApproval: React.FC = () => {
     };
 
     loadPendingData();
-  }, [currentUser]);
+  }, [currentUser, hasApprovalRecord]);
 
   const handleGoHome = () => {
     navigate('/');
@@ -85,37 +95,96 @@ const PendingApproval: React.FC = () => {
           marginBottom: '20px',
           fontWeight: 'bold'
         }}>
-          認証待ち
+          {hasApprovalRecord ? '認証待ち' : 'アカウント設定が必要です'}
         </h1>
         
-        <p style={{ 
-          fontSize: '18px', 
-          color: '#666', 
-          marginBottom: '30px',
-          lineHeight: '1.6'
-        }}>
-          ご登録ありがとうございます。
-        </p>
-        
-        <p style={{ 
-          fontSize: '16px', 
-          color: '#666', 
-          marginBottom: '20px',
-          lineHeight: '1.6'
-        }}>
-          アカウントの認証が完了するまで、しばらくお待ちください。
-        </p>
-        
-        <p style={{ 
-          fontSize: '14px', 
-          color: '#999', 
-          marginBottom: '30px',
-          lineHeight: '1.6'
-        }}>
-          管理者による承認が完了次第、ログインできるようになります。
-          <br />
-          承認が完了しましたら、メールでお知らせいたします。
-        </p>
+        {hasApprovalRecord ? (
+          <>
+            <p style={{ 
+              fontSize: '18px', 
+              color: '#666', 
+              marginBottom: '30px',
+              lineHeight: '1.6'
+            }}>
+              ご登録ありがとうございます。
+            </p>
+            
+            <p style={{ 
+              fontSize: '16px', 
+              color: '#666', 
+              marginBottom: '20px',
+              lineHeight: '1.6'
+            }}>
+              アカウントの認証が完了するまで、しばらくお待ちください。
+            </p>
+            
+            <p style={{ 
+              fontSize: '14px', 
+              color: '#999', 
+              marginBottom: '30px',
+              lineHeight: '1.6'
+            }}>
+              管理者による承認が完了次第、ログインできるようになります。
+              <br />
+              承認が完了しましたら、メールでお知らせいたします。
+            </p>
+          </>
+        ) : (
+          <>
+            <p style={{ 
+              fontSize: '18px', 
+              color: '#666', 
+              marginBottom: '30px',
+              lineHeight: '1.6'
+            }}>
+              ログインは成功しましたが、アカウントの承認レコードが見つかりませんでした。
+            </p>
+            
+            <p style={{ 
+              fontSize: '16px', 
+              color: '#666', 
+              marginBottom: '20px',
+              lineHeight: '1.6'
+            }}>
+              Firebase Consoleでユーザーを作成した場合、承認レコードを手動で作成する必要があります。
+            </p>
+            
+            <div style={{
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffc107',
+              borderRadius: '8px',
+              padding: '15px',
+              marginBottom: '30px',
+              textAlign: 'left'
+            }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#856404', fontWeight: 'bold' }}>
+                ⚠️ 対処方法：
+              </p>
+              <ol style={{ margin: '0', paddingLeft: '20px', fontSize: '14px', color: '#856404', lineHeight: '1.8' }}>
+                <li>Firestore Consoleを開く</li>
+                <li>`userApprovals` コレクションを開く</li>
+                <li>ユーザーのUIDをドキュメントIDとして新しいドキュメントを作成</li>
+                <li>以下のフィールドを追加：
+                  <ul style={{ marginTop: '5px', paddingLeft: '20px' }}>
+                    <li>`userId`: ユーザーのUID</li>
+                    <li>`email`: ユーザーのメールアドレス</li>
+                    <li>`approved`: `true`（承認する場合）</li>
+                    <li>`createdAt`: 現在のタイムスタンプ</li>
+                  </ul>
+                </li>
+              </ol>
+            </div>
+            
+            <p style={{ 
+              fontSize: '14px', 
+              color: '#999', 
+              marginBottom: '30px',
+              lineHeight: '1.6'
+            }}>
+              詳細については、README.mdの「Firebase Authentication で管理者を登録する手順」を参照してください。
+            </p>
+          </>
+        )}
 
         {pendingData && (
           <div style={{

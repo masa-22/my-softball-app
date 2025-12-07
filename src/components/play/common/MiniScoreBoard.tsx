@@ -6,7 +6,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 // import { getMatches } from '../../../services/matchService';
 import { getTeams } from '../../../services/teamService';
-import { getGameState } from '../../../services/gameStateService';
+import { subscribeGameState, GameState } from '../../../services/gameStateService';
 import { getGame } from '../../../services/gameService';
 
 interface MiniScoreBoardProps {
@@ -70,18 +70,32 @@ const styles = {
 
 const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
   const { matchId } = useParams<{ matchId: string }>();
-  const game = useMemo(() => (matchId ? getGame(matchId) : null), [matchId]);
+  const [game, setGame] = useState<any>(null);
 
-  // ▼ gameState をリアルタイム購読
-  const [state, setState] = useState<ReturnType<typeof getGameState> | null>(null);
+  // ▼ gameState をリアルタイム購読（Realtime Databaseリスナー）
+  const [state, setState] = useState<GameState | null>(null);
   useEffect(() => {
     if (!matchId) return;
-    const update = () => setState(getGameState(matchId));
-    update();
-    const t = setInterval(update, 500);
-    const onStorage = (e: StorageEvent) => { if (e.key === 'game_states') update(); };
-    window.addEventListener('storage', onStorage);
-    return () => { clearInterval(t); window.removeEventListener('storage', onStorage); };
+    const unsubscribe = subscribeGameState(matchId, (gameState) => {
+      setState(gameState);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [matchId]);
+
+  // ゲームデータの読み込み
+  useEffect(() => {
+    if (!matchId) return;
+    const loadGame = async () => {
+      try {
+        const g = await getGame(matchId);
+        setGame(g);
+      } catch (error) {
+        console.error('Error loading game:', error);
+      }
+    };
+    loadGame();
   }, [matchId]);
 
   const currentInningInfo = useMemo(() => {
@@ -89,15 +103,31 @@ const MiniScoreBoard: React.FC<MiniScoreBoardProps> = ({ bso }) => {
     return { inning: state.current_inning, half: state.top_bottom };
   }, [state]);
 
-  const teamNames = useMemo(() => {
-    if (!game) return { home: '先攻', away: '後攻' };
-    const teams = getTeams();
-    const home = teams.find(t => String(t.id) === String(game.topTeam.id));
-    const away = teams.find(t => String(t.id) === String(game.bottomTeam.id));
-    return {
-      home: home?.teamAbbr || game.topTeam.shortName || game.topTeam.name,
-      away: away?.teamAbbr || game.bottomTeam.shortName || game.bottomTeam.name,
+  const [teamNames, setTeamNames] = useState({ home: '先攻', away: '後攻' });
+  
+  useEffect(() => {
+    const loadTeamNames = async () => {
+      if (!game || !game.topTeam || !game.bottomTeam) {
+        setTeamNames({ home: '先攻', away: '後攻' });
+        return;
+      }
+      try {
+        const teams = await getTeams();
+        const home = teams.find(t => String(t.id) === String(game.topTeam.id));
+        const away = teams.find(t => String(t.id) === String(game.bottomTeam.id));
+        setTeamNames({
+          home: home?.teamAbbr || game.topTeam.shortName || game.topTeam.name,
+          away: away?.teamAbbr || game.bottomTeam.shortName || game.bottomTeam.name,
+        });
+      } catch (error) {
+        console.error('Error loading team names:', error);
+        setTeamNames({
+          home: game.topTeam?.shortName || game.topTeam?.name || '先攻',
+          away: game.bottomTeam?.shortName || game.bottomTeam?.name || '後攻',
+        });
+      }
     };
+    loadTeamNames();
   }, [game]);
 
   const isTopInning = currentInningInfo.half === 'top';

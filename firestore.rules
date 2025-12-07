@@ -3,23 +3,82 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 認証済みユーザーのみアクセス可能
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     // ユーザー承認管理コレクション
     match /userApprovals/{userId} {
-      // 自分の承認状態は読み取り可能
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // 個別ドキュメントの読み取り：自分のドキュメントのみ
+      allow get: if isAuthenticated() && request.auth.uid == userId;
+      // コレクション一覧の取得：認証済みユーザー全員（管理者判定は将来的に実装）
+      allow list: if isAuthenticated();
       // 新規登録時のみ自分のドキュメントを作成可能
-      allow create: if request.auth != null && request.auth.uid == userId;
-      // 更新は管理者のみ（承認状態の更新）
-      // 注意: 本番環境では管理者判定を実装してください
-      allow update: if request.auth != null;
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      // 更新は認証済みユーザー（管理者判定は将来的に実装）
+      allow update: if isAuthenticated();
       // 削除は不可
       allow delete: if false;
     }
 
-    // その他のコレクション（既存のデータ）
-    // 注意: 本番環境では適切なセキュリティルールを設定してください
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2025, 12, 15);
+    // チームコレクション（公開データ：未認証でも読み取り可能）
+    match /teams/{teamId} {
+      // 読み取りは誰でも可能（公開データ）
+      allow get, list: if true;
+      // 作成・更新は認証済みユーザーのみ
+      allow create, update: if isAuthenticated();
+      // 削除は不可
+      allow delete: if false;
+    }
+
+    // 選手コレクション
+    match /players/{playerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // 大会コレクション
+    match /tournaments/{tournamentId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // ゲームコレクション
+    match /games/{gameId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // ラインナップコレクション
+    match /lineups/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // 打席記録コレクション
+    match /atBats/{playId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // 出場記録コレクション
+    match /participations/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // 勝利投手コレクション
+    match /winningPitchers/{matchId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
     }
   }
 }

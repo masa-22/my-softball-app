@@ -3,15 +3,38 @@ import { Link, useNavigate } from 'react-router-dom';
 import LoginModal from '../auth/LoginModal';
 import AuthContainer from '../auth/AuthContainer';
 import { useAuth } from '../../context/AuthContext';
+import { getUserApprovalStatus, canEdit } from '../../services/userApprovalService';
 
 const Header: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isSignupOpen, setIsSignupOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
+  const [canUserEdit, setCanUserEdit] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const checkApproval = async () => {
+      if (currentUser) {
+        try {
+          const approvalStatus = await getUserApprovalStatus(currentUser.uid);
+          setIsApproved(approvalStatus !== null && approvalStatus.approved === true);
+          setCanUserEdit(canEdit(approvalStatus));
+        } catch (error) {
+          console.error('Error checking approval status:', error);
+          setIsApproved(false);
+          setCanUserEdit(false);
+        }
+      } else {
+        setIsApproved(false);
+        setCanUserEdit(false);
+      }
+    };
+    checkApproval();
+  }, [currentUser]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -111,24 +134,28 @@ const Header: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/team'); }}>チーム登録</li>
-
-                  {/* 大会登録 */}
-                  <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/tournament'); }}>大会登録</li>
-
-                  {/* 追加: 試合登録 */}
-                  <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/match'); }}>試合登録</li>
-
-                  <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/player'); }}>選手登録</li>
-                  <li
-                    style={{ padding: '10px 14px', cursor: 'pointer' }}
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      navigate('/dashboard');
-                    }}
-                  >
-                    ダッシュボード
-                  </li>
+                  {isApproved && (
+                    <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/viewer'); }}>データ閲覧</li>
+                  )}
+                  {canUserEdit && (
+                    <>
+                      <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/team'); }}>チーム登録</li>
+                      {/* 大会登録 */}
+                      <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/tournament'); }}>大会登録</li>
+                      {/* 追加: 試合登録 */}
+                      <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/match'); }}>試合登録</li>
+                      <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/player'); }}>選手登録</li>
+                      <li
+                        style={{ padding: '10px 14px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          navigate('/dashboard');
+                        }}
+                      >
+                        ダッシュボード
+                      </li>
+                    </>
+                  )}
                   <li
                     style={{ padding: '10px 14px', cursor: 'pointer', color: '#e74c3c' }}
                     onClick={handleLogout}

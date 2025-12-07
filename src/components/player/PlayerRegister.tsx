@@ -20,8 +20,17 @@ const PlayerRegister: React.FC = () => {
   const [pending, setPending] = useState<any | null>(null);
 
   useEffect(() => {
-    const ts = getTeams();
-    setTeams(ts);
+    const loadTeams = async () => {
+      try {
+        const ts = await getTeams();
+        setTeams(ts);
+      } catch (error) {
+        console.error('Error loading teams:', error);
+        setTeams([]);
+      }
+    };
+    
+    loadTeams();
   }, []);
 
   useEffect(() => {
