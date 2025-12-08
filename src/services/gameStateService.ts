@@ -231,6 +231,7 @@ export const closeHalfInningRealtime = async (gameId: string): Promise<GameState
     }
     
     // イニング終了時に残塁数を記録（3アウト時点で塁上に残ったランナー数）
+    // 注意: 現在この値は使用されていません。ボックススコアの残塁数は useBoxScoreData.ts の buildLeftOnBase で計算しています
     const leftOnBaseCount = [state.runners['1b'], state.runners['2b'], state.runners['3b']].filter(r => r !== null).length;
     const currentInningKey = String(state.current_inning);
     
@@ -274,6 +275,35 @@ export const closeHalfInningRealtime = async (gameId: string): Promise<GameState
     return state;
   } catch (error) {
     console.error('Error closing half inning:', error);
+    throw error;
+  }
+};
+
+export const updateBattingIndexRealtime = async (
+  gameId: string,
+  battingIndex: { home?: number; away?: number }
+): Promise<GameState | null> => {
+  try {
+    const state = await getGameState(gameId) || await initGameState(gameId);
+    if (battingIndex.home !== undefined) {
+      state.home_bat_index = battingIndex.home;
+    }
+    if (battingIndex.away !== undefined) {
+      state.away_bat_index = battingIndex.away;
+    }
+    touch(state);
+    const stateRef = getGameStateRef(gameId);
+    const updateData: any = { last_updated: state.last_updated };
+    if (battingIndex.home !== undefined) {
+      updateData.home_bat_index = state.home_bat_index;
+    }
+    if (battingIndex.away !== undefined) {
+      updateData.away_bat_index = state.away_bat_index;
+    }
+    await update(stateRef, updateData);
+    return state;
+  } catch (error) {
+    console.error('Error updating batting index:', error);
     throw error;
   }
 };

@@ -47,6 +47,10 @@ const headerCellStyle: React.CSSProperties = {
 };
 
 const getStatValue = (row: StatsRowData, statKey: string): number => {
+  // 四死球は四球と死球の合計として計算
+  if (statKey === 'fourBall') {
+    return row.stats.walks + row.stats.hitByPitch;
+  }
   const value = row.stats[statKey as keyof PlayerStats];
   return typeof value === 'number' ? value : 0;
 };

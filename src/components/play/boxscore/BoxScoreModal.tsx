@@ -85,7 +85,33 @@ const renderTeamBlock = (team: BoxScoreTeamData) => (
         </tbody>
       </table>
       <div style={{ marginTop: 6, fontSize: 11, color: '#868e96' }}>
-        代打・代走は元の打順の直後に表示されます。
+        {team.runnerRecords.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            {(() => {
+              const steals = team.runnerRecords.filter(r => r.type === 'steal');
+              const caughtStealings = team.runnerRecords.filter(r => r.type === 'caughtstealing');
+              const runouts = team.runnerRecords.filter(r => r.type === 'runout');
+              const items: string[] = [];
+              
+              if (steals.length > 0) {
+                items.push(`盗塁:${steals.map(r => `${r.playerName}(${r.inning}回)`).join(',')}`);
+              }
+              if (caughtStealings.length > 0) {
+                items.push(`盗塁死:${caughtStealings.map(r => `${r.playerName}(${r.inning}回)`).join(',')}`);
+              }
+              if (runouts.length > 0) {
+                items.push(`走塁死:${runouts.map(r => `${r.playerName}(${r.inning}回)`).join(',')}`);
+              }
+              
+              return items.join(' / ');
+            })()}
+          </div>
+        )}
+        {team.leftOnBase > 0 && (
+          <div style={{ marginTop: team.runnerRecords.length > 0 ? 4 : 0 }}>
+            残塁:{team.leftOnBase}
+          </div>
+        )}
       </div>
     </div>
   </div>

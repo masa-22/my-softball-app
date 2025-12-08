@@ -4,7 +4,7 @@ import { getPlayers } from '../services/playerService';
 import { getTeams } from '../services/teamService';
 import { getGame } from '../services/gameService';
 import { getParticipations, recordSubstitution } from '../services/participationService';
-import { getGameState, updateRunnersRealtime, updateMatchupRealtime } from '../services/gameStateService';
+import { getGameState, updateRunnersRealtime, updateMatchupRealtime, updateBattingIndexRealtime } from '../services/gameStateService';
 import { PitchData } from '../types/PitchData';
 import { useAtBats } from './useAtBats';
 import { formatAtBatSummary } from '../utils/scoreKeeping';
@@ -69,8 +69,8 @@ export const useLineupManager = ({
   const [awayPlayers, setAwayPlayers] = useState<any[]>([]);
   const [currentBatter, setCurrentBatter] = useState<any>(null);
   const [currentPitcher, setCurrentPitcher] = useState<any>(null);
-  const [homeBatIndex, setHomeBatIndex] = useState<number>(0);
-  const [awayBatIndex, setAwayBatIndex] = useState<number>(0);
+  const [homeBatIndex, setHomeBatIndex] = useState<number | undefined>(undefined);
+  const [awayBatIndex, setAwayBatIndex] = useState<number | undefined>(undefined);
 
   // サイドバー編集用 state
   const [homeLineup, setHomeLineup] = useState<any[]>([]);
@@ -89,6 +89,9 @@ export const useLineupManager = ({
   const lineupInitialized = useRef(false);
   const specialEntriesRef = useRef<SpecialLineupEntry[]>([]);
   const prevHalfRef = useRef<'top' | 'bottom' | null>(null);
+  const lastProcessedBatPlayIdRef = useRef<string | null>(null);
+  const isInitializingBatIndex = useRef(false);
+  const batIndexInitialized = useRef(false);
 
   useEffect(() => {
     specialEntriesRef.current = specialEntries;
@@ -122,14 +125,32 @@ export const useLineupManager = ({
         setHomePlayers(homePs);
         setAwayPlayers(awayPs);
 
+        // ゲーム状態から打順インデックスを取得
+        const gs = await getGameState(matchId);
+        // データベースに値が存在する場合はそれを使用、存在しない場合は0（1番打者から開始）
+        const savedHomeBatIndex = gs?.home_bat_index !== undefined ? gs.home_bat_index : 0;
+        const savedAwayBatIndex = gs?.away_bat_index !== undefined ? gs.away_bat_index : 0;
+        
         // 初期打者・投手の設定
-        const batterEntry = l.home[0];
+        const batterEntry = l.home[savedHomeBatIndex] || l.home[0];
         const pitcherEntry = l.away.find((e: any) => e.position === '1');
         const batter = homePs.find(p => p.playerId === batterEntry?.playerId) || null;
         const pitcher = awayPs.find(p => p.playerId === pitcherEntry?.playerId) || null;
         setCurrentBatter(batter);
         setCurrentPitcher(pitcher);
         setPitches([]);
+
+        // 打順インデックスを設定（データベースから取得した値を使用）
+        // 初期化中フラグを設定して、useEffectでの保存をスキップ
+        isInitializingBatIndex.current = true;
+        batIndexInitialized.current = false;
+        setHomeBatIndex(savedHomeBatIndex);
+        setAwayBatIndex(savedAwayBatIndex);
+        // 初期化が完了したらフラグをリセット
+        setTimeout(() => {
+          isInitializingBatIndex.current = false;
+          batIndexInitialized.current = true;
+        }, 200);
 
         // サイドバー用state初期化
         setHomeLineup(l.home);
@@ -151,23 +172,139 @@ export const useLineupManager = ({
     };
     
     loadData();
-  }, [matchId]);
+  }, [matchId, currentHalf]);
 
-  // 初期化時の打順インデックスリセット
+  // 初期化時の打順インデックスリセット（atBatsから計算できなかった場合のみ）
   useEffect(() => {
     if (!lineup || lineupInitialized.current) return;
-    setHomeBatIndex(0);
-    setAwayBatIndex(0);
+    // atBatsから計算した値が設定されなかった場合（atBatsが空の場合など）のみ、デフォルト値（0）を設定
+    // ただし、loadData内で既に設定されている可能性があるので、ここでは設定しない
+    // 代わりに、lineupInitializedフラグを設定して、この処理が実行されたことを記録
     lineupInitialized.current = true;
   }, [lineup]);
 
-  // atBatsの読み込み
-  // atBatsはuseAtBatsフックでリアルタイム購読（ポーリング不要）
+  // atBatsから最後の打席を取得し、現在の打者インデックスを計算
+  // allAtBatsが更新されたときに実行（useAtBatsフックでリアルタイム購読）
+  // type=runnerの結果が追加されても打順を再計算しないように、最後に処理したtype=batのplayIdを保持
+  // ただし、データベースに打順インデックスが保存されている場合は、それを優先する
+  useEffect(() => {
+    if (!matchId || !lineup) return;
+
+    const calculateBattingIndex = async () => {
+      try {
+        const gameState = await getGameState(matchId);
+        
+        // データベースに打順インデックスが保存されている場合は、それを使用
+        if (gameState?.home_bat_index !== undefined || gameState?.away_bat_index !== undefined) {
+          if (gameState.home_bat_index !== undefined && gameState.home_bat_index !== homeBatIndex) {
+            isInitializingBatIndex.current = true;
+            setHomeBatIndex(gameState.home_bat_index);
+            setTimeout(() => {
+              isInitializingBatIndex.current = false;
+            }, 100);
+          }
+          if (gameState.away_bat_index !== undefined && gameState.away_bat_index !== awayBatIndex) {
+            isInitializingBatIndex.current = true;
+            setAwayBatIndex(gameState.away_bat_index);
+            setTimeout(() => {
+              isInitializingBatIndex.current = false;
+            }, 100);
+          }
+          return;
+        }
+
+        // データベースに保存されていない場合のみ、atBatsから計算
+        if (allAtBats.length === 0) return;
+
+        const currentHalfFromState = gameState?.top_bottom ?? currentHalf;
+
+        // 最後の打席（type === 'bat'）を取得
+        const batAtBats = allAtBats.filter(a => a.type === 'bat');
+        if (batAtBats.length > 0) {
+          // 全打席の最後の打席を取得
+          const lastAtBat = batAtBats[batAtBats.length - 1];
+          
+          // 最後に処理したtype=batのplayIdと比較
+          // 同じplayIdの場合は、既に計算済みの打順を保持するため、再計算しない
+          if (lastProcessedBatPlayIdRef.current === lastAtBat.playId) {
+            return;
+          }
+          
+          const lastOutsAfter = lastAtBat.situationAfter?.outs ?? 0;
+          
+          let targetHalf = currentHalfFromState;
+          let targetBattingOrder = 1; // デフォルトは1番打者
+          
+          // 最後の打席で3アウト目が記録されていた場合は、攻守交代している
+          if (lastOutsAfter >= 3) {
+            // 最後の打席に入っていた選手のチームでないチーム（反対側のチーム）の最後の打者を見る
+            const oppositeHalf = lastAtBat.topOrBottom === 'top' ? 'bottom' : 'top';
+            const oppositeSideAtBats = batAtBats.filter(a => a.topOrBottom === oppositeHalf);
+            
+            if (oppositeSideAtBats.length > 0) {
+              // 反対側のチームの最後の打席を取得
+              const lastOppositeSideAtBat = oppositeSideAtBats[oppositeSideAtBats.length - 1];
+              // 攻守交代後は、反対側のチームの最後の打席の次の打順が次の打者になる
+              // ただし、advanceBattingOrder()は現在のチームの打順を進めるだけなので、
+              // 攻守交代が発生した場合は、反対側のチームの最後の打席の次の打順を計算する
+              targetBattingOrder = lastOppositeSideAtBat.battingOrder;
+              targetBattingOrder = (targetBattingOrder % 9) + 1;
+              targetHalf = oppositeHalf;
+            } else {
+              // 反対側のチームに打席がまだない場合は、1番打者から開始
+              targetBattingOrder = 1;
+              targetHalf = oppositeHalf;
+            }
+          } else {
+            // 3アウト目が記録されていない場合は、現在の攻撃側の最後の打席を見る
+            // useGameProcessorで既にadvanceBattingOrder()が呼ばれているので、
+            // 最後の打席のbattingOrderをそのまま使用する（+1しない）
+            const currentSideAtBats = batAtBats.filter(a => a.topOrBottom === currentHalfFromState);
+            
+            if (currentSideAtBats.length > 0) {
+              // 現在の攻撃側の最後の打席を取得
+              const lastCurrentSideAtBat = currentSideAtBats[currentSideAtBats.length - 1];
+              // advanceBattingOrder()で既に打順が進んでいるので、そのまま使用
+              targetBattingOrder = lastCurrentSideAtBat.battingOrder;
+            } else {
+              // 現在の攻撃側に打席がまだない場合は、1番打者から開始
+              targetBattingOrder = 1;
+            }
+            targetHalf = currentHalfFromState;
+          }
+
+          // lineup配列から、battingOrderに対応するインデックスを探す
+          const targetLineup = targetHalf === 'top' ? homeLineup : awayLineup;
+          const targetIndex = targetLineup.findIndex((entry: any) => entry.battingOrder === targetBattingOrder);
+          
+          if (targetIndex !== -1) {
+            if (targetHalf === 'top') {
+              setHomeBatIndex(targetIndex);
+              // データベースに保存
+              await updateBattingIndexRealtime(matchId, { home: targetIndex });
+            } else {
+              setAwayBatIndex(targetIndex);
+              // データベースに保存
+              await updateBattingIndexRealtime(matchId, { away: targetIndex });
+            }
+          }
+          
+          // 打順を計算したので、最後に処理したplayIdを記録
+          lastProcessedBatPlayIdRef.current = lastAtBat.playId;
+        }
+      } catch (atBatError) {
+        console.warn('Error calculating current batter index from atBats:', atBatError);
+        // エラーが発生した場合は、デフォルト値（0）を使用
+      }
+    };
+
+    calculateBattingIndex();
+  }, [matchId, lineup, allAtBats, currentHalf, homeLineup, awayLineup, homeBatIndex, awayBatIndex]);
 
   // 現在の half と打順に応じて currentBatter を更新
   useEffect(() => {
     const battingList = currentHalf === 'top' ? homeLineup : awayLineup;
-    const battingIndex = currentHalf === 'top' ? homeBatIndex : awayBatIndex;
+    const battingIndex = currentHalf === 'top' ? (homeBatIndex ?? 0) : (awayBatIndex ?? 0);
     const battingPlayers = currentHalf === 'top' ? homePlayers : awayPlayers;
 
     if (!battingList.length) return;
@@ -198,6 +335,21 @@ export const useLineupManager = ({
       });
     }
   }, [matchId, currentBatter, currentPitcher]);
+
+  // 打順インデックスが変更されたときにデータベースに保存
+  // ただし、初期化中はスキップ（advanceBattingOrder内で既に保存しているため）
+  useEffect(() => {
+    if (!matchId || isInitializingBatIndex.current || !batIndexInitialized.current) return;
+    // homeBatIndexまたはawayBatIndexがundefinedの場合はスキップ
+    if (homeBatIndex === undefined || awayBatIndex === undefined) return;
+    
+    updateBattingIndexRealtime(matchId, {
+      home: homeBatIndex,
+      away: awayBatIndex,
+    }).catch(error => {
+      console.error('Error updating batting index:', error);
+    });
+  }, [matchId, homeBatIndex, awayBatIndex]);
 
   const buildPlayerLabel = (player?: Player | null) => {
     if (!player) return '';
@@ -442,14 +594,14 @@ export const useLineupManager = ({
 
       // 打者
       if (half === 'top') {
-        const entry = homeLineup[homeBatIndex % Math.max(1, homeLineup.length)];
+        const entry = homeLineup[(homeBatIndex ?? 0) % Math.max(1, homeLineup.length)];
         const nextBatter = homePlayers.find(p => p.playerId === entry?.playerId) || null;
           if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
           setCurrentBatter(nextBatter);
           setPitches([]);
         }
       } else {
-        const entry = awayLineup[awayBatIndex % Math.max(1, awayLineup.length)];
+        const entry = awayLineup[(awayBatIndex ?? 0) % Math.max(1, awayLineup.length)];
         const nextBatter = awayPlayers.find(p => p.playerId === entry?.playerId) || null;
         if ((currentBatter?.playerId || null) !== (nextBatter?.playerId || null)) {
           setCurrentBatter(nextBatter);
@@ -496,12 +648,19 @@ export const useLineupManager = ({
       const list = homeLineup;
       const length = list.length || 1;
       setHomeBatIndex(idx => {
-        let nextIdx = (idx + 1) % length;
+        const currentIdx = idx ?? 0;
+        let nextIdx = (currentIdx + 1) % length;
         let attempts = 0;
         // FP(10番)をスキップ
         while (list[nextIdx] && list[nextIdx].battingOrder === 10 && attempts < length) {
           nextIdx = (nextIdx + 1) % length;
           attempts++;
+        }
+        // データベースに保存
+        if (matchId) {
+          updateBattingIndexRealtime(matchId, { home: nextIdx }).catch(error => {
+            console.error('Error updating home batting index:', error);
+          });
         }
         return nextIdx;
       });
@@ -509,12 +668,19 @@ export const useLineupManager = ({
       const list = awayLineup;
       const length = list.length || 1;
       setAwayBatIndex(idx => {
-        let nextIdx = (idx + 1) % length;
+        const currentIdx = idx ?? 0;
+        let nextIdx = (currentIdx + 1) % length;
         let attempts = 0;
         // FP(10番)をスキップ
         while (list[nextIdx] && list[nextIdx].battingOrder === 10 && attempts < length) {
           nextIdx = (nextIdx + 1) % length;
           attempts++;
+        }
+        // データベースに保存
+        if (matchId) {
+          updateBattingIndexRealtime(matchId, { away: nextIdx }).catch(error => {
+            console.error('Error updating away batting index:', error);
+          });
         }
         return nextIdx;
       });

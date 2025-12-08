@@ -26,6 +26,7 @@ const STATS_HEADERS = [
   { key: 'strikeouts', label: '三振' },
   { key: 'walks', label: '四球' },
   { key: 'hitByPitch', label: '死球' },
+  { key: 'runs', label: '失点' },
   { key: 'earnedRuns', label: '自責点' },
   { key: 'wildPitches', label: '暴投' },
 ] as const;

@@ -55,7 +55,7 @@ const styles = {
 interface PitchCourseInputProps {
   onInplayCommit?: () => void;
   onStrikeoutCommit?: (isSwinging: boolean) => void;
-  onWalkCommit?: () => void;
+  onWalkCommit?: (isDeadball?: boolean) => void;
   // 追加: 親から受け取る表示用状態と更新コールバック
   bso: { b: number; s: number; o: number };
   runners: { '1': string | null; '2': string | null; '3': string | null };
@@ -106,7 +106,9 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
     const currentStrikes = bso.s;
 
     if (pendingResult === 'deadball') {
-      onWalkCommit && onWalkCommit();
+      // 死球の場合、カウントをリセットして打席を終了
+      onCountsReset && onCountsReset();
+      onWalkCommit && onWalkCommit(true); // 死球フラグを渡す
       setPendingPoint(null);
       setPendingResult('');
       return;
