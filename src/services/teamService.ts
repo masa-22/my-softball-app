@@ -84,7 +84,7 @@ export const searchTeams = async (param: string | TeamSearchParams): Promise<Tea
 
     const teams = await getTeams();
     const results = teams.filter((t) => {
-      const matchName = name ? t.teamName.toLowerCase().includes(name) : true;
+      const matchName = name ? (t.teamName || '').toLowerCase().includes(name) : true;
       const matchPref = prefecture ? (t.prefecture || '') === prefecture : true;
       const matchAff = affiliation ? (t.affiliation || '') === affiliation : true;
       return matchName && matchPref && matchAff;

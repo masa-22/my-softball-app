@@ -134,8 +134,8 @@ const PlayRegister: React.FC = () => {
     clearRunnerEvents,
     currentBatter,
     currentPitcher,
-    homeBatIndex,
-    awayBatIndex,
+    homeBatIndex: homeBatIndex ?? 0,
+    awayBatIndex: awayBatIndex ?? 0,
     currentHalf,
     advanceBattingOrder,
     homeLineup,
@@ -263,13 +263,14 @@ const PlayRegister: React.FC = () => {
     setShowPlayResult(true);
   };
 
-  const handleWalkCommit = () => {
+  const handleWalkCommit = (isDeadball?: boolean) => {
     setStrikeoutType(null);
     setPendingOutcome({ kind: 'walk' });
     setShowPlayResult(false);
     
-    const isDeadball = pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball';
-    setBattingResultForMovement(isDeadball ? 'deadball' : 'walk');
+    // 死球フラグが渡されていない場合、最後のピッチを確認
+    const deadball = isDeadball ?? (pitches.length > 0 && pitches[pitches.length - 1].result === 'deadball');
+    setBattingResultForMovement(deadball ? 'deadball' : 'walk');
     setPlayDetailsForMovement({ position: '', batType: 'walk', outfieldDirection: '' });
     setShowRunnerMovement(true);
   };

@@ -21,7 +21,7 @@ interface CenterPanelProps {
   onPlayResultComplete: (result?: RunnerMovementResult) => void; // 引数を追加 (キャンセル時はundefinedの可能性も考慮してOptionalにするか、キャンセルは別ハンドラにするか。元の実装はonCancel=onCompleteだったので合わせる)
   onInplayCommit: () => void;
   onStrikeoutCommit: (isSwinging: boolean) => void;
-  onWalkCommit: () => void;
+  onWalkCommit: (isDeadball?: boolean) => void;
   onRunnerMovement: (
     battingResult: string,
     details: { 

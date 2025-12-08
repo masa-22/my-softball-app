@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
+import { getGames } from '../../services/gameService';
+import { getGameState } from '../../services/gameStateService';
+import { Game } from '../../types/Game';
+import { GameState } from '../../types/GameState';
 import TeamPlayerList from './TeamPlayerList';
 import Modal from '../common/Modal';
 import PendingApproval from './PendingApproval';
@@ -22,6 +26,8 @@ const HomePage: React.FC = () => {
   const [affiliations, setAffiliations] = useState<string[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | number | null>(null);
   const [playerListOpen, setPlayerListOpen] = useState(false);
+  const [games, setGames] = useState<Array<{ game: Game; state: GameState | null }>>([]);
+  const [gamesLoading, setGamesLoading] = useState(false);
 
   useEffect(() => {
     const loadPrefecturesAndAffiliations = async () => {
@@ -40,6 +46,36 @@ const HomePage: React.FC = () => {
     
     loadPrefecturesAndAffiliations();
   }, []);
+
+  // 試合データの読み込み
+  useEffect(() => {
+    const loadGames = async () => {
+      if (!currentUser) return;
+      try {
+        setGamesLoading(true);
+        const allGames = await getGames();
+        const gamesWithState = await Promise.all(
+          allGames.map(async (game) => {
+            try {
+              const state = await getGameState(game.gameId);
+              return { game, state };
+            } catch (error) {
+              console.error(`Error loading game state for ${game.gameId}:`, error);
+              return { game, state: null };
+            }
+          })
+        );
+        setGames(gamesWithState);
+      } catch (error) {
+        console.error('Error loading games:', error);
+        setGames([]);
+      } finally {
+        setGamesLoading(false);
+      }
+    };
+
+    loadGames();
+  }, [currentUser]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,8 +300,6 @@ const HomePage: React.FC = () => {
 
   return (
     <div style={{ width: '95%', maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h1>ホーム</h1>
-
       {/* クイックアクセスボタン */}
       <div style={{ marginBottom: '40px' }}>
         <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>クイックアクセス</h2>
@@ -319,6 +353,33 @@ const HomePage: React.FC = () => {
             }}
           >
             👥 選手管理
+          </button>
+          
+          {/* 試合管理ボタン */}
+          <button
+            onClick={() => navigate('/match')}
+            style={{
+              padding: '15px 30px',
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontSize: '16px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+              transition: 'transform 0.2s, box-shadow 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+            }}
+          >
+            ⚾ 試合管理
           </button>
           
           {/* 管理者用ボタン */}
@@ -528,6 +589,211 @@ const HomePage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 試合一覧セクション */}
+      {currentUser && (
+        <div style={{ marginBottom: '40px' }}>
+          {gamesLoading ? (
+            <LoadingIndicator />
+          ) : (
+            <>
+              {/* 入力中の試合一覧 */}
+              {games.filter(({ state }) => state?.status === 'in_progress').length > 0 && (
+                <div style={{ marginBottom: '30px' }}>
+                  <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>入力中の試合</h2>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                    gap: '15px' 
+                  }}>
+                    {games
+                      .filter(({ state }) => state?.status === 'in_progress')
+                      .sort((a, b) => {
+                        // 日付でソート（新しい順）
+                        return b.game.date.localeCompare(a.game.date);
+                      })
+                      .map(({ game, state }) => {
+                        const inningDisplay = state 
+                          ? `${state.current_inning}回${state.top_bottom === 'top' ? '表' : '裏'}`
+                          : '未開始';
+                        const bottomScore = state?.scores.bottom_total ?? 0;
+                        const topScore = state?.scores.top_total ?? 0;
+                        
+                        return (
+                          <div
+                            key={game.gameId}
+                            onClick={() => navigate(`/match/${game.gameId}/play`)}
+                            style={{
+                              padding: '12px',
+                              backgroundColor: '#fff',
+                              border: '2px solid #3498db',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = '#2980b9';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#3498db';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                            }}
+                          >
+                            <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+                              {game.date}
+                            </div>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              marginBottom: '8px'
+                            }}>
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                flex: 1,
+                                textAlign: 'left'
+                              }}>
+                                {game.bottomTeam.name}
+                              </div>
+                              <div style={{ 
+                                fontSize: '18px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                margin: '0 15px'
+                              }}>
+                                {bottomScore} - {topScore}
+                              </div>
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                flex: 1,
+                                textAlign: 'right'
+                              }}>
+                                {game.topTeam.name}
+                              </div>
+                            </div>
+                            <div style={{ 
+                              fontSize: '13px', 
+                              color: '#3498db', 
+                              fontWeight: 'bold',
+                              textAlign: 'center'
+                            }}>
+                              {inningDisplay}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* 終了した試合一覧 */}
+              {games.filter(({ state }) => state?.status === 'finished').length > 0 && (
+                <div>
+                  <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>終了した試合</h2>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+                    gap: '15px' 
+                  }}>
+                    {games
+                      .filter(({ state }) => state?.status === 'finished')
+                      .sort((a, b) => {
+                        // 日付でソート（新しい順）
+                        return b.game.date.localeCompare(a.game.date);
+                      })
+                      .map(({ game, state }) => {
+                        const bottomScore = state?.scores.bottom_total ?? 0;
+                        const topScore = state?.scores.top_total ?? 0;
+                        
+                        return (
+                          <div
+                            key={game.gameId}
+                            onClick={() => navigate(`/match/${game.gameId}/play`)}
+                            style={{
+                              padding: '12px',
+                              backgroundColor: '#fff',
+                              border: '2px solid #95a5a6',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                              opacity: 0.8
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = '#7f8c8d';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                              e.currentTarget.style.opacity = '1';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#95a5a6';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                              e.currentTarget.style.opacity = '0.8';
+                            }}
+                          >
+                            <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+                              {game.date}
+                            </div>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              marginBottom: '8px'
+                            }}>
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                flex: 1,
+                                textAlign: 'left'
+                              }}>
+                                {game.bottomTeam.name}
+                              </div>
+                              <div style={{ 
+                                fontSize: '18px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                margin: '0 15px'
+                              }}>
+                                {bottomScore} - {topScore}
+                              </div>
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#333',
+                                flex: 1,
+                                textAlign: 'right'
+                              }}>
+                                {game.topTeam.name}
+                              </div>
+                            </div>
+                            <div style={{ 
+                              fontSize: '13px', 
+                              color: '#7f8c8d', 
+                              fontWeight: 'bold',
+                              textAlign: 'center'
+                            }}>
+                              試合終了
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* 選手一覧モーダル */}
       {playerListOpen && selectedTeamId && (

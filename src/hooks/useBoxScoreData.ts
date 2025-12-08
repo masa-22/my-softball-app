@@ -41,10 +41,19 @@ export interface BoxScoreRowData {
   orderLabel?: string;
 }
 
+export interface RunnerRecord {
+  playerId: string;
+  playerName: string;
+  type: 'steal' | 'caughtstealing' | 'runout';
+  inning: number;
+}
+
 export interface BoxScoreTeamData {
   teamName: string;
   side: Side;
   rows: BoxScoreRowData[];
+  runnerRecords: RunnerRecord[];
+  leftOnBase: number; // 残塁数（合計）
 }
 
 export interface BoxScoreData {
@@ -106,6 +115,105 @@ const buildResultMap = (atBats: AtBat[]): Record<Side, PlayerResultMap> => {
   });
 
   return result;
+};
+
+const buildRunnerRecords = (
+  atBats: AtBat[],
+  side: Side,
+  players: Player[]
+): RunnerRecord[] => {
+  const records: RunnerRecord[] = [];
+  const playersById = players.reduce<Record<string, Player>>((acc, player) => {
+    acc[player.playerId] = player;
+    return acc;
+  }, {});
+
+  atBats.forEach((atBat) => {
+    if (atBat.type !== 'bat') return;
+    const inning = atBat.inning ?? 0;
+    if (inning < 1 || inning > MAX_BOX_SCORE_INNINGS) return;
+
+    const atBatSide: Side = atBat.topOrBottom === 'top' ? 'home' : 'away';
+    if (atBatSide !== side) return; // 対象チームの攻撃時のみ
+
+    if (!atBat.runnerEvents) return;
+
+    atBat.runnerEvents.forEach((event) => {
+      if (event.type === 'steal' && !event.isOut) {
+        // 盗塁
+        const player = playersById[event.runnerId];
+        if (player) {
+          records.push({
+            playerId: event.runnerId,
+            playerName: formatPlayerName(player),
+            type: 'steal',
+            inning,
+          });
+        }
+      } else if (event.type === 'caughtstealing') {
+        // 盗塁死
+        const player = playersById[event.runnerId];
+        if (player) {
+          records.push({
+            playerId: event.runnerId,
+            playerName: formatPlayerName(player),
+            type: 'caughtstealing',
+            inning,
+          });
+        }
+      } else if (event.type === 'runout') {
+        // 走塁死
+        const player = playersById[event.runnerId];
+        if (player) {
+          records.push({
+            playerId: event.runnerId,
+            playerName: formatPlayerName(player),
+            type: 'runout',
+            inning,
+          });
+        }
+      }
+    });
+  });
+
+  return records;
+};
+
+const buildLeftOnBase = (atBats: AtBat[], side: Side): number => {
+  let totalLeftOnBase = 0;
+
+  // 各イニングについて処理
+  for (let inning = 1; inning <= MAX_BOX_SCORE_INNINGS; inning++) {
+    // 対象サイドのatBatsを取得（時系列順）
+    const sideAtBats = atBats
+      .filter((atBat) => {
+        if (atBat.type !== 'bat') return false;
+        const atBatSide: Side = atBat.topOrBottom === 'top' ? 'home' : 'away';
+        return atBatSide === side && atBat.inning === inning;
+      })
+      .sort((a, b) => a.index - b.index);
+
+    if (sideAtBats.length === 0) continue;
+
+    // 3アウトになった時点のatBatを探す、または最後のatBat
+    let endAtBat = sideAtBats.find((atBat) => atBat.situationAfter.outs >= 3);
+    if (!endAtBat) {
+      // 3アウトになっていない場合、最後のatBatを使用
+      endAtBat = sideAtBats[sideAtBats.length - 1];
+    }
+
+    // 残塁数を計算（3アウトになっている場合のみ記録）
+    if (endAtBat.situationAfter.outs >= 3) {
+      const runners = endAtBat.situationAfter.runners;
+      let lobCount = 0;
+      if (runners['1']) lobCount++;
+      if (runners['2']) lobCount++;
+      if (runners['3']) lobCount++;
+      totalLeftOnBase += lobCount;
+    }
+  }
+
+  return totalLeftOnBase;
 };
 
 const ensureParticipantEntries = (
@@ -367,6 +475,8 @@ const buildBoxScoreData = async (matchId: string, atBats: AtBat[]): Promise<BoxS
       players: homePlayers,
       resultMap: resultMap.home,
     }),
+    runnerRecords: buildRunnerRecords(atBats, 'home', homePlayers),
+    leftOnBase: buildLeftOnBase(atBats, 'home'),
   };
 
   const awayTeam: BoxScoreTeamData = {
@@ -379,6 +489,8 @@ const buildBoxScoreData = async (matchId: string, atBats: AtBat[]): Promise<BoxS
       players: awayPlayers,
       resultMap: resultMap.away,
     }),
+    runnerRecords: buildRunnerRecords(atBats, 'away', awayPlayers),
+    leftOnBase: buildLeftOnBase(atBats, 'away'),
   };
 
   return { home: homeTeam, away: awayTeam };

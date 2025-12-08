@@ -21,7 +21,9 @@ export interface PlayerStats {
   runs: number;              // 得点
   rbi: number;               // 打点
   sacrifice: number;         // 犠打
-  fourBall: number;          // 四死球
+  walks: number;             // 四球
+  hitByPitch: number;        // 死球
+  fourBall: number;          // 四死球（四球と死球の合計、表示用）
   strikeouts: number;        // 三振
   stolenBases: number;       // 盗塁
   homeRuns: number;          // 本塁打
@@ -80,6 +82,8 @@ const calculatePlayerStats = (
     runs: 0,
     rbi: 0,
     sacrifice: 0,
+    walks: 0,
+    hitByPitch: 0,
     fourBall: 0,
     strikeouts: 0,
     stolenBases: 0,
@@ -129,9 +133,14 @@ const calculatePlayerStats = (
             stats.sacrifice++;
           }
 
-          // 四死球
-          if (resultDef.stats.isFourBall) {
-            stats.fourBall++;
+          // 四球
+          if (atBat.result.type === 'walk') {
+            stats.walks++;
+          }
+
+          // 死球
+          if (atBat.result.type === 'deadball') {
+            stats.hitByPitch++;
           }
 
           // 三振
@@ -178,6 +187,9 @@ const calculatePlayerStats = (
       });
     }
   });
+
+  // 四死球は四球と死球の合計
+  stats.fourBall = stats.walks + stats.hitByPitch;
 
   return stats;
 };
@@ -316,6 +328,8 @@ const buildRowsForSide = ({
           runs: 0,
           rbi: 0,
           sacrifice: 0,
+          walks: 0,
+          hitByPitch: 0,
           fourBall: 0,
           strikeouts: 0,
           stolenBases: 0,

@@ -11,6 +11,7 @@ import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import { getPlayers } from '../../services/playerService';
 import { PitchType } from '../../types/PitchType';
 import OutRunnersSelectionDialog from './runner/OutRunnersSelectionDialog';
+import { BATTING_RESULTS } from '../../data/softball/battingResults';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -33,6 +34,7 @@ export interface RunnerMovementResult {
     threwPosition: string;
     caughtPosition: string;
   }>;
+  scoredRunnerReasons?: Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'>; // 得点したランナーの進塁理由
 }
 
 interface RunnerMovementInputProps {
@@ -340,6 +342,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   const [scoredRunners, setScoredRunners] = useState<string[]>([]);
   const [showScoreConfirm, setShowScoreConfirm] = useState(false);
   const [pendingScores, setPendingScores] = useState<string[]>([]);
+  const [scoredRunnerReasons, setScoredRunnerReasons] = useState<Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'>>({});
 
   // ダイアログ表示用state
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
@@ -633,6 +636,7 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         outsAfter,
         scoredRunners,
         outDetails,
+        scoredRunnerReasons: Object.keys(scoredRunnerReasons).length > 0 ? scoredRunnerReasons : undefined,
       });
     }
 
@@ -645,7 +649,16 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
 
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     console.log('進塁理由:', results);
-    // TODO: 必要なら理由も親に渡す構造にするが、現状はログのみ
+    
+    // ホームインしたランナーの進塁理由を保存
+    const newReasons = { ...scoredRunnerReasons };
+    results.forEach(result => {
+      const adv = pendingAdvancements.find(a => a.runnerId === result.runnerId);
+      if (adv && adv.toBase === 'home' && (result.reason === 'hit' || result.reason === 'error' || result.reason === 'steal' || result.reason === 'wildpitch' || result.reason === 'passball')) {
+        newReasons[result.runnerId] = result.reason as 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball';
+      }
+    });
+    setScoredRunnerReasons(newReasons);
     
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
@@ -707,6 +720,21 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   
   const handleConfirmScores = () => {
     setScoredRunners(pendingScores);
+    
+    // 打撃結果がヒットの場合、自動進塁でホームインしたランナーの進塁理由を「ヒット」として記録
+    const newReasons = { ...scoredRunnerReasons };
+    const battingResultDef = battingResult ? BATTING_RESULTS[battingResult as keyof typeof BATTING_RESULTS] : null;
+    const isHit = battingResultDef && battingResultDef.stats && battingResultDef.stats.isHit;
+    
+    if (isHit) {
+      pendingScores.forEach(runnerId => {
+        if (!newReasons[runnerId]) {
+          newReasons[runnerId] = 'hit';
+        }
+      });
+    }
+    setScoredRunnerReasons(newReasons);
+    
     setShowScoreConfirm(false);
     setPendingScores([]);
   };

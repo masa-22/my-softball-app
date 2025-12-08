@@ -17,6 +17,8 @@ export interface GameState {
       leftOnBase?: { top: number; bottom: number };
     }>;
   };
+  home_bat_index?: number; // 先攻チームの現在の打順インデックス
+  away_bat_index?: number; // 後攻チームの現在の打順インデックス
   last_updated: string;
 }
 

@@ -24,6 +24,7 @@ export interface PitcherStats {
   strikeouts: number;     // 三振
   walks: number;          // 四球
   hitByPitch: number;     // 死球
+  runs: number;           // 失点
   earnedRuns: number;     // 自責点
   wildPitches: number;    // 暴投
 }
@@ -161,6 +162,7 @@ const calculatePitcherStats = (
     strikeouts: 0,
     walks: 0,
     hitByPitch: 0,
+    runs: 0,
     earnedRuns: 0,
     wildPitches: 0,
   };
@@ -248,6 +250,7 @@ const calculatePitcherStats = (
   pitcherAtBats.forEach((atBat) => {
     if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
       // その打席で得点したランナーは、その投手の失点
+      stats.runs += atBat.scoredRunners.length;
       // 自責点の計算：エラーやパスボールがなかった得点のみカウント
       atBat.scoredRunners.forEach((runnerId) => {
         // そのランナーが出塁した時点から得点するまでの過程でエラーやパスボールがあったかチェック
@@ -641,6 +644,7 @@ const buildPitcherRowsForSide = async ({
         strikeouts: 0,
         walks: 0,
         hitByPitch: 0,
+        runs: 0,
         earnedRuns: 0,
         wildPitches: 0,
       },

@@ -5,6 +5,7 @@ import { AtBat, RunnerEvent, FieldingAction } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 import { RunnerMovementResult } from '../components/play/RunnerMovementInput';
 import { LineupEntry } from '../types/Lineup';
+import { BATTING_RESULTS } from '../data/softball/battingResults';
 
 type PlayProcessingParams = {
   movementResult?: RunnerMovementResult;
@@ -269,7 +270,7 @@ export const useGameProcessor = ({
     }
     // 2. RunnerMovementあり (インプレイ、四死球など)
     else if (movementResult) {
-        const { afterRunners, outsAfter, scoredRunners, outDetails } = movementResult;
+        const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons } = movementResult;
 
         // --- at_bats 保存処理 ---
         const pitchRecords = pitches.map(p => ({
@@ -289,8 +290,27 @@ export const useGameProcessor = ({
           atBatResult.fieldedBy = playDetailsForMovement.position;
         }
         
+        // 打点を追加する条件：
+        // 1. ヒットの場合
+        // 2. 四死球（押し出し）の場合
+        // 3. 内野ゴロで得点した場合
+        // 4. ランナーの進塁理由が「ヒット」である場合（打撃結果がヒットで、追加でホームインした場合など）
         if (scoredRunners.length > 0) {
-          atBatResult.rbi = scoredRunners.length;
+          const battingResultDef = BATTING_RESULTS[battingResultForMovement as keyof typeof BATTING_RESULTS];
+          const isHit = battingResultDef && battingResultDef.stats.isHit;
+          const isFourBall = battingResultForMovement === 'walk' || battingResultForMovement === 'deadball';
+          const isGroundout = battingResultForMovement === 'groundout';
+          
+          // ランナーの進塁理由が「ヒット」である場合を確認
+          let hasHitAdvanceReason = false;
+          if (scoredRunnerReasons && scoredRunners.length > 0) {
+            // 得点したランナーのうち、少なくとも1人が「ヒット」で進塁した場合
+            hasHitAdvanceReason = scoredRunners.some(runnerId => scoredRunnerReasons[runnerId] === 'hit');
+          }
+          
+          if (isHit || isFourBall || isGroundout || hasHitAdvanceReason) {
+            atBatResult.rbi = scoredRunners.length;
+          }
         }
 
         const existingAtBats = await getAtBats(matchId);
