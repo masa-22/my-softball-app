@@ -145,15 +145,6 @@ const Header: React.FC = () => {
                       {/* 追加: 試合登録 */}
                       <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/match'); }}>試合登録</li>
                       <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/player'); }}>選手登録</li>
-                      <li
-                        style={{ padding: '10px 14px', cursor: 'pointer' }}
-                        onClick={() => {
-                          setIsMenuOpen(false);
-                          navigate('/dashboard');
-                        }}
-                      >
-                        ダッシュボード
-                      </li>
                     </>
                   )}
                   <li

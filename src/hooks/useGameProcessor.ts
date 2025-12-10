@@ -80,6 +80,44 @@ export const useGameProcessor = ({
     quality,
   });
 
+  // 各投球の直前のストライクカウントを計算する関数
+  const calculateCountBefore = (
+    pitches: PitchData[],
+    initialBalls: number,
+    initialStrikes: number,
+    targetSeq: number
+  ): { B: number; S: number } => {
+    let balls = initialBalls;
+    let strikes = initialStrikes;
+
+    // targetSeqより前の投球の結果を順番に処理
+    for (const pitch of pitches) {
+      if (pitch.order >= targetSeq) break; // 対象の投球以降は無視
+
+      switch (pitch.result) {
+        case 'ball':
+          balls = Math.min(3, balls + 1);
+          break;
+        case 'swing':
+        case 'looking':
+          strikes = Math.min(2, strikes + 1);
+          break;
+        case 'foul':
+          // ファウル: 2ストライク未満ならストライク+1、2ストライクなら据え置き
+          if (strikes < 2) {
+            strikes = Math.min(2, strikes + 1);
+          }
+          break;
+        case 'inplay':
+        case 'deadball':
+          // 打席終了するのでカウントは変わらない
+          break;
+      }
+    }
+
+    return { B: balls, S: strikes };
+  };
+
   const processPlayResult = async (
     params: PlayProcessingParams,
     onComplete: () => void,
@@ -113,6 +151,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
+          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -191,6 +230,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
+          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -280,6 +320,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
+          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
         }));
 
         const atBatResult: any = {
@@ -479,6 +520,7 @@ export const useGameProcessor = ({
         x: toPercentage(p.x, ZONE_WIDTH),
         y: toPercentage(p.y, ZONE_HEIGHT),
         result: p.result,
+        countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
       }));
 
       const existingAtBats = await getAtBats(matchId);

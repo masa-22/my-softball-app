@@ -72,7 +72,6 @@ export const recordSubstitution = async (params: {
     if (outEntry) {
       outEntry.endInning = params.inning;
       outEntry.status = 'substituted';
-      outEntry.positionAtEnd = outEntry.positionAtEnd ?? params.position ?? null;
     } else if (params.outPlayerId) {
       // データ整合性エラー時の保険
       list.push({
@@ -82,7 +81,6 @@ export const recordSubstitution = async (params: {
         status: 'substituted',
         startInning: null,
         endInning: params.inning,
-        positionAtEnd: params.position ?? null,
         note: params.note,
       });
     }
@@ -161,4 +159,217 @@ export const getCurrentLineup = async (matchId: string, side: 'home' | 'away'): 
   return table[side]
     .filter(p => p.endInning === null) // まだ終わっていない選手
     .sort((a, b) => a.battingOrder - b.battingOrder); // 打順順
+};
+
+// ポジション変更を記録
+export const recordPositionChange = async (params: {
+  matchId: string;
+  side: 'home' | 'away';
+  playerId: string;
+  battingOrder: number;
+  oldPosition: string | null;
+  newPosition: string | null;
+  inning: number;
+}): Promise<void> => {
+  try {
+    const table = await getParticipations(params.matchId);
+    const list = table[params.side];
+    
+    // 現在出場中の選手を探す（まだ試合に出ている選手＝endInningがnull）
+    const currentEntry = list.find(
+      p => p.playerId === params.playerId 
+        && p.battingOrder === params.battingOrder 
+        && p.endInning == null
+    );
+    
+    if (currentEntry) {
+      // 既存entryのendInningを設定し、statusを更新
+      currentEntry.endInning = params.inning;
+      currentEntry.status = currentEntry.status === 'starter' ? 'substituted' : currentEntry.status;
+      // 新しいentryを作成（新しいポジションで）
+      list.push({
+        playerId: params.playerId,
+        side: params.side,
+        battingOrder: params.battingOrder,
+        status: 'position_change',
+        startInning: params.inning,
+        endInning: null,
+        positionAtStart: params.newPosition ?? null,
+      });
+    } else {
+      // データ整合性エラー時の保険：新しいentryを作成
+      list.push({
+        playerId: params.playerId,
+        side: params.side,
+        battingOrder: params.battingOrder,
+        status: 'position_change',
+        startInning: params.inning,
+        endInning: null,
+        positionAtStart: params.newPosition ?? null,
+      });
+    }
+
+    const participationRef = doc(db, PARTICIPATIONS_COLLECTION, params.matchId);
+    await updateDoc(participationRef, { [params.side]: list });
+  } catch (error) {
+    console.error('Error recording position change:', error);
+    throw error;
+  }
+};
+
+// 選手変更を記録（再出場対応）
+export const recordPlayerChange = async (params: {
+  matchId: string;
+  side: 'home' | 'away';
+  outPlayerId: string | null;
+  inPlayerId: string;
+  battingOrder: number;
+  position: string | null;
+  inning: number;
+}): Promise<void> => {
+  try {
+    const table = await getParticipations(params.matchId);
+    const list = table[params.side];
+    
+    // 交代対象の選手を探す（まだ試合に出ている選手＝endInningがnull）
+    if (params.outPlayerId) {
+      const outEntry = list.find(
+        p => p.playerId === params.outPlayerId 
+          && p.battingOrder === params.battingOrder 
+          && p.endInning == null
+      );
+      
+      if (outEntry) {
+        outEntry.endInning = params.inning;
+        outEntry.status = 'substituted';
+      } else if (params.outPlayerId) {
+        // データ整合性エラー時の保険
+        list.push({
+          playerId: params.outPlayerId,
+          side: params.side,
+          battingOrder: params.battingOrder,
+          status: 'substituted',
+          startInning: null,
+          endInning: params.inning,
+        });
+      }
+    }
+    
+    // 新しい選手のentryを作成（再出場の場合も常に新しいentryを作成）
+    // 再出場かどうかを確認（以前に出場したことがあるか）
+    const previousEntries = list.filter(
+      p => p.playerId === params.inPlayerId && p.endInning != null
+    );
+    const isReentry = previousEntries.length > 0;
+    
+    list.push({
+      playerId: params.inPlayerId,
+      side: params.side,
+      battingOrder: params.battingOrder,
+      status: isReentry ? 'pinch_hitter' : 'pinch_hitter', // 再出場も途中出場として記録
+      startInning: params.inning,
+      endInning: null,
+      positionAtStart: params.position ?? null,
+    });
+
+    const participationRef = doc(db, PARTICIPATIONS_COLLECTION, params.matchId);
+    await updateDoc(participationRef, { [params.side]: list });
+  } catch (error) {
+    console.error('Error recording player change:', error);
+    throw error;
+  }
+};
+
+// ラインナップ変更を自動検出・記録
+export const recordLineupChange = async (params: {
+  matchId: string;
+  side: 'home' | 'away';
+  oldLineup: { playerId: string; position: string; battingOrder: number }[];
+  newLineup: { playerId: string; position: string; battingOrder: number }[];
+  currentInning: number;
+}): Promise<void> => {
+  try {
+    // 試合開始前（回数が1回表の開始前）は記録しない
+    if (params.currentInning <= 1) {
+      return;
+    }
+
+    // 打順ごとに変更を検出
+    const maxOrder = Math.max(
+      params.oldLineup.length > 0 ? Math.max(...params.oldLineup.map(e => e.battingOrder)) : 0,
+      params.newLineup.length > 0 ? Math.max(...params.newLineup.map(e => e.battingOrder)) : 0
+    );
+
+    for (let order = 1; order <= maxOrder; order++) {
+      const oldEntry = params.oldLineup.find(e => e.battingOrder === order);
+      const newEntry = params.newLineup.find(e => e.battingOrder === order);
+
+      // 選手変更: 同じ打順でplayerIdが変更された場合
+      if (oldEntry && newEntry && oldEntry.playerId !== newEntry.playerId) {
+        await recordPlayerChange({
+          matchId: params.matchId,
+          side: params.side,
+          outPlayerId: oldEntry.playerId || null,
+          inPlayerId: newEntry.playerId || '',
+          battingOrder: order,
+          position: newEntry.position || null,
+          inning: params.currentInning,
+        });
+      }
+      // ポジション変更: 同じ打順・同じ選手でpositionが変更された場合
+      else if (
+        oldEntry &&
+        newEntry &&
+        oldEntry.playerId === newEntry.playerId &&
+        oldEntry.playerId &&
+        oldEntry.position !== newEntry.position
+      ) {
+        await recordPositionChange({
+          matchId: params.matchId,
+          side: params.side,
+          playerId: oldEntry.playerId,
+          battingOrder: order,
+          oldPosition: oldEntry.position || null,
+          newPosition: newEntry.position || null,
+          inning: params.currentInning,
+        });
+      }
+      // 新規出場: oldEntryがなくnewEntryがある場合
+      else if (!oldEntry && newEntry && newEntry.playerId) {
+        await recordPlayerChange({
+          matchId: params.matchId,
+          side: params.side,
+          outPlayerId: null,
+          inPlayerId: newEntry.playerId,
+          battingOrder: order,
+          position: newEntry.position || null,
+          inning: params.currentInning,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error recording lineup change:', error);
+    // エラーが発生してもlineup保存は続行できるようにするため、ここではthrowしない
+  }
+};
+
+// 出場試合数をカウント
+export const countGamesPlayed = (
+  allParticipations: Array<{ matchId: string; table: ParticipationTable }>,
+  targetPlayerId: string
+): number => {
+  const seenGames = new Set<string>(); // matchIdを記録
+  
+  allParticipations.forEach(({ matchId, table }) => {
+    // ホーム・アウェイの両方から検索
+    const found = table.home
+      .concat(table.away)
+      .some(entry => entry.playerId === targetPlayerId);
+    
+    if (found && matchId) {
+      seenGames.add(matchId);
+    }
+  });
+  
+  return seenGames.size; // ユニークな試合数
 };

@@ -419,7 +419,7 @@ export const useLineupManager = ({
         currentPlayerName: resolvePlayerLabel(side, entry.playerId),
         previousPlayerId: previousParticipant?.playerId,
         previousPlayerName: previousParticipant ? resolvePlayerLabel(side, previousParticipant.playerId) : undefined,
-        previousPosition: previousParticipant?.positionAtEnd || previousParticipant?.positionAtStart || '',
+        previousPosition: previousParticipant?.positionAtStart || '',
         candidatePlayers,
         candidatePositions: positionOptions,
       });
@@ -458,7 +458,7 @@ export const useLineupManager = ({
           currentPlayerName: resolvePlayerLabel(side, entry.playerId),
           previousPlayerId: previousParticipant?.playerId,
           previousPlayerName: previousParticipant ? resolvePlayerLabel(side, previousParticipant.playerId) : undefined,
-          previousPosition: previousParticipant?.positionAtEnd || previousParticipant?.positionAtStart || '',
+          previousPosition: previousParticipant?.positionAtStart || '',
           candidatePlayers,
           candidatePositions: positionOptions,
         });

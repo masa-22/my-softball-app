@@ -48,9 +48,18 @@ const renderRow = (row: BoxScoreRowData) => {
       <td style={{ ...cellStyle, width: 40, textAlign: 'center', fontWeight: 600 }}>
         {orderDisplay}
       </td>
-    <td style={{ ...cellStyle, width: 64, textAlign: 'center', fontWeight: 600 }}>
-      {row.positionLabel || '-'}
-    </td>
+      <td
+        style={{
+          ...cellStyle,
+          width: 40,
+          minWidth: 40,
+          textAlign: 'center',
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {row.positionLabel || '-'}
+      </td>
     <td style={{ ...cellStyle, minWidth: 140 }}>
       <span>{row.name || '未設定'}</span>
     </td>
@@ -67,11 +76,11 @@ const renderTeamBlock = (team: BoxScoreTeamData) => (
   <div key={team.side} style={{ marginBottom: 28 }}>
     <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{team.teamName}</div>
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 520 }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 560 }}>
         <thead>
           <tr>
             <th style={{ ...headerCellStyle, width: 40 }}>打順</th>
-            <th style={{ ...headerCellStyle, width: 64 }}>守備</th>
+            <th style={{ ...headerCellStyle, width: 40, minWidth: 40, whiteSpace: 'nowrap' }}>守備</th>
             <th style={{ ...headerCellStyle, minWidth: 140 }}>選手</th>
             {INNING_HEADERS.map((inning) => (
               <th key={inning} style={{ ...headerCellStyle, minWidth: 48 }}>
