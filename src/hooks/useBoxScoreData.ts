@@ -68,6 +68,31 @@ const getPositionLabel = (position?: string | null) => {
   return POSITIONS[position]?.shortName || position || '';
 };
 
+// 守備位置の履歴をラベル化（連続重複は圧縮し、変化が無いときは単一表示）
+const buildPositionHistoryLabel = (positions: string[], fallback?: string) => {
+  const filtered = positions.filter((p) => p && p !== 'TR');
+  const collapsed: string[] = [];
+  filtered.forEach((p) => {
+    if (collapsed.length === 0 || collapsed[collapsed.length - 1] !== p) {
+      collapsed.push(p);
+    }
+  });
+  const addFallback = () => {
+    if (fallback && fallback !== 'TR') {
+      collapsed.push(fallback);
+    }
+  };
+  if (collapsed.length === 0) {
+    addFallback();
+  }
+  if (collapsed.length === 0) return '';
+  const distinctCount = new Set(collapsed).size;
+  if (distinctCount <= 1) {
+    return getPositionLabel(collapsed[0]);
+  }
+  return collapsed.map(getPositionLabel).join('/');
+};
+
 const formatPlayerName = (player: Player | undefined) => {
   if (!player) return '';
   const family = player.familyName ?? '';
@@ -361,17 +386,112 @@ const buildRowsForSide = ({
       return 0;
     });
 
+    // スタメンエントリを特定
+    const starterEntry = participants.find(p => p.status === 'starter');
+    const starterPlayerId = starterEntry?.playerId || null;
+    
+    // 同じ選手のエントリをグループ化（PH/PR/TRは守備位置対象外）
+    const entriesByPlayer = new Map<string, ParticipationEntry[]>();
+    participants.forEach(entry => {
+      if (!entry.playerId) return;
+      const list = entriesByPlayer.get(entry.playerId) || [];
+      list.push(entry);
+      entriesByPlayer.set(entry.playerId, list);
+    });
+
+    // 処理済みの選手IDを追跡
+    const processedPlayerIds = new Set<string>();
+
     participants.forEach((participant, idx) => {
-      const player = playersById[participant.playerId];
+      const playerId = participant.playerId;
+      if (!playerId) return;
+
+      // スタメンで再出場した場合、最初のスタメンエントリに統合
+      if (starterPlayerId && playerId === starterPlayerId) {
+        if (processedPlayerIds.has(playerId)) {
+          // 既に処理済み（スタメン行として統合済み）なのでスキップ
+          return;
+        }
+        // スタメンエントリとして統合処理
+        processedPlayerIds.add(playerId);
+        
+        const player = playersById[playerId];
+        const displayName = formatPlayerName(player) || '未登録';
+        const roleLabel = roleLabelMap[participant.status] || '';
+        
+        // 同じ選手の全エントリから守備位置を収集
+        const samePlayerEntries = entriesByPlayer.get(playerId) || [];
+        const positionSeq: string[] = [];
+        samePlayerEntries.forEach(entry => {
+          if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
+            positionSeq.push(entry.positionAtStart);
+          }
+        });
+        if (lineupEntry?.position && lineupEntry.position !== 'TR') {
+          positionSeq.push(lineupEntry.position);
+        }
+        
+        const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
+        
+        // 打席結果は全エントリを統合（既にresultMapで統合されているのでそのまま使用）
+        const perInning = resultMap[playerId] || {};
+        const resultsByInning: Record<number, string> = {};
+        const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+        INNING_COLUMNS.forEach((inning) => {
+          const info = perInning[inning];
+          if (info?.labels.length) {
+            resultsByInning[inning] = info.labels.join(' / ');
+            if (info.hasRbi) {
+              inningStyles[inning] = 'rbi';
+            } else if (info.hasHit) {
+              inningStyles[inning] = 'hit';
+            } else {
+              inningStyles[inning] = null;
+            }
+          }
+        });
+
+        rows.push({
+          key: `${side}-${order}-${playerId}`,
+          battingOrder: order,
+          playerId: playerId,
+          name: displayName,
+          positionLabel,
+          roleLabel,
+          isSubstitute: false,
+          resultsByInning,
+          inningStyles,
+          orderLabel: baseOrderLabel,
+        });
+        return;
+      }
+
+      // 途中出場選手の場合
+      if (processedPlayerIds.has(playerId)) {
+        return; // 既に処理済み
+      }
+      processedPlayerIds.add(playerId);
+
+      const player = playersById[playerId];
       const displayName = formatPlayerName(player) || '未登録';
       const roleLabel = roleLabelMap[participant.status] || '';
-      const position =
-        participant.positionAtStart ||
-        participant.positionAtEnd ||
-        lineupEntry?.position ||
-        '';
-      const positionLabel = getPositionLabel(position);
-      const perInning = resultMap[participant.playerId] || {};
+      
+       // 同じ選手の全エントリから守備位置を収集
+       const samePlayerEntries = entriesByPlayer.get(playerId) || [];
+       const positionSeq: string[] = [];
+       samePlayerEntries.forEach(entry => {
+         if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
+           positionSeq.push(entry.positionAtStart);
+         }
+       });
+      // lineupEntryの位置も追加
+       if (lineupEntry?.position && lineupEntry.position !== 'TR') {
+         positionSeq.push(lineupEntry.position);
+       }
+      
+      const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
+      
+      const perInning = resultMap[playerId] || {};
       const resultsByInning: Record<number, string> = {};
       const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
       INNING_COLUMNS.forEach((inning) => {
@@ -390,10 +510,11 @@ const buildRowsForSide = ({
 
       const isStarterRow = getStatusPriority(participant) === 0;
       const orderLabel = isStarterRow ? baseOrderLabel : undefined;
+      
       rows.push({
-        key: `${side}-${order}-${participant.playerId || idx}`,
+        key: `${side}-${order}-${playerId || idx}`,
         battingOrder: order,
-        playerId: participant.playerId,
+        playerId: playerId,
         name: displayName,
         positionLabel,
         roleLabel,
@@ -405,6 +526,15 @@ const buildRowsForSide = ({
     });
   }
 
+  // unassignedParticipantsも同じ選手のエントリをグループ化（PH/PR/TRは守備位置対象外）
+  const unassignedByPlayer = new Map<string, ParticipationEntry[]>();
+  unassignedParticipants.forEach(entry => {
+    if (!entry.playerId) return;
+    const list = unassignedByPlayer.get(entry.playerId) || [];
+    list.push(entry);
+    unassignedByPlayer.set(entry.playerId, list);
+  });
+
   unassignedParticipants
     .sort((a, b) => {
       const aStart = a.startInning ?? 999;
@@ -412,43 +542,56 @@ const buildRowsForSide = ({
       return aStart - bStart;
     })
     .forEach((participant, idx) => {
-    const player = playersById[participant.playerId];
-    const displayName = formatPlayerName(player) || '未登録';
-    const roleLabel = roleLabelMap[participant.status] || '';
-    const fallbackLineup = lineupEntries.find((entry) => entry.playerId === participant.playerId);
-    const position =
-      participant.positionAtStart ||
-      participant.positionAtEnd ||
-      fallbackLineup?.position ||
-      '';
-    const positionLabel = getPositionLabel(position);
-    const perInning = resultMap[participant.playerId] || {};
-    const resultsByInning: Record<number, string> = {};
-    const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
-    INNING_COLUMNS.forEach((inning) => {
-      const info = perInning[inning];
-      if (info?.labels.length) {
-        resultsByInning[inning] = info.labels.join(' / ');
-        if (info.hasRbi) {
-          inningStyles[inning] = 'rbi';
-        } else if (info.hasHit) {
-          inningStyles[inning] = 'hit';
-        } else {
-          inningStyles[inning] = null;
+      const playerId = participant.playerId;
+      if (!playerId) return;
+
+      const player = playersById[playerId];
+      const displayName = formatPlayerName(player) || '未登録';
+      const roleLabel = roleLabelMap[participant.status] || '';
+      const fallbackLineup = lineupEntries.find((entry) => entry.playerId === playerId);
+      
+      // 同じ選手の全エントリから守備位置を収集
+      const samePlayerEntries = unassignedByPlayer.get(playerId) || [];
+      const positionSeq: string[] = [];
+      samePlayerEntries.forEach(entry => {
+        if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
+          positionSeq.push(entry.positionAtStart);
         }
+      });
+      // fallbackLineupの位置も追加
+      if (fallbackLineup?.position && fallbackLineup.position !== 'TR') {
+        positionSeq.push(fallbackLineup.position);
       }
-    });
+      
+      const positionLabel = buildPositionHistoryLabel(positionSeq, fallbackLineup?.position || '');
+      
+      const perInning = resultMap[playerId] || {};
+      const resultsByInning: Record<number, string> = {};
+      const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+      INNING_COLUMNS.forEach((inning) => {
+        const info = perInning[inning];
+        if (info?.labels.length) {
+          resultsByInning[inning] = info.labels.join(' / ');
+          if (info.hasRbi) {
+            inningStyles[inning] = 'rbi';
+          } else if (info.hasHit) {
+            inningStyles[inning] = 'hit';
+          } else {
+            inningStyles[inning] = null;
+          }
+        }
+      });
       rows.push({
-        key: `${side}-extra-${participant.playerId || idx}`,
+        key: `${side}-extra-${playerId || idx}`,
         battingOrder: 0,
-        playerId: participant.playerId,
+        playerId: playerId,
         name: displayName,
         positionLabel,
         roleLabel,
         isSubstitute: true,
         resultsByInning,
         inningStyles,
-      orderLabel: undefined,
+        orderLabel: undefined,
       });
     });
 
@@ -558,5 +701,4 @@ export const useBoxScoreData = (matchId?: string) => {
 
   return { data, loading, refresh };
 };
-
 

@@ -62,7 +62,16 @@ const renderRow = (row: StatsRowData) => {
       <td style={{ ...cellStyle, width: 40, textAlign: 'center', fontWeight: 600 }}>
         {orderDisplay}
       </td>
-      <td style={{ ...cellStyle, width: 64, textAlign: 'center', fontWeight: 600 }}>
+      <td
+        style={{
+          ...cellStyle,
+          width: 40,
+          minWidth: 40,
+          textAlign: 'center',
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+        }}
+      >
         {row.positionLabel || '-'}
       </td>
       <td style={{ ...cellStyle, minWidth: 140 }}>
@@ -84,8 +93,8 @@ const renderTeamBlock = (team: StatsTeamData) => (
       <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 520 }}>
         <thead>
           <tr>
-            <th style={{ ...headerCellStyle, width: 40 }}>打順</th>
-            <th style={{ ...headerCellStyle, width: 64 }}>守備</th>
+            <th style={{ ...headerCellStyle, width: 40, minWidth: 40, whiteSpace: 'nowrap' }}>打順</th>
+            <th style={{ ...headerCellStyle, width: 40, minWidth: 40, whiteSpace: 'nowrap' }}>守備</th>
             <th style={{ ...headerCellStyle, minWidth: 140 }}>選手</th>
             {STATS_HEADERS.map((header) => (
               <th key={header.key} style={{ ...headerCellStyle, minWidth: 48 }}>

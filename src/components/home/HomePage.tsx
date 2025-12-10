@@ -294,6 +294,7 @@ const HomePage: React.FC = () => {
             </div>
           </div>
         </div>
+
       </div>
     );
   }

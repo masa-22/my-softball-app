@@ -568,25 +568,20 @@ const buildPitcherRowsForSide = async ({
   matchId: string;
 }): Promise<PitcherStatsRowData[]> => {
   const rows: PitcherStatsRowData[] = [];
-  const pitchersSet = new Set<string>();
 
-  // そのサイドの投手を特定（pitcherIdでフィルタ）
-  // side === 'home'の場合、topOrBottom === 'bottom'の打席で投げている（後攻の攻撃時に先攻が守備）
-  // side === 'away'の場合、topOrBottom === 'top'の打席で投げている（先攻の攻撃時に後攻が守備）
-  atBats.forEach((atBat) => {
-    if (atBat.type === 'bat' && atBat.pitcherId) {
-      const isPitcherSide =
-        (side === 'home' && atBat.topOrBottom === 'bottom') ||
-        (side === 'away' && atBat.topOrBottom === 'top');
+  // 守備側の打席を時系列で取得
+  const defensiveAtBats = atBats
+    .filter(
+      (atBat) =>
+        atBat.type === 'bat' &&
+        atBat.pitcherId &&
+        ((side === 'home' && atBat.topOrBottom === 'bottom') ||
+          (side === 'away' && atBat.topOrBottom === 'top'))
+    )
+    .sort((a, b) => a.index - b.index);
 
-      if (isPitcherSide && !pitchersSet.has(atBat.pitcherId)) {
-        pitchersSet.add(atBat.pitcherId);
-      }
-    }
-  });
-
-  // 勝利投手・敗戦投手を判定
-  const allPitcherIds = Array.from(pitchersSet);
+  // 勝利投手・敗戦投手判定用に登板した投手一覧（重複除外）
+  const allPitcherIds = Array.from(new Set(defensiveAtBats.map((ab) => ab.pitcherId!)));
   let winningPitcher = determineWinningPitcher(side, atBats, gameState, lineup, allPitcherIds);
   
   // 条件3の場合、既に選択されている勝利投手を取得
@@ -604,27 +599,49 @@ const buildPitcherRowsForSide = async ({
   const losingPitcher = determineLosingPitcher(side, atBats, gameState);
 
   // 投手ごとに統計を計算
-  pitchersSet.forEach((pitcherId) => {
-    const player = players.find((p) => p.playerId === pitcherId);
-    const displayName = formatPlayerName(player) || '未登録';
-    const stats = calculatePitcherStats(pitcherId, atBats, side, gameState);
+  // 投手交代（同一投手の再登板も含む）ごとにスティントを分割
+  let currentPitcherId: string | null = null;
+  let currentStint: AtBat[] = [];
+  let stintIndex = 0;
 
-    // 勝敗を設定
+  const flushStint = () => {
+    if (!currentPitcherId || currentStint.length === 0) return;
+    const player = players.find((p) => p.playerId === currentPitcherId);
+    const displayName = formatPlayerName(player) || '未登録';
+    const stats = calculatePitcherStats(currentPitcherId, currentStint, side, gameState);
+
     if (gameState?.status === 'finished') {
-      if (pitcherId === winningPitcher) {
+      if (currentPitcherId === winningPitcher) {
         stats.winLoss = '勝';
-      } else if (pitcherId === losingPitcher) {
+      } else if (currentPitcherId === losingPitcher) {
         stats.winLoss = '敗';
       }
     }
 
     rows.push({
-      key: `${side}-pitcher-${pitcherId}`,
-      playerId: pitcherId,
+      key: `${side}-pitcher-${currentPitcherId}-${stintIndex}`,
+      playerId: currentPitcherId,
       name: displayName,
       stats,
     });
+    stintIndex += 1;
+  };
+
+  defensiveAtBats.forEach((atBat) => {
+    if (currentPitcherId === null) {
+      currentPitcherId = atBat.pitcherId!;
+      currentStint = [atBat];
+      return;
+    }
+    if (atBat.pitcherId === currentPitcherId) {
+      currentStint.push(atBat);
+    } else {
+      flushStint();
+      currentPitcherId = atBat.pitcherId!;
+      currentStint = [atBat];
+    }
   });
+  flushStint();
 
   // 投手がいない場合
   if (rows.length === 0) {

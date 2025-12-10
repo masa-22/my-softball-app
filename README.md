@@ -256,51 +256,130 @@ export const createData = async (data: SomeData) => {
 
 ### 本番環境へのデプロイ
 
+#### クイックデプロイ（推奨）
+
+最も簡単な方法は、npmスクリプトを使用することです：
+
+```bash
+# ビルドとHostingへのデプロイを一度に実行
+npm run deploy
+```
+
+このコマンドは以下を自動的に実行します：
+1. `npm run build` - アプリケーションをビルド
+2. `firebase deploy --only hosting` - Firebase Hostingにデプロイ
+
+#### 詳細なデプロイ手順
+
 ### 1. Firebase CLIにログイン
 
 ```bash
 firebase login
 ```
 
-### 2. Firebaseプロジェクトの確認
+ブラウザが開くので、Googleアカウントでログインしてください。
+
+### 2. Firebaseプロジェクトの確認と切り替え
+
+**重要**: 正しいプロジェクト（`tus-softball-datasystem`）にデプロイするため、必ずプロジェクトを確認・切り替えてください。
+
+#### 現在のプロジェクトを確認
 
 ```bash
-firebase projects:list
+firebase use
 ```
 
-プロジェクトIDが `tus-softball-datasystem` であることを確認してください。
-
-### 3. Firestoreセキュリティルールのデプロイ
+#### 正しいプロジェクトに切り替え
 
 ```bash
-firebase deploy --only firestore:rules
+firebase use tus-softball-datasystem
 ```
 
-### 4. Realtime Databaseセキュリティルールのデプロイ
+#### プロジェクトが切り替わったことを確認
 
 ```bash
-firebase deploy --only database
+firebase use
 ```
 
-### 5. Firestoreインデックスのデプロイ（必要に応じて）
+出力に `tus-softball-datasystem (current)` と表示されることを確認してください。
 
-```bash
-firebase deploy --only firestore:indexes
-```
+**注意**: もし別のプロジェクト（例: `tus-softball-datasystem-dev`）が表示されている場合、上記のコマンドで正しいプロジェクトに切り替えてください。
 
-### 6. アプリケーションのビルド
+### 3. アプリケーションのビルド
 
 ```bash
 npm run build
 ```
 
-### 7. Hostingへのデプロイ
+ビルドされたファイルは `dist` ディレクトリに出力されます。
+
+### 4. Hostingへのデプロイ
+
+#### 方法A: npmスクリプトを使用（推奨）
+
+```bash
+npm run deploy
+```
+
+#### 方法B: Firebase CLIを直接使用
 
 ```bash
 firebase deploy --only hosting
 ```
 
-### 8. すべてを一度にデプロイ
+または、プロジェクトを明示的に指定：
+
+```bash
+firebase deploy --only hosting --project tus-softball-datasystem
+```
+
+### 5. デプロイの確認
+
+デプロイが完了すると、以下のURLでアプリが公開されます：
+
+- **本番環境**: https://tus-softball-datasystem.web.app/
+- **プレビュー環境**: https://tus-softball-datasystem.firebaseapp.com/
+
+デプロイが成功すると、ターミナルに以下のようなメッセージが表示されます：
+
+```
+✔  Deploy complete!
+
+Project Console: https://console.firebase.google.com/project/tus-softball-datasystem/overview
+Hosting URL: https://tus-softball-datasystem.web.app
+```
+
+### 6. その他のサービスをデプロイする場合
+
+#### Firestoreセキュリティルールのデプロイ
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+#### Realtime Databaseセキュリティルールのデプロイ
+
+```bash
+firebase deploy --only database
+```
+
+#### Firestoreインデックスのデプロイ
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+#### すべてを一度にデプロイ
+
+```bash
+# ビルドを実行してから
+npm run build
+
+# すべてのサービスをデプロイ
+npm run deploy:all
+```
+
+または：
 
 ```bash
 firebase deploy

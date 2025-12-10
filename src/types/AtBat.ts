@@ -55,6 +55,7 @@ export interface PitchRecord {
   y?: number; // 0-100%
   result: PitchResult;
   velocity?: number | null;
+  countBefore?: { B: number; S: number }; // その投球が起こる直前のストライクカウント
 }
 
 export type RunnerEventType =
