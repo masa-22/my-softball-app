@@ -795,6 +795,7 @@ const PlayRegister: React.FC = () => {
         data={pitcherStatsData}
         loading={pitcherStatsLoading}
         onClose={handleClosePitcherStats}
+        matchId={matchId}
       />
       {winningPitcherModalSide && (
         <WinningPitcherModal
