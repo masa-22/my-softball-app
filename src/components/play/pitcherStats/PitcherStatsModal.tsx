@@ -1,16 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   PitcherStatsData,
   PitcherStatsRowData,
   PitcherStatsTeamData,
   PitcherStats,
 } from '../../../hooks/usePitcherStatsData';
+import PitchChartModal from './PitchChartModal';
 
 type PitcherStatsModalProps = {
   open: boolean;
   loading: boolean;
   data: PitcherStatsData | null;
   onClose: () => void;
+  matchId?: string;
 };
 
 const STATS_HEADERS = [
@@ -93,7 +95,9 @@ const renderTeamBlock = (team: PitcherStatsTeamData) => (
   </div>
 );
 
-const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loading, onClose }) => {
+const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loading, onClose, matchId }) => {
+  const [showPitchChart, setShowPitchChart] = useState(false);
+
   if (!open) return null;
 
   const overlayStyle: React.CSSProperties = {
@@ -130,20 +134,37 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
       <div style={modalStyle} onClick={handleModalClick}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 20, fontWeight: 700 }}>投手成績</div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              border: 'none',
-              background: '#e9ecef',
-              borderRadius: 20,
-              padding: '6px 14px',
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            閉じる
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setShowPitchChart(true)}
+              style={{
+                border: 'none',
+                background: '#4c6ef5',
+                color: '#fff',
+                borderRadius: 20,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              投球チャート
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                border: 'none',
+                background: '#e9ecef',
+                borderRadius: 20,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              閉じる
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -159,6 +180,13 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
           </div>
         )}
       </div>
+      {matchId && (
+        <PitchChartModal
+          open={showPitchChart}
+          onClose={() => setShowPitchChart(false)}
+          matchId={matchId}
+        />
+      )}
     </div>
   );
 };
