@@ -18,6 +18,7 @@
 - [テスト手順](#テスト手順)
 - [開発・デプロイフロー](#開発デプロイフロー)
 - [技術スタック](#技術スタック)
+- [型定義ドキュメント](#型定義ドキュメント)
 
 ---
 
@@ -759,3 +760,18 @@ Firebase Consoleでユーザーを作成しても、自動的には承認レコ�
 
 - React Compilerは現在有効化されていません（パフォーマンスへの影響を考慮）
 - TypeScriptの統合については、[Vite TypeScriptテンプレート](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts)を参照してください
+
+---
+
+## 型定義ドキュメント
+
+このプロジェクトで使用されるすべてのデータ型の詳細な説明については、[型定義ドキュメント](src/types/@README.md)を参照してください。
+
+型定義ドキュメントには以下の情報が含まれています：
+
+- 各型定義ファイルの説明（Game、AtBat、Team、Player、Tournament、Lineup、Participation、GameState、PitchData、PitchType）
+- 各型の主要フィールドとその意味
+- 型間の関係性とデータフロー
+- 使用上の注意事項
+
+開発時やデータ構造を理解する際の参考資料としてご活用ください。

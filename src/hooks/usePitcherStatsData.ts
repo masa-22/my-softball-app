@@ -383,7 +383,10 @@ const determineWinningPitcher = (
   const pitcherChanges = getPitcherChanges(side, atBats);
   const finalInning = Math.max(...atBats.map((a) => a.inning || 0), 0);
 
-  // 先発投手の投球回数を計算
+  // 試合終了イニングの半数以上の整数イニングを計算
+  const requiredInnings = Math.ceil(finalInning / 2);
+
+  // 先発投手の投球回数を計算（整数イニング）
   const startingPitcherAtBats = atBats.filter(
     (a) => a.type === 'bat' && a.pitcherId === startingPitcher
   );
@@ -392,14 +395,14 @@ const determineWinningPitcher = (
     const outsAdded = Math.max(0, atBat.situationAfter.outs - atBat.situationBefore.outs);
     startingPitcherOuts += outsAdded;
   });
-  const startingPitcherInnings = startingPitcherOuts / 3;
+  const startingPitcherInnings = Math.floor(startingPitcherOuts / 3); // 整数イニング
 
   // 先発投手の交代タイミングを特定
   const startingPitcherChange = pitcherChanges.find((c) => c.pitcherId === startingPitcher);
   const startingPitcherEndIndex = startingPitcherChange?.endIndex || 0;
 
-  // 条件1: 先発投手が4回以上投げて、交代時にリードしていて、そのリードが維持された場合
-  if (startingPitcher && startingPitcherInnings >= 4) {
+  // 条件1: 試合終了イニングの半数以上の整数イニングを投げ、交代時にリードしていて、そのリードが維持された場合
+  if (startingPitcher && startingPitcherInnings >= requiredInnings) {
     const scoreAtChange = getScoreAtAtBat(startingPitcherEndIndex, atBats, gameState);
     const wasLeading =
       (isHomeTeam && scoreAtChange.home > scoreAtChange.away) ||
@@ -413,31 +416,14 @@ const determineWinningPitcher = (
         (!isHomeTeam && scoreAfterChange.away > scoreAfterChange.home);
 
       if (stillLeading) {
+        // 勝利投手が見つかったら即座に返す（以降の条件はチェックしない）
         return startingPitcher;
       }
     }
   }
 
-  // 条件2: 5回または6回で終了した試合で先発投手が3回以上投げて、交代時にリードしていて、そのリードが維持された場合
-  if (startingPitcher && (finalInning === 5 || finalInning === 6) && startingPitcherInnings >= 3) {
-    const scoreAtChange = getScoreAtAtBat(startingPitcherEndIndex, atBats, gameState);
-    const wasLeading =
-      (isHomeTeam && scoreAtChange.home > scoreAtChange.away) ||
-      (!isHomeTeam && scoreAtChange.away > scoreAtChange.home);
-
-    if (wasLeading) {
-      const scoreAfterChange = getScoreAtAtBat(atBats.length, atBats, gameState);
-      const stillLeading =
-        (isHomeTeam && scoreAfterChange.home > scoreAfterChange.away) ||
-        (!isHomeTeam && scoreAfterChange.away > scoreAfterChange.home);
-
-      if (stillLeading) {
-        return startingPitcher;
-      }
-    }
-  }
-
-  // 条件3: 1または2の条件を満たさず、2人以上の救援投手が出場した場合
+  // 条件1で見つからなかった場合のみ、以下の条件をチェック
+  // 条件2: 統合条件を満たさず、2人以上の救援投手が出場した場合
   // この場合は、試合終了時に登板した投手を提示して選ばせる必要がある
   // 既に選択されている場合はそれを返す
   const reliefPitchers = allPitchers.filter((p) => p !== startingPitcher);
@@ -447,8 +433,9 @@ const determineWinningPitcher = (
     return null; // 一旦nullを返し、後で処理
   }
 
-  // 救援投手が1人の場合、その投手を勝利投手とする
+  // 条件3: 救援投手が1人の場合、その投手を勝利投手とする
   if (reliefPitchers.length === 1) {
+    // 勝利投手が見つかったら即座に返す
     return reliefPitchers[0];
   }
 
