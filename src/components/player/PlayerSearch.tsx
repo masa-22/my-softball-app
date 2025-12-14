@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { getTeams } from '../../services/teamService';
 import { searchPlayers } from '../../services/playerService';
+import PlayerListItem from './PlayerListItem';
+import PlayerStatsModal from '../viewer/PlayerStatsModal';
+import { Player } from '../../types/Player';
 
 const PlayerSearch: React.FC = () => {
   const [teams, setTeams] = useState<any[]>([]);
   const [teamId, setTeamId] = useState('');
   const [nameQuery, setNameQuery] = useState('');
   const [entryYear, setEntryYear] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<Player[]>([]);
   const [error, setError] = useState('');
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   useEffect(() => {
     const loadTeams = async () => {
@@ -44,6 +48,10 @@ const PlayerSearch: React.FC = () => {
     setError('');
   };
 
+  const handlePlayerClick = (player: Player) => {
+    setSelectedPlayer(player);
+  };
+
   return (
     <div>
       <h2>選手検索</h2>
@@ -68,14 +76,19 @@ const PlayerSearch: React.FC = () => {
 
       <div>
         {results.map(p => (
-          <div key={p.playerId} style={{ padding:12, border:'1px solid #ddd', borderRadius:4, marginBottom:10, background:'#fff' }}>
-            <h3 style={{ margin:0 }}>{p.familyName} {p.givenName} <small style={{ color:'#666' }}>[{p.playerId}]</small></h3>
-            <p style={{ margin:4 }}><strong>利き手:</strong> {p.throwing} / <strong>利き打ち:</strong> {p.batting}</p>
-            {p.entryYear && <p style={{ margin:4 }}><strong>入学年度:</strong> {p.entryYear}</p>}
-            <p style={{ margin:4, fontSize:12, color:'#666' }}><strong>所属チームID:</strong> {p.teamId}</p>
-          </div>
+          <PlayerListItem 
+            key={p.playerId} 
+            player={p} 
+            onClick={handlePlayerClick}
+          />
         ))}
       </div>
+
+      <PlayerStatsModal
+        isOpen={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        player={selectedPlayer}
+      />
     </div>
   );
 };

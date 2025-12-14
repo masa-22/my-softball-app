@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 import { getPlayers } from '../../services/playerService';
 import LoadingIndicator from '../common/LoadingIndicator';
+import PlayerListItem from '../player/PlayerListItem';
+import PlayerStatsModal from './PlayerStatsModal';
+import { Player } from '../../types/Player';
 
 const ViewerPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -13,8 +16,9 @@ const ViewerPage: React.FC = () => {
   const [prefectures, setPrefectures] = useState<string[]>([]);
   const [affiliations, setAffiliations] = useState<string[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<any | null>(null);
-  const [players, setPlayers] = useState<any[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -73,6 +77,14 @@ const ViewerPage: React.FC = () => {
     setPlayers([]);
   };
 
+  const handlePlayerClick = (player: Player) => {
+    setSelectedPlayer(player);
+  };
+
+  const handleCloseStatsModal = () => {
+    setSelectedPlayer(null);
+  };
+
   if (selectedTeam) {
     return (
       <div style={{ width: '95%', maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
@@ -105,26 +117,20 @@ const ViewerPage: React.FC = () => {
         ) : (
           <div style={{ display: 'grid', gap: '10px' }}>
             {players.map((player) => (
-              <div
-                key={player.id}
-                style={{
-                  padding: '15px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  backgroundColor: '#f9f9f9',
-                }}
-              >
-                <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>
-                  {player.familyName} {player.givenName}
-                </div>
-                <div style={{ fontSize: '14px', color: '#666' }}>
-                  背番号: {player.uniformNumber || '未設定'} | 
-                  入学年: {player.entryYear || '未設定'}
-                </div>
-              </div>
+              <PlayerListItem 
+                key={player.playerId} 
+                player={player} 
+                onClick={handlePlayerClick}
+              />
             ))}
           </div>
         )}
+
+        <PlayerStatsModal
+          isOpen={!!selectedPlayer}
+          onClose={handleCloseStatsModal}
+          player={selectedPlayer}
+        />
       </div>
     );
   }
@@ -261,6 +267,3 @@ const ViewerPage: React.FC = () => {
 };
 
 export default ViewerPage;
-
-
-
