@@ -24,12 +24,14 @@ import { usePitcherStatsData, getPitchersForSelection } from '../../hooks/usePit
 import PitcherStatsModal from './pitcherStats/PitcherStatsModal';
 import WinningPitcherModal from './pitcherStats/WinningPitcherModal';
 import { setWinningPitcher, getWinningPitcher } from '../../services/winningPitcherService';
-import { getGame } from '../../services/gameService';
+import { getGame, updateGame } from '../../services/gameService';
 import { getGameState } from '../../services/gameStateService';
 import { getLineup } from '../../services/lineupService';
 import SpecialSubstitutionModal from './substitution/SpecialSubstitutionModal';
+import { savePlayerGameStats } from '../../services/playerGameStatsService';
 import FinishGameButton from './FinishGameButton';
 import { useGameStatus } from '../../hooks/useGameStatus';
+import MemoModal from '../common/MemoModal';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -161,6 +163,10 @@ const PlayRegister: React.FC = () => {
   const [showSpecialModal, setShowSpecialModal] = useState(false);
   const [specialModalDismissed, setSpecialModalDismissed] = useState(false);
   const specialEntriesKeyRef = useRef<string>('');
+  // Game Memo State
+  const [showGameMemoModal, setShowGameMemoModal] = useState(false);
+  const [gameMemo, setGameMemo] = useState('');
+
   const {
     data: boxScoreData,
     loading: boxScoreLoading,
@@ -309,6 +315,29 @@ const PlayRegister: React.FC = () => {
   const handleSpecialModalSubmit = async (resolutions: SpecialEntryResolution[]) => {
     await applySpecialEntryResolutions(resolutions);
     refreshBoxScore();
+  };
+
+  const handleOpenGameMemo = async () => {
+    if (!matchId) return;
+    try {
+      const game = await getGame(matchId);
+      if (game) {
+        setGameMemo(game.memo || '');
+        setShowGameMemoModal(true);
+      }
+    } catch (error) {
+      console.error('Error fetching game for memo:', error);
+    }
+  };
+
+  const handleSaveGameMemo = async (memo: string) => {
+    if (!matchId) return;
+    try {
+      await updateGame(matchId, { memo });
+    } catch (error) {
+      console.error('Error updating game memo:', error);
+      throw error;
+    }
   };
 
   const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
@@ -613,7 +642,16 @@ const PlayRegister: React.FC = () => {
                   交代処理 ({specialEntries.length})
                 </button>
               )}
-              <div style={{ marginLeft: 'auto' }}>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="boxscore-button"
+                  onClick={handleOpenGameMemo}
+                  disabled={!matchId}
+                  style={{ backgroundColor: '#fd7e14' }}
+                >
+                  試合メモ
+                </button>
                 <FinishGameButton
                   status={gameStatus}
                   onFinish={async () => {
@@ -668,7 +706,14 @@ const PlayRegister: React.FC = () => {
                     }
 
                     // 試合終了
-                    await finishGame();
+                    const finished = await finishGame();
+                    if (finished) {
+                      try {
+                        await savePlayerGameStats(matchId);
+                      } catch (err) {
+                        console.error('Error saving player game stats:', err);
+                      }
+                    }
                   }}
                   busy={statusTransitioning}
                   disabled={!matchId}
@@ -783,12 +828,14 @@ const PlayRegister: React.FC = () => {
         data={boxScoreData}
         loading={boxScoreLoading}
         onClose={handleCloseBoxScore}
+        matchId={matchId}
       />
       <StatsModal
         open={showStats}
         data={statsData}
         loading={statsLoading}
         onClose={handleCloseStats}
+        matchId={matchId}
       />
       <PitcherStatsModal
         open={showPitcherStats}
@@ -796,6 +843,13 @@ const PlayRegister: React.FC = () => {
         loading={pitcherStatsLoading}
         onClose={handleClosePitcherStats}
         matchId={matchId}
+      />
+      <MemoModal
+        isOpen={showGameMemoModal}
+        onClose={() => setShowGameMemoModal(false)}
+        onSave={handleSaveGameMemo}
+        initialMemo={gameMemo}
+        title="試合メモ"
       />
       {winningPitcherModalSide && (
         <WinningPitcherModal
@@ -811,7 +865,14 @@ const PlayRegister: React.FC = () => {
               setShowWinningPitcherModal(false);
               setWinningPitcherModalSide(null);
               // 試合終了を実行
-              finishGame();
+              const finished = await finishGame();
+              if (finished) {
+                try {
+                  await savePlayerGameStats(matchId);
+                } catch (err) {
+                  console.error('Error saving player game stats:', err);
+                }
+              }
             }
           }}
           onCancel={() => {

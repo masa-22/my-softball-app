@@ -4,9 +4,10 @@ interface Props {
   isOpen?: boolean;
   onClose: () => void;
   children: ReactNode;
+  zIndex?: number;
 }
 
-const Modal: React.FC<Props> = ({ isOpen = true, onClose, children }) => {
+const Modal: React.FC<Props> = ({ isOpen = true, onClose, children, zIndex = 1000 }) => {
   if (!isOpen) return null;
 
   return (
@@ -21,7 +22,7 @@ const Modal: React.FC<Props> = ({ isOpen = true, onClose, children }) => {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 1000,
+        zIndex: zIndex,
       }}
       onClick={onClose}
     >

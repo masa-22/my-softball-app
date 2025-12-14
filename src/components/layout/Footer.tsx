@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
-const version = '1.0.4';
-const updatedAt = '2025-12-11';
+const version = '1.0.5';
+const updatedAt = '2025-12-14';
 
 const Footer: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -59,14 +59,13 @@ const Footer: React.FC = () => {
               </div>
               <div style={{ fontSize: '13px', marginBottom: '6px' }}>バージョン: {version}</div>
               <ul style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5, fontSize: '13px' }}>
+                <li>選手アイコン/名前クリックでの成績詳細（通算・試合履歴）閲覧機能を追加</li>
+                <li>選手検索・データ閲覧画面のデザイン統一</li>
+              </ul>
+              <div style={{ fontSize: '13px', marginTop: '12px', marginBottom: '6px' }}>バージョン: {'1.0.4'}</div>
+              <ul style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5, fontSize: '13px' }}>
                 <li>投手成績の中に投球チャートの作成</li>
                 <li>投球チャートの中に球数・ストライク率を表示</li>
-              </ul>
-              <div style={{ fontSize: '13px', marginTop: '12px', marginBottom: '6px' }}>バージョン: {'1.0.3'}</div>
-              <ul style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5, fontSize: '13px' }}>
-                <li>データ型 atBats / pitches にストライクカウントを保持</li>
-                <li>守備変更が participants に反映されるように改善</li>
-                <li>守備変更など participants の更新がボックススコア・打者成績・投手成績へ反映</li>
               </ul>
             </div>
           )}
@@ -77,4 +76,3 @@ const Footer: React.FC = () => {
 };
 
 export default Footer;
-

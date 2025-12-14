@@ -11,7 +11,7 @@ export interface Game {
   tournament: { id: string; name: string };
   topTeam: { id: string; name: string; shortName: string };
   bottomTeam: { id: string; name: string; shortName: string };
-  // 動的情報やロースターは保持しない
+  memo?: string;
 }
 
 // UI向けの統合ビュー（静的＋動的）
@@ -44,6 +44,10 @@ export type GameCreateInput = {
   bottomTeamName: string;
   bottomTeamShortName: string;
 };
+
+
+
+
 
 
 

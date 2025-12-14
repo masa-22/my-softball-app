@@ -6,6 +6,9 @@ import {
   PitcherStats,
 } from '../../../hooks/usePitcherStatsData';
 import PitchChartModal from './PitchChartModal';
+import MemoModal from '../../common/MemoModal';
+import { updatePlayerGameStatsMemo, getPlayerGameStats } from '../../../services/playerGameStatsService';
+import PlayerStatsModal from '../../viewer/PlayerStatsModal';
 
 type PitcherStatsModalProps = {
   open: boolean;
@@ -61,19 +64,83 @@ const getStatValue = (row: PitcherStatsRowData, statKey: string): string | numbe
   return typeof value === 'number' ? value : 0;
 };
 
-const renderRow = (row: PitcherStatsRowData) => {
+const renderRow = (
+  row: PitcherStatsRowData,
+  onPlayerNameClick: (playerId: string, playerName: string) => void,
+  onMemoClick: (playerId: string, playerName: string) => void
+) => {
+  const canClick = !!row.playerId;
+
   return (
     <tr key={row.key}>
-      {STATS_HEADERS.map((header) => (
-        <td key={header.key} style={{ ...cellStyle, textAlign: header.key === 'name' ? 'left' : 'center', minWidth: header.key === 'name' ? 140 : 48 }}>
-          {getStatValue(row, header.key) || ''}
-        </td>
-      ))}
+      {STATS_HEADERS.map((header) => {
+        if (header.key === 'name') {
+          return (
+            <td key={header.key} style={{ ...cellStyle, textAlign: 'left', minWidth: 140 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {canClick ? (
+                    <span
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onPlayerNameClick(row.playerId!, row.name);
+                        }}
+                        style={{
+                            cursor: 'pointer',
+                            color: '#3498db',
+                            textDecoration: 'underline'
+                        }}
+                    >
+                        {getStatValue(row, header.key)}
+                    </span>
+                ) : (
+                    <span>{getStatValue(row, header.key)}</span>
+                )}
+                
+                {canClick && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMemoClick(row.playerId!, row.name);
+                    }}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#868e96',
+                      transition: 'color 0.2s',
+                    }}
+                    title="メモ"
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#228be6')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#868e96')}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </td>
+          );
+        }
+        return (
+          <td key={header.key} style={{ ...cellStyle, textAlign: 'center', minWidth: 48 }}>
+            {getStatValue(row, header.key) || ''}
+          </td>
+        );
+      })}
     </tr>
   );
 };
 
-const renderTeamBlock = (team: PitcherStatsTeamData) => (
+const renderTeamBlock = (
+  team: PitcherStatsTeamData,
+  onPlayerNameClick: (playerId: string, playerName: string) => void,
+  onMemoClick: (playerId: string, playerName: string) => void
+) => (
   <div key={team.side} style={{ marginBottom: 28 }}>
     <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>{team.teamName}</div>
     <div style={{ overflowX: 'auto' }}>
@@ -88,7 +155,7 @@ const renderTeamBlock = (team: PitcherStatsTeamData) => (
           </tr>
         </thead>
         <tbody>
-          {team.rows.map(renderRow)}
+          {team.rows.map((row) => renderRow(row, onPlayerNameClick, onMemoClick))}
         </tbody>
       </table>
     </div>
@@ -97,6 +164,18 @@ const renderTeamBlock = (team: PitcherStatsTeamData) => (
 
 const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loading, onClose, matchId }) => {
   const [showPitchChart, setShowPitchChart] = useState(false);
+  const [showMemoModal, setShowMemoModal] = useState(false);
+  const [memoTarget, setMemoTarget] = useState<{
+    playerId: string;
+    playerName: string;
+    memo: string;
+  } | null>(null);
+
+  const [selectedPlayer, setSelectedPlayer] = useState<{
+    playerId: string;
+    familyName: string;
+    givenName: string;
+  } | null>(null);
 
   if (!open) return null;
 
@@ -129,67 +208,115 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
   const handleOverlayClick = () => onClose();
   const handleModalClick: React.MouseEventHandler<HTMLDivElement> = (e) => e.stopPropagation();
 
-  return (
-    <div style={overlayStyle} onClick={handleOverlayClick}>
-      <div style={modalStyle} onClick={handleModalClick}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>投手成績</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setShowPitchChart(true)}
-              style={{
-                border: 'none',
-                background: '#4c6ef5',
-                color: '#fff',
-                borderRadius: 20,
-                padding: '6px 14px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              投球チャート
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                border: 'none',
-                background: '#e9ecef',
-                borderRadius: 20,
-                padding: '6px 14px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              閉じる
-            </button>
-          </div>
-        </div>
+  const handleMemoClick = async (playerId: string, playerName: string) => {
+    if (!matchId) return;
+    try {
+      const stats = await getPlayerGameStats(matchId, playerId);
+      setMemoTarget({
+        playerId,
+        playerName,
+        memo: stats?.memo || '',
+      });
+      setShowMemoModal(true);
+    } catch (error) {
+      console.error('Error fetching player memo:', error);
+    }
+  };
 
-        {loading ? (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: '#495057' }}>読み込み中...</div>
-        ) : data ? (
-          <>
-            {renderTeamBlock(data.home)}
-            {renderTeamBlock(data.away)}
-          </>
-        ) : (
-          <div style={{ padding: '24px 0', textAlign: 'center', color: '#868e96' }}>
-            表示できるデータがありません。
+  const handlePlayerNameClick = (playerId: string, playerName: string) => {
+    const [familyName, givenName] = playerName.split(/\s+/);
+    setSelectedPlayer({
+        playerId,
+        familyName: familyName || playerName,
+        givenName: givenName || '',
+    });
+  };
+
+  const handleSaveMemo = async (memo: string) => {
+    if (!matchId || !memoTarget) return;
+    try {
+      await updatePlayerGameStatsMemo(matchId, memoTarget.playerId, memo);
+    } catch (error) {
+      console.error('Error saving player memo:', error);
+      throw error;
+    }
+  };
+
+  return (
+    <>
+      <div style={overlayStyle} onClick={handleOverlayClick}>
+        <div style={modalStyle} onClick={handleModalClick}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>投手成績</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setShowPitchChart(true)}
+                style={{
+                  border: 'none',
+                  background: '#4c6ef5',
+                  color: '#fff',
+                  borderRadius: 20,
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                投球チャート
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  border: 'none',
+                  background: '#e9ecef',
+                  borderRadius: 20,
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                閉じる
+              </button>
+            </div>
           </div>
+
+          {loading ? (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: '#495057' }}>読み込み中...</div>
+          ) : data ? (
+            <>
+              {renderTeamBlock(data.home, handlePlayerNameClick, handleMemoClick)}
+              {renderTeamBlock(data.away, handlePlayerNameClick, handleMemoClick)}
+            </>
+          ) : (
+            <div style={{ padding: '24px 0', textAlign: 'center', color: '#868e96' }}>
+              表示できるデータがありません。
+            </div>
+          )}
+        </div>
+        {matchId && (
+          <PitchChartModal
+            open={showPitchChart}
+            onClose={() => setShowPitchChart(false)}
+            matchId={matchId}
+          />
         )}
       </div>
-      {matchId && (
-        <PitchChartModal
-          open={showPitchChart}
-          onClose={() => setShowPitchChart(false)}
-          matchId={matchId}
-        />
-      )}
-    </div>
+      <MemoModal
+        isOpen={showMemoModal}
+        onClose={() => setShowMemoModal(false)}
+        onSave={handleSaveMemo}
+        initialMemo={memoTarget?.memo}
+        title={`${memoTarget?.playerName || ''} のメモ`}
+        zIndex={2100}
+      />
+      <PlayerStatsModal
+        isOpen={!!selectedPlayer}
+        onClose={() => setSelectedPlayer(null)}
+        player={selectedPlayer}
+      />
+    </>
   );
 };
 
 export default PitcherStatsModal;
-
