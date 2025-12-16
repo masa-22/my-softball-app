@@ -401,6 +401,8 @@ const buildRowsForSide = ({
       const playerId = participant.playerId;
       if (!playerId) return;
 
+      if (participant.status === 'temporary_runner') return;
+
       // スタメンで再出場した場合、最初のスタメンエントリに統合
       if (starterPlayerId && playerId === starterPlayerId) {
         if (processedPlayerIds.has(playerId)) {
@@ -505,6 +507,8 @@ const buildRowsForSide = ({
       return aStart - bStart;
     })
     .forEach((participant, idx) => {
+      if (participant.status === 'temporary_runner') return;
+
       const playerId = participant.playerId;
       if (!playerId) return;
 

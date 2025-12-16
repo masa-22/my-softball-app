@@ -1,0 +1,20 @@
+export interface PlayerStats {
+  plateAppearances: number; // 打席
+  atBats: number;           // 打数
+  hits: number;              // 安打
+  runs: number;              // 得点
+  rbi: number;               // 打点
+  sacrifice: number;         // 犠打
+  walks: number;             // 四球
+  hitByPitch: number;        // 死球
+  fourBall: number;          // 四死球（四球と死球の合計、表示用）
+  strikeouts: number;        // 三振
+  stolenBases: number;       // 盗塁
+  homeRuns: number;          // 本塁打
+  triples: number;           // 三塁打
+  doubles: number;           // 二塁打
+  singles: number;           // 単打
+  assists: number;           // 捕殺
+  putouts: number;           // 刺殺
+  errors: number;            // 失策
+}

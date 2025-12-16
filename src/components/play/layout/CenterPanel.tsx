@@ -70,6 +70,9 @@ interface CenterPanelProps {
   onSelectOutRunner: (runnerId: string, fromBase: '1' | '2' | '3') => void;
   onAddOutConfirm: () => void;
   onAddOutCancel: () => void;
+  // テンポラリーランナー（親制御）
+  canUseTemporaryRunner?: boolean;
+  onTempRunnerClick?: () => void;
 }
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
@@ -114,6 +117,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   presetOutsAfter,
   battingResultLabel,
   playDetails,
+  canUseTemporaryRunner,
+  onTempRunnerClick,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -211,6 +216,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 onSelectOutRunner={onSelectOutRunner}
                 onAddOutConfirm={onAddOutConfirm}
                 onAddOutCancel={onAddOutCancel}
+                canUseTemporaryRunner={canUseTemporaryRunner}
+                onTempRunnerClick={onTempRunnerClick}
               />
             )}
           </div>

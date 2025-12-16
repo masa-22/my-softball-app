@@ -280,6 +280,67 @@ export const recordPlayerChange = async (params: {
   }
 };
 
+// テンポラリーランナー記録
+export const recordTemporaryRunner = async (params: {
+  matchId: string;
+  side: 'home' | 'away';
+  battingOrder: number;
+  inPlayerId: string;
+  inning: number;
+}): Promise<void> => {
+  try {
+    const table = await getParticipations(params.matchId);
+    const list = table[params.side];
+
+    // 新しいTRエントリを追加
+    // 元の選手の endInning は変更しない
+    list.push({
+      playerId: params.inPlayerId,
+      side: params.side,
+      battingOrder: params.battingOrder,
+      status: 'temporary_runner',
+      startInning: params.inning,
+      endInning: null, // closeTemporaryRunner で設定する
+      positionAtStart: 'TR', // 守備位置TR
+    });
+
+    const participationRef = doc(db, PARTICIPATIONS_COLLECTION, params.matchId);
+    await updateDoc(participationRef, { [params.side]: list });
+  } catch (error) {
+    console.error('Error recording temporary runner:', error);
+    throw error;
+  }
+};
+
+// テンポラリーランナー終了（イニング終了時）
+export const closeTemporaryRunner = async (
+  matchId: string,
+  side: 'home' | 'away',
+  inning: number
+): Promise<void> => {
+  try {
+    const table = await getParticipations(matchId);
+    const list = table[side];
+    let updated = false;
+
+    // 現在出場中のTRを探して終了させる
+    list.forEach(p => {
+      if (p.status === 'temporary_runner' && p.endInning == null) {
+        p.endInning = inning;
+        updated = true;
+      }
+    });
+
+    if (updated) {
+      const participationRef = doc(db, PARTICIPATIONS_COLLECTION, matchId);
+      await updateDoc(participationRef, { [side]: list });
+    }
+  } catch (error) {
+    console.error('Error closing temporary runner:', error);
+    throw error;
+  }
+};
+
 // ラインナップ変更を自動検出・記録
 export const recordLineupChange = async (params: {
   matchId: string;

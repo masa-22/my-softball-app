@@ -3,7 +3,7 @@ import { getLineup, saveLineup, recordStartersFromLineup } from '../services/lin
 import { getPlayers } from '../services/playerService';
 import { getTeams } from '../services/teamService';
 import { getGame } from '../services/gameService';
-import { getParticipations, recordSubstitution } from '../services/participationService';
+import { getParticipations, recordSubstitution, recordTemporaryRunner } from '../services/participationService';
 import { getGameState, updateRunnersRealtime, updateMatchupRealtime, updateBattingIndexRealtime } from '../services/gameStateService';
 import { PitchData } from '../types/PitchData';
 import { useAtBats } from './useAtBats';
@@ -810,6 +810,50 @@ export const useLineupManager = ({
     setSpecialEntries([]);
   };
 
+  const registerTemporaryRunner = async (
+    targetRunnerId: string,
+    tempRunnerId: string
+  ) => {
+    if (!matchId) return;
+
+    // 現在のイニングを取得
+    const gs = await getGameState(matchId);
+    const inning = gs?.current_inning ?? 1;
+    const side = currentHalf === 'top' ? 'home' : 'away';
+
+    // TRとして登録
+    // 打順が必要: targetRunnerId を持つ LineupEntry を探す
+    const currentLineup = side === 'home' ? homeLineup : awayLineup;
+    const targetEntry = currentLineup.find((e: any) => e.playerId === targetRunnerId);
+    if (!targetEntry) {
+      console.warn('Target runner not found in lineup:', targetRunnerId);
+      return;
+    }
+
+    try {
+      // 1. 記録
+      await recordTemporaryRunner({
+        matchId,
+        side,
+        battingOrder: targetEntry.battingOrder,
+        inPlayerId: tempRunnerId,
+        inning,
+      });
+
+      // 2. ランナー交代（リアルタイム更新）
+      const nextRunners = { ...runners };
+      (['1', '2', '3'] as const).forEach(base => {
+        if (nextRunners[base] === targetRunnerId) {
+          nextRunners[base] = tempRunnerId;
+        }
+      });
+      setRunners(nextRunners);
+      await updateRunnersRealtime(matchId, { '1b': nextRunners['1'], '2b': nextRunners['2'], '3b': nextRunners['3'] });
+    } catch (error) {
+      console.error('Error registering temporary runner:', error);
+    }
+  };
+
   return {
     match,
     lineup,
@@ -838,6 +882,7 @@ export const useLineupManager = ({
     offensePlayers,
     specialEntries,
     applySpecialEntryResolutions,
+    registerTemporaryRunner,
   };
 };
 

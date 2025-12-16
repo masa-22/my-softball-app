@@ -32,6 +32,7 @@ import { savePlayerGameStats } from '../../services/playerGameStatsService';
 import FinishGameButton from './FinishGameButton';
 import { useGameStatus } from '../../hooks/useGameStatus';
 import MemoModal from '../common/MemoModal';
+import TempRunnerDialog from './runner/TempRunnerDialog';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -101,6 +102,7 @@ const PlayRegister: React.FC = () => {
     offenseTeamId,
     specialEntries,
     applySpecialEntryResolutions,
+    registerTemporaryRunner,
   } = useLineupManager({
     matchId,
     currentHalf,
@@ -166,6 +168,82 @@ const PlayRegister: React.FC = () => {
   // Game Memo State
   const [showGameMemoModal, setShowGameMemoModal] = useState(false);
   const [gameMemo, setGameMemo] = useState('');
+  
+  // テンポラリーランナーUI
+  const [showTempRunnerDialog, setShowTempRunnerDialog] = useState(false);
+  
+  // TR候補の計算
+  const currentLineupForTR = useMemo(() => {
+    return currentHalf === 'top' ? homeLineup : awayLineup;
+  }, [currentHalf, homeLineup, awayLineup]);
+
+  const tempRunnerTarget = useMemo(() => {
+    if (currentBSO.o !== 2) return null;
+    // ランナーIDから守備位置を検索
+    // 投手(1) or 捕手(2)
+    const targets: Array<{ base: '1'|'2'|'3', runnerId: string, position: string }> = [];
+    (['1', '2', '3'] as const).forEach(base => {
+      const rid = runners[base];
+      if (rid) {
+        const entry = currentLineupForTR.find(e => e.playerId === rid);
+        if (entry && (entry.position === '1' || entry.position === '2')) {
+          targets.push({ base, runnerId: rid, position: entry.position });
+        }
+      }
+    });
+    return targets.length > 0 ? targets : null;
+  }, [currentBSO.o, runners, currentLineupForTR]);
+
+  const canUseTemporaryRunner = useMemo(() => {
+    return !!tempRunnerTarget;
+  }, [tempRunnerTarget]);
+
+  const tempRunnerCandidates = useMemo(() => {
+    if (!tempRunnerTarget) return [];
+    
+    // 現在のランナーIDセット
+    const currentRunnerIds = Object.values(runners).filter(Boolean) as string[];
+    
+    return currentLineupForTR
+      .filter(e => {
+        if (!e.playerId) return false;
+        // ランナーとしてベース上にいない
+        if (currentRunnerIds.includes(e.playerId)) return false;
+        // 投手・捕手でない
+        if (e.position === '1' || e.position === '2') return false;
+        return true;
+      })
+      .map(e => {
+        // 名前解決
+        const players = currentHalf === 'top' ? homePlayers : awayPlayers;
+        const p = players.find(pl => pl.playerId === e.playerId);
+        const name = p ? `${p.familyName} ${p.givenName}`.trim() : e.playerId;
+        return {
+          playerId: e.playerId,
+          name,
+          position: POSITIONS[e.position]?.shortName || e.position,
+        };
+      });
+  }, [tempRunnerTarget, runners, currentLineupForTR, homePlayers, awayPlayers, currentHalf]);
+
+  const handleOpenTempRunnerDialog = () => {
+    if (tempRunnerCandidates.length === 0) {
+      alert('交代可能な選手がいません');
+      return;
+    }
+    setShowTempRunnerDialog(true);
+  };
+
+  const handleConfirmTempRunner = async (tempRunnerId: string) => {
+    if (!tempRunnerTarget || tempRunnerTarget.length === 0) return;
+    
+    // 対象が複数いる場合は、とりあえず先頭のランナーを交代対象とする（通常は1人）
+    // もし2人いる場合に選択させるなら、もう一段階ダイアログが必要だが、レアケースなので一旦これで行く
+    const target = tempRunnerTarget[0];
+    
+    await registerTemporaryRunner(target.runnerId, tempRunnerId);
+    setShowTempRunnerDialog(false);
+  };
 
   const {
     data: boxScoreData,
@@ -767,6 +845,8 @@ const PlayRegister: React.FC = () => {
                 onSelectOutRunner={runnerManager.handleSelectOutRunner}
                 onAddOutConfirm={runnerManager.handleAddOutConfirm}
                 onAddOutCancel={runnerManager.handleAddOutCancel}
+                canUseTemporaryRunner={canUseTemporaryRunner}
+                onTempRunnerClick={handleOpenTempRunnerDialog}
               />
             </div>
             
@@ -850,6 +930,12 @@ const PlayRegister: React.FC = () => {
         onSave={handleSaveGameMemo}
         initialMemo={gameMemo}
         title="試合メモ"
+      />
+      <TempRunnerDialog
+        open={showTempRunnerDialog}
+        candidates={tempRunnerCandidates}
+        onConfirm={handleConfirmTempRunner}
+        onCancel={() => setShowTempRunnerDialog(false)}
       />
       {winningPitcherModalSide && (
         <WinningPitcherModal
