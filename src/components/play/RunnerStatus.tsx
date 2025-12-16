@@ -46,6 +46,10 @@ interface RunnerStatusProps {
   onSelectOutRunner: (runnerId: string, fromBase: '1' | '2' | '3') => void;
   onAddOutConfirm: () => void;
   onAddOutCancel: () => void;
+
+  // テンポラリーランナー（親制御）
+  canUseTemporaryRunner?: boolean;
+  onTempRunnerClick?: () => void;
 }
 
 const styles = {
@@ -92,6 +96,8 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
   onSelectOutRunner,
   onAddOutConfirm,
   onAddOutCancel,
+  canUseTemporaryRunner,
+  onTempRunnerClick,
 }) => {
   const latestPitchOrder = useMemo(() => {
     if (!pitches || pitches.length === 0) return null;
@@ -140,7 +146,12 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
 
       <div style={styles.mainLayout}>
         {/* 左カラム（サイドバー） */}
-        <RunnerStatusSidebar bso={bso} pitches={pitches} />
+        <RunnerStatusSidebar 
+          bso={bso} 
+          pitches={pitches} 
+          canUseTemporaryRunner={canUseTemporaryRunner}
+          onTempRunnerClick={onTempRunnerClick}
+        />
 
         {/* 右カラム（フィールド＋ランナー一覧＋アウト追加ボタン） */}
         <div style={styles.rightColumn}>

@@ -70,6 +70,7 @@ const getPositionLabel = (position?: string | null) => {
 
 // 守備位置の履歴をラベル化（連続重複は圧縮し、変化が無いときは単一表示）
 const buildPositionHistoryLabel = (positions: string[], fallback?: string) => {
+  // TRは履歴に表示しない（TRとして出場しても守備位置としてはカウントしない）
   const filtered = positions.filter((p) => p && p !== 'TR');
   const collapsed: string[] = [];
   filtered.forEach((p) => {
@@ -270,8 +271,10 @@ const roleLabelMap: Record<string, string> = {
   starter: '',
   pinch_hitter: '代打',
   pinch_runner: '代走',
+  temporary_runner: '臨代',
   substituted: '',
   finished: '',
+  position_change: '',
 };
 
 const getStatusPriority = (entry: ParticipationEntry) => {
@@ -406,7 +409,13 @@ const buildRowsForSide = ({
       const playerId = participant.playerId;
       if (!playerId) return;
 
-      // スタメンで再出場した場合、最初のスタメンエントリに統合
+      const isTR = participant.status === 'temporary_runner';
+
+      // TRはボックススコアの行として表示しない（ランナー記録のみ反映されればよいが、それはrunnerRecordsで処理済）
+      // TRとして出場したエントリはスキップし、他のエントリ（スタメンや交代出場）がある場合のみ表示する
+      if (isTR) return;
+
+      // スタメンで再出場した場合、最初のスタメンエントリに統合（TRは除く）
       if (starterPlayerId && playerId === starterPlayerId) {
         if (processedPlayerIds.has(playerId)) {
           // 既に処理済み（スタメン行として統合済み）なのでスキップ
@@ -476,6 +485,8 @@ const buildRowsForSide = ({
       const displayName = formatPlayerName(player) || '未登録';
       const roleLabel = roleLabelMap[participant.status] || '';
       
+      let positionLabel = '';
+      
        // 同じ選手の全エントリから守備位置を収集
        const samePlayerEntries = entriesByPlayer.get(playerId) || [];
        const positionSeq: string[] = [];
@@ -489,11 +500,12 @@ const buildRowsForSide = ({
          positionSeq.push(lineupEntry.position);
        }
       
-      const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
+      positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
       
-      const perInning = resultMap[playerId] || {};
       const resultsByInning: Record<number, string> = {};
       const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+
+      const perInning = resultMap[playerId] || {};
       INNING_COLUMNS.forEach((inning) => {
         const info = perInning[inning];
         if (info?.labels.length) {

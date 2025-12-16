@@ -358,7 +358,8 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
   
   // 自動入力があった場合はロック状態で開始
   const [outDetailsLocked, setOutDetailsLocked] = useState(() => {
-    return (battingResult === 'flyout' || battingResult === 'sacrifice_fly') && !!batterId && !!playDetails?.position;
+    return ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && !!batterId && !!playDetails?.position) ||
+           ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && !!batterId);
   });
 
   const [selectedOutRunners, setSelectedOutRunners] = useState<Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey }>>(() => {
@@ -367,6 +368,13 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         runnerId: batterId,
         fromBase: 'home',
         outAtBase: '1'
+      }];
+    }
+    if ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && batterId) {
+      return [{
+        runnerId: batterId,
+        fromBase: 'home',
+        outAtBase: 'home'
       }];
     }
     return [];
@@ -382,18 +390,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
       if (after['3']) {
         after['3'] = null;
       }
-      return after;
-    }
-
-    // ゴロアウトの場合、打者走者を1塁に、その他ランナーを1塁だけ進塁
-    if (battingResult === 'groundout' && batterId) {
-      const after = { ...initialRunners };
-      // 打者走者を1塁に配置
-      after['1'] = batterId;
-      // 既存ランナーを1塁だけ進塁
-      if (initialRunners['1']) after['2'] = initialRunners['1'];
-      if (initialRunners['2']) after['3'] = initialRunners['2'];
-      // 3塁ランナーはそのまま（ホームインしない）
       return after;
     }
 
@@ -467,6 +463,14 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = ({
         base: '1', // 打者は一塁でアウト扱い
         threwPosition: '',
         caughtPosition: playDetails.position
+      }];
+    }
+    if ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && batterId) {
+      return [{
+        runnerId: batterId,
+        base: 'home',
+        threwPosition: '',
+        caughtPosition: '2'
       }];
     }
     return [];

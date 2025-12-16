@@ -1,4 +1,5 @@
 import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunnersRealtime, addRunsRealtime } from '../services/gameStateService';
+import { closeTemporaryRunner } from '../services/participationService';
 import { getAtBats, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
 import { AtBat, RunnerEvent, FieldingAction } from '../types/AtBat';
@@ -216,6 +217,8 @@ export const useGameProcessor = ({
 
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
+          const side = currentHalf === 'top' ? 'home' : 'away';
+          await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
           await closeHalfInningRealtime(matchId);
           setRunners({ '1': null, '2': null, '3': null });
         }
@@ -474,6 +477,8 @@ export const useGameProcessor = ({
         // チェンジ判定
         if (finalOutsAfter >= 3) {
           console.log('[atBat] Closing half inning due to 3 outs');
+          const side = currentHalf === 'top' ? 'home' : 'away';
+          await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
           closeHalfInningRealtime(matchId);
           setRunners({ '1': null, '2': null, '3': null });
         }
@@ -607,6 +612,8 @@ export const useGameProcessor = ({
       const newO = Math.min(3, currentO + 1);
       updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
       if (newO >= 3) {
+        const side = currentHalf === 'top' ? 'home' : 'away';
+        await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
         closeHalfInningRealtime(matchId);
         setRunners({ '1': null, '2': null, '3': null });
       }
