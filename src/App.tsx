@@ -15,6 +15,7 @@ import PlayRegister from './components/play/PlayRegister';
 import HomePage from './components/home/HomePage';
 import UserApprovalManagement from './components/admin/UserApprovalManagement';
 import ViewerPage from './components/viewer/ViewerPage';
+import ReplayView from './components/replay/ReplayView';
 
 const Dashboard = () => <div>ダッシュボード（ログイン必須）</div>;
 
@@ -32,6 +33,8 @@ function App() {
           <Route path="/match/:matchId/play" element={<EditorRoute><PlayRegister /></EditorRoute>} />
           <Route path="/game/:matchId/lineup" element={<EditorRoute><StartingLineup /></EditorRoute>} />
           <Route path="/game/:matchId/play" element={<EditorRoute><PlayRegister /></EditorRoute>} />
+          <Route path="/game/:matchId/replay" element={<EditorRoute><ReplayView /></EditorRoute>} />
+          <Route path="/match/:matchId/replay" element={<EditorRoute><ReplayView /></EditorRoute>} />
           <Route path="/dashboard" element={<EditorRoute><Dashboard /></EditorRoute>} />
           <Route path="/viewer" element={<PrivateRoute><ViewerPage /></PrivateRoute>} />
           <Route path="/admin/users" element={<AdminRoute><UserApprovalManagement /></AdminRoute>} />

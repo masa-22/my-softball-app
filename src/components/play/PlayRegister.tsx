@@ -3,7 +3,7 @@
  * - ロジックはカスタムフックに委譲し、Viewの構成に専念
  */
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ScoreBoard from './ScoreBoard';
 import LeftSidebar from './layout/LeftSidebar';
 import CenterPanel from './layout/CenterPanel';
@@ -51,6 +51,8 @@ type MovementDetails = {
 
 const PlayRegister: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     status: gameStatus,
     isFinished: isGameFinished,
@@ -241,8 +243,13 @@ const PlayRegister: React.FC = () => {
     // もし2人いる場合に選択させるなら、もう一段階ダイアログが必要だが、レアケースなので一旦これで行く
     const target = tempRunnerTarget[0];
     
-    await registerTemporaryRunner(target.runnerId, tempRunnerId);
-    setShowTempRunnerDialog(false);
+    try {
+      await registerTemporaryRunner(target.runnerId, tempRunnerId);
+      setShowTempRunnerDialog(false);
+    } catch (error) {
+      console.error('Failed to register temporary runner:', error);
+      alert('テンポラリーランナーの登録に失敗しました。');
+    }
   };
 
   const {
@@ -379,6 +386,14 @@ const PlayRegister: React.FC = () => {
   };
 
   const handleClosePitcherStats = () => setShowPitcherStats(false);
+
+  const handleOpenReplay = () => {
+    if (matchId) {
+      const isMatchRoute = location.pathname.startsWith('/match');
+      const basePath = isMatchRoute ? 'match' : 'game';
+      navigate(`/${basePath}/${matchId}/replay`);
+    }
+  };
 
   const handleOpenSpecialModal = () => {
     setSpecialModalDismissed(false);
@@ -709,6 +724,14 @@ const PlayRegister: React.FC = () => {
                 disabled={!matchId}
               >
                 投手成績
+              </button>
+              <button
+                type="button"
+                className="boxscore-button"
+                onClick={handleOpenReplay}
+                disabled={!matchId}
+              >
+                リプレイ
               </button>
               {specialEntries.length > 0 && (
                 <button
