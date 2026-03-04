@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 import { getPlayers } from '../../services/playerService';
+import { getGames } from '../../services/gameService';
+import { getGameState } from '../../services/gameStateService';
 import LoadingIndicator from '../common/LoadingIndicator';
 import PlayerListItem from '../player/PlayerListItem';
 import PlayerStatsModal from './PlayerStatsModal';
 import { Player } from '../../types/Player';
+import { Game } from '../../types/Game';
+import { GameState } from '../../types/GameState';
 
 const ViewerPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [prefecture, setPrefecture] = useState('');
   const [affiliation, setAffiliation] = useState('');
@@ -19,6 +25,8 @@ const ViewerPage: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [games, setGames] = useState<Array<{ game: Game; state: GameState | null }>>([]);
+  const [gamesLoading, setGamesLoading] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -34,6 +42,33 @@ const ViewerPage: React.FC = () => {
       }
     };
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const loadGames = async () => {
+      try {
+        setGamesLoading(true);
+        const allGames = await getGames();
+        const gamesWithState = await Promise.all(
+          allGames.map(async (game) => {
+            try {
+              const state = await getGameState(game.gameId);
+              return { game, state };
+            } catch (error) {
+              console.error(`Error loading game state for ${game.gameId}:`, error);
+              return { game, state: null };
+            }
+          })
+        );
+        setGames(gamesWithState);
+      } catch (error) {
+        console.error('Error loading games:', error);
+        setGames([]);
+      } finally {
+        setGamesLoading(false);
+      }
+    };
+    loadGames();
   }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -135,12 +170,112 @@ const ViewerPage: React.FC = () => {
     );
   }
 
+  const finishedGames = games.filter(({ state }) => state?.status === 'finished');
+
   return (
     <div style={{ width: '95%', maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>データ閲覧</h1>
       <p style={{ color: '#666', marginBottom: '20px' }}>
-        チームを検索して、選手情報を閲覧できます。
+        チームを検索して、選手情報を閲覧できます。終了した試合の結果・成績も閲覧できます。
       </p>
+
+      {/* 終了した試合一覧 - トップに表示 */}
+      <div style={{ marginBottom: '30px' }}>
+        <h2 style={{ marginBottom: '20px', fontSize: '20px' }}>終了した試合</h2>
+        {gamesLoading ? (
+          <LoadingIndicator />
+        ) : finishedGames.length > 0 ? (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: '15px',
+          }}>
+            {finishedGames
+              .sort((a, b) => b.game.date.localeCompare(a.game.date))
+              .map(({ game, state }) => {
+                const bottomScore = state?.scores.bottom_total ?? 0;
+                const topScore = state?.scores.top_total ?? 0;
+                return (
+                  <div
+                    key={game.gameId}
+                    onClick={() => navigate(`/viewer/game/${game.gameId}/replay`)}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: '#fff',
+                      border: '2px solid #95a5a6',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      opacity: 0.9,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = '#3498db';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                      e.currentTarget.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = '#95a5a6';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.opacity = '0.9';
+                    }}
+                  >
+                    <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+                      {game.date}
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: '8px',
+                    }}>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        color: '#333',
+                        flex: 1,
+                        textAlign: 'left',
+                      }}>
+                        {game.bottomTeam.name}
+                      </div>
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: 'bold',
+                        color: '#333',
+                        margin: '0 15px',
+                      }}>
+                        {bottomScore} - {topScore}
+                      </div>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        color: '#333',
+                        flex: 1,
+                        textAlign: 'right',
+                      }}>
+                        {game.topTeam.name}
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: '13px',
+                      color: '#7f8c8d',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                    }}>
+                      試合結果を閲覧
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        ) : (
+          <p style={{ color: '#666', padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
+            終了した試合はありません。
+          </p>
+        )}
+      </div>
 
       <form onSubmit={handleSearch} style={{ marginBottom: '20px' }}>
         <div style={{ marginBottom: '15px' }}>

@@ -36,11 +36,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPlayerBattingStatsDetail = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const battingStats_1 = require("../logic/battingStats");
 const PLAYER_GAME_STATS_COLLECTION = "playerGameStats";
 const DEV_PLAYER_GAME_STATS_COLLECTION = "dev_playerGameStats";
 const DEV_PLAYER_SEASON_STATS_COLLECTION = "dev_playerSeasonStats";
 const GAMES_COLLECTION = "games";
 const LINEUPS_COLLECTION = "lineups";
+const ATBATS_COLLECTION = "atBats";
 /** 守備位置コード → 短縮ラベル */
 const POSITION_LABELS = {
     "1": "投", "2": "捕", "3": "一", "4": "二", "5": "三", "6": "遊",
@@ -124,8 +126,8 @@ function playerStatsToBatting(stats) {
         strikeouts: (_l = stats.strikeouts) !== null && _l !== void 0 ? _l : 0,
         stolenBases: (_m = stats.stolenBases) !== null && _m !== void 0 ? _m : 0,
         caughtStealing: 0,
-        sacrificeBunts: 0,
-        sacrificeFlies: (_o = stats.sacrifice) !== null && _o !== void 0 ? _o : 0,
+        sacrificeBunts: (_o = stats.sacrifice) !== null && _o !== void 0 ? _o : 0,
+        sacrificeFlies: 0,
     };
 }
 function battingToRow(batting, g) {
@@ -248,6 +250,13 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
     const gameIds = [...new Set(filteredList.map((s) => s.gameId))];
     const lineupMap = new Map();
     const gameMapForLineup = new Map();
+    // 試合ごとの atBats を取得（StatsModal/useStatsData と同ロジックで打席・犠打・四死球・単打を計算するため）
+    const atBatsMap = new Map();
+    await Promise.all(gameIds.map(async (gid) => {
+        const snapshot = await db.collection(ATBATS_COLLECTION).where("matchId", "==", gid).get();
+        const atBats = snapshot.docs.map((d) => d.data()).sort((a, b) => { var _a, _b; return ((_a = a.index) !== null && _a !== void 0 ? _a : 0) - ((_b = b.index) !== null && _b !== void 0 ? _b : 0); });
+        atBatsMap.set(gid, atBats);
+    }));
     for (const gid of gameIds) {
         const [lineupSnap, gameSnap] = await Promise.all([
             db.collection(LINEUPS_COLLECTION).doc(gid).get(),
@@ -265,20 +274,28 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
         }
     }
     const gameHistory = filteredList.map((s) => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g;
         const row = battingToRow(s.batting, 1);
         let battingOrder;
         let positionLabel;
         const lineup = lineupMap.get(s.gameId);
         const gameTeams = gameMapForLineup.get(s.gameId);
+        // 選手の side を判定（StatsModal と同じロジック）
+        let side = "home";
+        if (s.side) {
+            side = s.side;
+        }
+        else if (s.teamId && gameTeams) {
+            side = s.teamId === gameTeams.topTeamId ? "home" : "away";
+        }
         if (lineup) {
             let entries = [];
             if (s.side) {
                 entries = (_a = lineup[s.side]) !== null && _a !== void 0 ? _a : [];
             }
             else if (s.teamId && gameTeams) {
-                const side = s.teamId === gameTeams.topTeamId ? "home" : "away";
-                entries = (_b = lineup[side]) !== null && _b !== void 0 ? _b : [];
+                const lineupSide = s.teamId === gameTeams.topTeamId ? "home" : "away";
+                entries = (_b = lineup[lineupSide]) !== null && _b !== void 0 ? _b : [];
             }
             const entry = entries.find((e) => e.playerId === playerId);
             if (entry) {
@@ -286,7 +303,10 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
                 positionLabel = getPositionLabel(entry.position) || undefined;
             }
         }
-        return Object.assign(Object.assign({}, row), { gameId: s.gameId, gameDate: s.gameDate, gameName: s.gameName, opponentTeam: (_c = s.opponentTeam) !== null && _c !== void 0 ? _c : "", battingOrder, positionLabel: positionLabel !== null && positionLabel !== void 0 ? positionLabel : undefined, putouts: (_d = s.fielding) === null || _d === void 0 ? void 0 : _d.putouts, assists: (_e = s.fielding) === null || _e === void 0 ? void 0 : _e.assists, errors: (_f = s.fielding) === null || _f === void 0 ? void 0 : _f.errors });
+        // atBats から calculatePlayerStats で計算（StatsModal/useStatsData と同一ロジック）
+        const atBats = (_c = atBatsMap.get(s.gameId)) !== null && _c !== void 0 ? _c : [];
+        const statsFromAtBats = (0, battingStats_1.calculatePlayerStats)(playerId, atBats, side);
+        return Object.assign(Object.assign({}, row), { gameId: s.gameId, gameDate: s.gameDate, gameName: s.gameName, opponentTeam: (_d = s.opponentTeam) !== null && _d !== void 0 ? _d : "", battingOrder, positionLabel: positionLabel !== null && positionLabel !== void 0 ? positionLabel : undefined, putouts: (_e = s.fielding) === null || _e === void 0 ? void 0 : _e.putouts, assists: (_f = s.fielding) === null || _f === void 0 ? void 0 : _f.assists, errors: (_g = s.fielding) === null || _g === void 0 ? void 0 : _g.errors, pa: statsFromAtBats.plateAppearances, sh: statsFromAtBats.sacrifice, bbHbp: statsFromAtBats.fourBall, "1b": statsFromAtBats.singles });
     });
     // 通算: 期間フィルタなし かつ dev_playerSeasonStats がある場合は計算済み値をそのまま利用
     const seasonDoc = await db.collection(DEV_PLAYER_SEASON_STATS_COLLECTION).doc(playerId).get();

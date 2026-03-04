@@ -333,6 +333,10 @@ export interface GameHistoryRow extends BattingStatsRow {
   putouts?: number;
   assists?: number;
   errors?: number;
+  pa?: number;      // 打席
+  sh?: number;      // 犠打
+  bbHbp?: number;   // 四死球
+  '1b'?: number;    // 単打
 }
 
 /** 打撃成績詳細 API レスポンス */

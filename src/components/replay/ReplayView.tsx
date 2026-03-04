@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import ReplayCard from './ReplayCard';
 import CorrectionModal from './CorrectionModal';
 import { getGame } from '../../services/gameService';
@@ -13,6 +13,8 @@ import { Player } from '../../types/Player';
 const ReplayView: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isViewerPath = location.pathname.includes('/viewer/');
 
   const [game, setGame] = useState<Game | null>(null);
   const [atBats, setAtBats] = useState<AtBat[]>([]);
@@ -137,7 +139,7 @@ const ReplayView: React.FC = () => {
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
         <div style={{ marginBottom: headerMarginBottom, display: 'flex', alignItems: 'center' }}>
           <button 
-            onClick={() => navigate(-1)}
+            onClick={() => (isViewerPath ? navigate('/viewer') : navigate(-1))}
             style={{ 
                 marginRight: '12px', 
                 border: 'none', 
