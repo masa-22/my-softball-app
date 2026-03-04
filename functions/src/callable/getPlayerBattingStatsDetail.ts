@@ -4,12 +4,17 @@ import { PlayerGameStats, PlayerBattingStats, PlayerFieldingStats } from "../typ
 import { PlayerStats } from "../types/PlayerStats";
 import { PlayerSeasonStats } from "../types/PlayerSeasonStats";
 import { Lineup, LineupEntry } from "../types/Lineup";
+import { AtBat } from "../types/AtBat";
+import { calculatePlayerStats } from "../logic/battingStats";
 
 const PLAYER_GAME_STATS_COLLECTION = "playerGameStats";
 const DEV_PLAYER_GAME_STATS_COLLECTION = "dev_playerGameStats";
 const DEV_PLAYER_SEASON_STATS_COLLECTION = "dev_playerSeasonStats";
 const GAMES_COLLECTION = "games";
 const LINEUPS_COLLECTION = "lineups";
+const ATBATS_COLLECTION = "atBats";
+
+type Side = "home" | "away";
 
 /** 守備位置コード → 短縮ラベル */
 const POSITION_LABELS: Record<string, string> = {
@@ -42,7 +47,7 @@ export interface BattingStatsRow {
   ops: string;   // OPS
 }
 
-/** 試合履歴1件（BattingStatsRow + 試合メタ情報 + 打順・守備・守備成績） */
+/** 試合履歴1件（BattingStatsRow + 試合メタ情報 + 打順・守備・守備成績 + 試合履歴用追加項目） */
 export interface GameHistoryRow extends BattingStatsRow {
   gameId: string;
   gameDate: string;
@@ -53,6 +58,11 @@ export interface GameHistoryRow extends BattingStatsRow {
   putouts?: number;
   assists?: number;
   errors?: number;
+  /** 試合履歴表示用 */
+  pa?: number;      // 打席
+  sh?: number;      // 犠打
+  bbHbp?: number;   // 四死球
+  "1b"?: number;    // 単打
 }
 
 /** レスポンス型 */
@@ -138,8 +148,8 @@ function playerStatsToBatting(stats: PlayerStats): PlayerBattingStats {
     strikeouts: stats.strikeouts ?? 0,
     stolenBases: stats.stolenBases ?? 0,
     caughtStealing: 0,
-    sacrificeBunts: 0,
-    sacrificeFlies: stats.sacrifice ?? 0,
+    sacrificeBunts: stats.sacrifice ?? 0,
+    sacrificeFlies: 0,
   };
 }
 
@@ -280,6 +290,17 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
     const gameIds = [...new Set(filteredList.map((s) => s.gameId))];
     const lineupMap = new Map<string, Lineup>();
     const gameMapForLineup = new Map<string, { topTeamId: string; bottomTeamId: string }>();
+
+    // 試合ごとの atBats を取得（StatsModal/useStatsData と同ロジックで打席・犠打・四死球・単打を計算するため）
+    const atBatsMap = new Map<string, AtBat[]>();
+    await Promise.all(
+      gameIds.map(async (gid) => {
+        const snapshot = await db.collection(ATBATS_COLLECTION).where("matchId", "==", gid).get();
+        const atBats = snapshot.docs.map((d) => d.data() as AtBat).sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+        atBatsMap.set(gid, atBats);
+      })
+    );
+
     for (const gid of gameIds) {
       const [lineupSnap, gameSnap] = await Promise.all([
         db.collection(LINEUPS_COLLECTION).doc(gid).get(),
@@ -304,13 +325,22 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
 
       const lineup = lineupMap.get(s.gameId);
       const gameTeams = gameMapForLineup.get(s.gameId);
+
+      // 選手の side を判定（StatsModal と同じロジック）
+      let side: Side = "home";
+      if (s.side) {
+        side = s.side;
+      } else if (s.teamId && gameTeams) {
+        side = s.teamId === gameTeams.topTeamId ? "home" : "away";
+      }
+
       if (lineup) {
         let entries: LineupEntry[] = [];
         if (s.side) {
           entries = lineup[s.side] ?? [];
         } else if (s.teamId && gameTeams) {
-          const side = s.teamId === gameTeams.topTeamId ? "home" : "away";
-          entries = lineup[side] ?? [];
+          const lineupSide = s.teamId === gameTeams.topTeamId ? "home" : "away";
+          entries = lineup[lineupSide] ?? [];
         }
         const entry = entries.find((e) => e.playerId === playerId);
         if (entry) {
@@ -318,6 +348,10 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
           positionLabel = getPositionLabel(entry.position) || undefined;
         }
       }
+
+      // atBats から calculatePlayerStats で計算（StatsModal/useStatsData と同一ロジック）
+      const atBats = atBatsMap.get(s.gameId) ?? [];
+      const statsFromAtBats = calculatePlayerStats(playerId, atBats, side);
 
       return {
         ...row,
@@ -330,6 +364,10 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
         putouts: s.fielding?.putouts,
         assists: s.fielding?.assists,
         errors: s.fielding?.errors,
+        pa: statsFromAtBats.plateAppearances,
+        sh: statsFromAtBats.sacrifice,
+        bbHbp: statsFromAtBats.fourBall,
+        "1b": statsFromAtBats.singles,
       };
     });
 

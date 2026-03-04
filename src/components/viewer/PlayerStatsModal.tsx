@@ -45,10 +45,25 @@ const BATTING_HEADERS: { key: keyof BattingStatsRow; label: string }[] = [
   { key: 'ops', label: 'OPS' },
 ];
 
-const FIELDING_HEADERS = [
-  { key: 'putouts' as const, label: '刺殺' },
-  { key: 'assists' as const, label: '補殺' },
-  { key: 'errors' as const, label: '失策' },
+/** 試合履歴用: 試合数の隣から 打席→打数→安打→得点→打点→犠打→四死球→三振→盗塁→本塁打→三塁打→二塁打→単打→捕殺→刺殺→失策 */
+const GAME_HISTORY_BATTING_HEADERS: { key: keyof GameHistoryRow; label: string }[] = [
+  { key: 'g', label: '試合数' },
+  { key: 'pa', label: '打席' },
+  { key: 'ab', label: '打数' },
+  { key: 'h', label: '安打' },
+  { key: 'r', label: '得点' },
+  { key: 'rbi', label: '打点' },
+  { key: 'sh', label: '犠打' },
+  { key: 'bbHbp', label: '四死球' },
+  { key: 'so', label: '三振' },
+  { key: 'sb', label: '盗塁' },
+  { key: 'hr', label: '本塁打' },
+  { key: '3b', label: '三塁打' },
+  { key: '2b', label: '二塁打' },
+  { key: '1b', label: '単打' },
+  { key: 'assists', label: '捕殺' },
+  { key: 'putouts', label: '刺殺' },
+  { key: 'errors', label: '失策' },
 ];
 
 const PITCHING_HEADERS: { key: keyof PitchingStatsRow; label: string }[] = [
@@ -376,10 +391,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
                         <th style={{ ...thStyle, textAlign: 'left' }}>対戦相手</th>
                         <th style={thStyle}>打順</th>
                         <th style={thStyle}>守備</th>
-                        {BATTING_HEADERS.map(({ label }) => (
-                          <th key={label} style={thStyle}>{label}</th>
-                        ))}
-                        {FIELDING_HEADERS.map(({ label }) => (
+                        {GAME_HISTORY_BATTING_HEADERS.map(({ label }) => (
                           <th key={label} style={thStyle}>{label}</th>
                         ))}
                       </tr>
@@ -392,13 +404,10 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
                           <td style={{ ...tdStyle, textAlign: 'left', minWidth: '120px' }}>{row.opponentTeam}</td>
                           <td style={tdStyle}>{row.battingOrder ?? '-'}</td>
                           <td style={tdStyle}>{row.positionLabel || '-'}</td>
-                          {BATTING_HEADERS.map(({ key }) => (
+                          {GAME_HISTORY_BATTING_HEADERS.map(({ key }) => (
                             <td key={key} style={tdStyle}>
-                              {typeof row[key] === 'number' ? row[key] : row[key]}
+                              {typeof row[key] === 'number' ? row[key] : row[key] ?? '-'}
                             </td>
-                          ))}
-                          {FIELDING_HEADERS.map(({ key }) => (
-                            <td key={key} style={tdStyle}>{row[key] ?? '-'}</td>
                           ))}
                         </tr>
                       ))}
@@ -407,18 +416,20 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
                           <td colSpan={3} style={{ ...tdStyle, textAlign: 'left' }}>合計</td>
                           <td style={tdStyle}></td>
                           <td style={tdStyle}></td>
-                          {BATTING_HEADERS.map(({ key }) => (
-                            <td key={key} style={tdStyle}>
-                              {typeof battingDetail.career[key] === 'number'
-                                ? battingDetail.career[key]
-                                : battingDetail.career[key]}
-                            </td>
-                          ))}
-                          {FIELDING_HEADERS.map(({ key }) => (
-                            <td key={key} style={tdStyle}>
-                              {sumFieldingFromHistory(battingDetail.gameHistory)[key]}
-                            </td>
-                          ))}
+                          {GAME_HISTORY_BATTING_HEADERS.map(({ key }) => {
+                            if (key === 'g') return <td key={key} style={tdStyle}>{battingDetail.gameHistory.length}</td>;
+                            if (key === 'pa' || key === 'sh' || key === 'bbHbp' || key === '1b') {
+                              const sum = battingDetail.gameHistory.reduce((acc, r) => acc + (Number(r[key]) ?? 0), 0);
+                              return <td key={key} style={tdStyle}>{sum}</td>;
+                            }
+                            if (key === 'assists' || key === 'putouts' || key === 'errors') {
+                              const sum = sumFieldingFromHistory(battingDetail.gameHistory)[key] ?? 0;
+                              return <td key={key} style={tdStyle}>{sum}</td>;
+                            }
+                            const careerKey = key as keyof BattingStatsRow;
+                            const val = battingDetail.career[careerKey];
+                            return <td key={key} style={tdStyle}>{typeof val === 'number' ? val : val ?? '-'}</td>;
+                          })}
                         </tr>
                       )}
                     </tbody>

@@ -33,10 +33,12 @@ function App() {
           <Route path="/match/:matchId/play" element={<EditorRoute><PlayRegister /></EditorRoute>} />
           <Route path="/game/:matchId/lineup" element={<EditorRoute><StartingLineup /></EditorRoute>} />
           <Route path="/game/:matchId/play" element={<EditorRoute><PlayRegister /></EditorRoute>} />
-          <Route path="/game/:matchId/replay" element={<EditorRoute><ReplayView /></EditorRoute>} />
-          <Route path="/match/:matchId/replay" element={<EditorRoute><ReplayView /></EditorRoute>} />
+          <Route path="/game/:matchId/replay" element={<PrivateRoute><ReplayView /></PrivateRoute>} />
+          <Route path="/match/:matchId/replay" element={<PrivateRoute><ReplayView /></PrivateRoute>} />
+          <Route path="/game/:matchId/view" element={<PrivateRoute><PlayRegister /></PrivateRoute>} />
           <Route path="/dashboard" element={<EditorRoute><Dashboard /></EditorRoute>} />
           <Route path="/viewer" element={<PrivateRoute><ViewerPage /></PrivateRoute>} />
+          <Route path="/viewer/game/:matchId/replay" element={<PrivateRoute><ReplayView /></PrivateRoute>} />
           <Route path="/admin/users" element={<AdminRoute><UserApprovalManagement /></AdminRoute>} />
           <Route path="/login" element={<AuthContainer mode="login" />} />
           <Route path="/signup" element={<AuthContainer mode="signup" />} />
