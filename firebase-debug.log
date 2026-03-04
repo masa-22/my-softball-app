@@ -1,0 +1,147 @@
+[debug] [2026-03-04T08:15:12.123Z] ----------------------------------------------------------------------
+[debug] [2026-03-04T08:15:12.129Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\itoma\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:start --only firestore,functions
+[debug] [2026-03-04T08:15:12.130Z] CLI Version:   14.25.0
+[debug] [2026-03-04T08:15:12.130Z] Platform:      win32
+[debug] [2026-03-04T08:15:12.130Z] Node Version:  v24.11.1
+[debug] [2026-03-04T08:15:12.130Z] Time:          Wed Mar 04 2026 17:15:12 GMT+0900 (GMT+09:00)
+[debug] [2026-03-04T08:15:12.130Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-04T08:15:12.322Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-04T08:15:12.322Z] > authorizing via signed-in user (itomasa.0328@gmail.com)
+[debug] [2026-03-04T08:15:12.447Z] openjdk version "21.0.5" 2024-10-15 LTS
+OpenJDK Runtime Environment (build 21.0.5+11-LTS)
+OpenJDK 64-Bit Server VM (build 21.0.5+11-LTS, mixed mode, sharing)
+
+[debug] [2026-03-04T08:15:12.480Z] Parsed Java major version: 21
+[info] i  emulators: Starting emulators: functions, firestore {"metadata":{"emulator":{"name":"hub"},"message":"Starting emulators: functions, firestore"}}
+[debug] [2026-03-04T08:15:12.493Z] [logging] Logging Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.493Z] [firestore] Firestore Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.493Z] [firestore.websocket] websocket server for firestore only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.493Z] assigned listening specs for emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}]},"metadata":{"message":"assigned listening specs for emulators"}}
+[debug] [2026-03-04T08:15:12.498Z] Emulator locator file path: C:\Users\itoma\AppData\Local\Temp\hub-tus-softball-datasystem.json
+[debug] [2026-03-04T08:15:12.498Z] [hub] writing locator at C:\Users\itoma\AppData\Local\Temp\hub-tus-softball-datasystem.json
+[debug] [2026-03-04T08:15:12.521Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.522Z] [eventarc] Eventarc Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.522Z] [tasks] Cloud Tasks Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-04T08:15:12.522Z] late-assigned ports for functions and eventarc emulators {"user":{"hub":[{"address":"127.0.0.1","family":"IPv4","port":4400},{"address":"::1","family":"IPv6","port":4400}],"ui":[{"address":"127.0.0.1","family":"IPv4","port":4000},{"address":"::1","family":"IPv6","port":4000}],"logging":[{"address":"127.0.0.1","family":"IPv4","port":4500}],"firestore":[{"address":"127.0.0.1","family":"IPv4","port":8080}],"firestore.websocket":[{"address":"127.0.0.1","family":"IPv4","port":9150}],"functions":[{"address":"127.0.0.1","family":"IPv4","port":5001}],"eventarc":[{"address":"127.0.0.1","family":"IPv4","port":9299}],"tasks":[{"address":"127.0.0.1","family":"IPv4","port":9499}]},"metadata":{"message":"late-assigned ports for functions and eventarc emulators"}}
+[warn] !  functions: The following emulators are not running, calls to these services from the Functions emulator will affect production: apphosting, auth, database, hosting, pubsub, storage, dataconnect {"metadata":{"emulator":{"name":"functions"},"message":"The following emulators are not running, calls to these services from the Functions emulator will affect production: \u001b[1mapphosting, auth, database, hosting, pubsub, storage, dataconnect\u001b[22m"}}
+[debug] [2026-03-04T08:15:12.576Z] defaultcredentials: writing to file C:\Users\itoma\AppData\Roaming\firebase\itomasa_0328_gmail.com_application_default_credentials.json
+[debug] [2026-03-04T08:15:12.582Z] Setting GAC to C:\Users\itoma\AppData\Roaming\firebase\itomasa_0328_gmail.com_application_default_credentials.json {"metadata":{"emulator":{"name":"functions"},"message":"Setting GAC to C:\\Users\\itoma\\AppData\\Roaming\\firebase\\itomasa_0328_gmail.com_application_default_credentials.json"}}
+[debug] [2026-03-04T08:15:12.585Z] Checked if tokens are valid: true, expires at: 1772615341580
+[debug] [2026-03-04T08:15:12.585Z] Checked if tokens are valid: true, expires at: 1772615341580
+[debug] [2026-03-04T08:15:12.587Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tus-softball-datasystem/adminSdkConfig [none]
+[debug] [2026-03-04T08:15:12.930Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tus-softball-datasystem/adminSdkConfig 200
+[debug] [2026-03-04T08:15:12.931Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tus-softball-datasystem/adminSdkConfig {"projectId":"tus-softball-datasystem","databaseURL":"https://tus-softball-datasystem-default-rtdb.asia-southeast1.firebasedatabase.app","storageBucket":"tus-softball-datasystem.firebasestorage.app"}
+[debug] [2026-03-04T08:15:12.969Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2026-03-04T08:15:12.969Z] Ignoring unsupported arg: single_project_mode_error {"metadata":{"emulator":{"name":"firestore"},"message":"Ignoring unsupported arg: single_project_mode_error"}}
+[debug] [2026-03-04T08:15:12.969Z] Starting Firestore Emulator with command {"binary":"java","args":["-Dgoogle.cloud_firestore.debug_log_level=FINE","-Duser.language=en","-jar","C:\\Users\\itoma\\.cache\\firebase\\emulators\\cloud-firestore-emulator-v1.19.8.jar","--host","127.0.0.1","--port",8080,"--websocket_port",9150,"--project_id","tus-softball-datasystem","--rules","C:\\Users\\itoma\\softball_dev\\my-softball-app\\firestore.rules","--single_project_mode",true,"--functions_emulator","127.0.0.1:5001"],"optionalArgs":["port","webchannel_port","host","rules","websocket_port","functions_emulator","seed_from_export","project_id","single_project_mode"],"joinArgs":false,"shell":false,"port":8080} {"metadata":{"emulator":{"name":"firestore"},"message":"Starting Firestore Emulator with command {\"binary\":\"java\",\"args\":[\"-Dgoogle.cloud_firestore.debug_log_level=FINE\",\"-Duser.language=en\",\"-jar\",\"C:\\\\Users\\\\itoma\\\\.cache\\\\firebase\\\\emulators\\\\cloud-firestore-emulator-v1.19.8.jar\",\"--host\",\"127.0.0.1\",\"--port\",8080,\"--websocket_port\",9150,\"--project_id\",\"tus-softball-datasystem\",\"--rules\",\"C:\\\\Users\\\\itoma\\\\softball_dev\\\\my-softball-app\\\\firestore.rules\",\"--single_project_mode\",true,\"--functions_emulator\",\"127.0.0.1:5001\"],\"optionalArgs\":[\"port\",\"webchannel_port\",\"host\",\"rules\",\"websocket_port\",\"functions_emulator\",\"seed_from_export\",\"project_id\",\"single_project_mode\"],\"joinArgs\":false,\"shell\":false,\"port\":8080}"}}
+[info] i  firestore: Firestore Emulator logging to firestore-debug.log {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator logging to \u001b[1mfirestore-debug.log\u001b[22m"}}
+[debug] [2026-03-04T08:15:14.813Z] Mar 04, 2026 5:15:14 PM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start
+INFO: Started WebSocket server on ws://127.0.0.1:9150
+ {"metadata":{"emulator":{"name":"firestore"},"message":"Mar 04, 2026 5:15:14 PM com.google.cloud.datastore.emulator.firestore.websocket.WebSocketServer start\r\nINFO: Started WebSocket server on ws://127.0.0.1:9150\r\n"}}
+[debug] [2026-03-04T08:15:15.183Z] API endpoint: http:// {"metadata":{"emulator":{"name":"firestore"},"message":"API endpoint: http://"}}
+[debug] [2026-03-04T08:15:15.183Z] 127.0.0.1:8080
+If you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:
+
+   export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+
+If you are running a Firestore in Datastore Mode project, run:
+
+   export DATASTORE_EMULATOR_HOST=127.0.0.1:8080
+
+Note: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.
+Dev App Server is now running.
+
+ {"metadata":{"emulator":{"name":"firestore"},"message":"127.0.0.1:8080\nIf you are using a library that supports the FIRESTORE_EMULATOR_HOST environment variable, run:\r\n\n   export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080\n\nIf you are running a Firestore in Datastore Mode project, run:\r\n\n   export DATASTORE_EMULATOR_HOST=127.0.0.1:8080\n\nNote: Support for Datastore Mode is in preview. If you encounter any bugs please file at https://github.com/firebase/firebase-tools/issues.\r\nDev App Server is now running.\n\r\n"}}
+[info] +  firestore: Firestore Emulator UI websocket is running on 9150. {"metadata":{"emulator":{"name":"firestore"},"message":"Firestore Emulator UI websocket is running on 9150."}}
+[info] i  functions: Watching "C:\Users\itoma\softball_dev\my-softball-app\functions" for Cloud Functions... {"metadata":{"emulator":{"name":"functions"},"message":"Watching \"C:\\Users\\itoma\\softball_dev\\my-softball-app\\functions\" for Cloud Functions..."}}
+[debug] [2026-03-04T08:15:15.337Z] Validating nodejs source
+[warn] !  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] !  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-03-04T08:15:16.843Z] > [functions] package.json contents: {
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "firebase-functions-test": "^3.1.0"
+  },
+  "private": true
+}
+[debug] [2026-03-04T08:15:16.843Z] Building nodejs source
+[debug] [2026-03-04T08:15:16.843Z] Failed to find version of module node: reached end of search path C:\Users\itoma\softball_dev\my-softball-app\functions\node_modules
+[warn] !  functions: Your requested "node" version "22" doesn't match your global version "24". Using node@24 from host. 
+[debug] [2026-03-04T08:15:16.846Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-04T08:15:16.856Z] Found firebase-functions binary at 'C:\Users\itoma\softball_dev\my-softball-app\functions\node_modules\.bin\firebase-functions'
+[info] Serving at port 8042
+
+[debug] [2026-03-04T08:15:17.867Z] Got response from /__/functions.yaml {"endpoints":{"getPlayerBattingStatsDetail":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"getPlayerBattingStatsDetail"},"getPlayerPitchingStatsDetail":{"platform":"gcfv1","labels":{},"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"callableTrigger":{},"entryPoint":"getPlayerPitchingStatsDetail"},"onAtBatWriteDryRun":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.write","eventFilters":{"resource":"projects/tus-softball-datasystem/databases/(default)/documents/atBats/{playId}"},"retry":false},"labels":{},"entryPoint":"onAtBatWriteDryRun"},"onGameStatusChangeDryRun":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.update","eventFilters":{"resource":"projects/tus-softball-datasystem/databases/(default)/documents/gameStates/{gameId}"},"retry":false},"labels":{},"entryPoint":"onGameStatusChangeDryRun"},"onPlayerGameStatsWriteDryRun":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.write","eventFilters":{"resource":"projects/tus-softball-datasystem/databases/(default)/documents/dev_playerGameStats/{docId}"},"retry":false},"labels":{},"entryPoint":"onPlayerGameStatsWriteDryRun"},"onPitcherGameStatsWriteDryRun":{"platform":"gcfv1","availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"serviceAccountEmail":null,"vpc":null,"eventTrigger":{"eventType":"providers/cloud.firestore/eventTypes/document.write","eventFilters":{"resource":"projects/tus-softball-datasystem/databases/(default)/documents/dev_pitcherGameStats/{docId}"},"retry":false},"labels":{},"entryPoint":"onPitcherGameStatsWriteDryRun"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[info] +  functions: Loaded functions definitions from source: getPlayerBattingStatsDetail, getPlayerPitchingStatsDetail, onAtBatWriteDryRun, onGameStatusChangeDryRun, onPlayerGameStatsWriteDryRun, onPitcherGameStatsWriteDryRun. {"metadata":{"emulator":{"name":"functions"},"message":"Loaded functions definitions from source: getPlayerBattingStatsDetail, getPlayerPitchingStatsDetail, onAtBatWriteDryRun, onGameStatusChangeDryRun, onPlayerGameStatsWriteDryRun, onPitcherGameStatsWriteDryRun."}}
+[info] +  functions[us-central1-getPlayerBattingStatsDetail]: http function initialized (http://127.0.0.1:5001/tus-softball-datasystem/us-central1/getPlayerBattingStatsDetail). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/tus-softball-datasystem/us-central1/getPlayerBattingStatsDetail)."}}
+[info] +  functions[us-central1-getPlayerPitchingStatsDetail]: http function initialized (http://127.0.0.1:5001/tus-softball-datasystem/us-central1/getPlayerPitchingStatsDetail). {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mhttp\u001b[22m function initialized (http://127.0.0.1:5001/tus-softball-datasystem/us-central1/getPlayerPitchingStatsDetail)."}}
+[debug] [2026-03-04T08:15:21.930Z] addFirestoreTrigger "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/atBats/{playId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:21.931Z] >>> [apiv2][query] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onAtBatWriteDryRun-0 [none]
+[debug] [2026-03-04T08:15:21.931Z] >>> [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onAtBatWriteDryRun-0 "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/atBats/{playId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:21.946Z] Mar 04, 2026 5:15:21 PM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected non-HTTP/2 connection.
+ {"metadata":{"emulator":{"name":"firestore"},"message":"Mar 04, 2026 5:15:21 PM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead\r\nINFO: Detected non-HTTP/2 connection.\r\n"}}
+[debug] [2026-03-04T08:15:22.134Z] Mar 04, 2026 5:15:22 PM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead
+INFO: Detected HTTP/2 connection.
+ {"metadata":{"emulator":{"name":"firestore"},"message":"Mar 04, 2026 5:15:22 PM io.gapi.emulators.netty.HttpVersionRoutingHandler channelRead\r\nINFO: Detected HTTP/2 connection.\r\n"}}
+[debug] [2026-03-04T08:15:22.901Z] <<< [apiv2][status] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onAtBatWriteDryRun-0 200
+[debug] [2026-03-04T08:15:22.902Z] <<< [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onAtBatWriteDryRun-0 {}
+[info] +  functions[us-central1-onAtBatWriteDryRun]: firestore function initialized. {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mfirestore\u001b[22m function initialized."}}
+[debug] [2026-03-04T08:15:22.903Z] addFirestoreTrigger "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.update\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/gameStates/{gameId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.903Z] >>> [apiv2][query] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onGameStatusChangeDryRun-0 [none]
+[debug] [2026-03-04T08:15:22.903Z] >>> [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onGameStatusChangeDryRun-0 "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.update\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/gameStates/{gameId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.912Z] <<< [apiv2][status] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onGameStatusChangeDryRun-0 200
+[debug] [2026-03-04T08:15:22.912Z] <<< [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onGameStatusChangeDryRun-0 {}
+[info] +  functions[us-central1-onGameStatusChangeDryRun]: firestore function initialized. {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mfirestore\u001b[22m function initialized."}}
+[debug] [2026-03-04T08:15:22.913Z] addFirestoreTrigger "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/dev_playerGameStats/{docId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.913Z] >>> [apiv2][query] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPlayerGameStatsWriteDryRun-0 [none]
+[debug] [2026-03-04T08:15:22.913Z] >>> [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPlayerGameStatsWriteDryRun-0 "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/dev_playerGameStats/{docId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.922Z] <<< [apiv2][status] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPlayerGameStatsWriteDryRun-0 200
+[debug] [2026-03-04T08:15:22.922Z] <<< [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPlayerGameStatsWriteDryRun-0 {}
+[info] +  functions[us-central1-onPlayerGameStatsWriteDryRun]: firestore function initialized. {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mfirestore\u001b[22m function initialized."}}
+[debug] [2026-03-04T08:15:22.922Z] addFirestoreTrigger "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/dev_pitcherGameStats/{docId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.923Z] >>> [apiv2][query] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPitcherGameStatsWriteDryRun-0 [none]
+[debug] [2026-03-04T08:15:22.923Z] >>> [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPitcherGameStatsWriteDryRun-0 "{\"eventTrigger\":{\"eventType\":\"providers/cloud.firestore/eventTypes/document.write\",\"resource\":\"projects/tus-softball-datasystem/databases/(default)/documents/dev_pitcherGameStats/{docId}\",\"service\":\"firestore.googleapis.com\"}}"
+[debug] [2026-03-04T08:15:22.934Z] <<< [apiv2][status] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPitcherGameStatsWriteDryRun-0 200
+[debug] [2026-03-04T08:15:22.934Z] <<< [apiv2][body] PUT http://127.0.0.1:8080/emulator/v1/projects/tus-softball-datasystem/triggers/us-central1-onPitcherGameStatsWriteDryRun-0 {}
+[info] +  functions[us-central1-onPitcherGameStatsWriteDryRun]: firestore function initialized. {"metadata":{"emulator":{"name":"functions"},"message":"\u001b[1mfirestore\u001b[22m function initialized."}}
+[debug] [2026-03-04T08:15:22.940Z] Could not find VSCode notification endpoint: FetchError: request to http://localhost:40001/vscode/notify failed, reason: . If you are not running the Firebase Data Connect VSCode extension, this is expected and not an issue.
+[info] 
+┌─────────────────────────────────────────────────────────────┐
+│ ✔  All emulators ready! It is now safe to connect your app. │
+│ i  View Emulator UI at http://127.0.0.1:4000/               │
+└─────────────────────────────────────────────────────────────┘
+
+┌───────────┬────────────────┬─────────────────────────────────┐
+│ Emulator  │ Host:Port      │ View in Emulator UI             │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Functions │ 127.0.0.1:5001 │ http://127.0.0.1:4000/functions │
+├───────────┼────────────────┼─────────────────────────────────┤
+│ Firestore │ 127.0.0.1:8080 │ http://127.0.0.1:4000/firestore │
+└───────────┴────────────────┴─────────────────────────────────┘
+  Emulator Hub host: 127.0.0.1 port: 4400
+  Other reserved ports: 4500, 9150
+
+Issues? Report them at https://github.com/firebase/firebase-tools/issues and attach the *-debug.log files.
+ 

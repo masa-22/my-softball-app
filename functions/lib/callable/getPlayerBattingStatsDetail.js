@@ -40,6 +40,18 @@ const PLAYER_GAME_STATS_COLLECTION = "playerGameStats";
 const DEV_PLAYER_GAME_STATS_COLLECTION = "dev_playerGameStats";
 const DEV_PLAYER_SEASON_STATS_COLLECTION = "dev_playerSeasonStats";
 const GAMES_COLLECTION = "games";
+const LINEUPS_COLLECTION = "lineups";
+/** 守備位置コード → 短縮ラベル */
+const POSITION_LABELS = {
+    "1": "投", "2": "捕", "3": "一", "4": "二", "5": "三", "6": "遊",
+    "7": "左", "8": "中", "9": "右", "DP": "DP", "PH": "PH", "PR": "PR", "TR": "TR",
+};
+function getPositionLabel(position) {
+    var _a;
+    if (!position)
+        return "";
+    return (_a = POSITION_LABELS[position]) !== null && _a !== void 0 ? _a : position;
+}
 function calcRateStats(batting) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const ab = (_a = batting.atBats) !== null && _a !== void 0 ? _a : 0;
@@ -140,7 +152,7 @@ function battingToRow(batting, g) {
     };
 }
 exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, context) => {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     const playerId = data === null || data === void 0 ? void 0 : data.playerId;
     if (!playerId || typeof playerId !== "string") {
         throw new functions.https.HttpsError("invalid-argument", "playerId is required");
@@ -156,14 +168,19 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
         .get();
     if (prodSnapshot.size > 0) {
         statsList = prodSnapshot.docs.map((d) => {
-            var _a;
+            var _a, _b, _c, _d;
             const s = d.data();
+            const fielding = s.fielding;
             return {
                 gameId: s.gameId,
                 gameDate: s.gameDate,
                 gameName: s.gameName,
                 opponentTeam: (_a = s.opponentTeam) !== null && _a !== void 0 ? _a : "",
                 batting: s.batting,
+                fielding: fielding
+                    ? { putouts: (_b = fielding.putouts) !== null && _b !== void 0 ? _b : 0, assists: (_c = fielding.assists) !== null && _c !== void 0 ? _c : 0, errors: (_d = fielding.errors) !== null && _d !== void 0 ? _d : 0 }
+                    : undefined,
+                teamId: s.teamId,
             };
         });
     }
@@ -195,16 +212,24 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
         }
         statsList = devDocs
             .map((doc) => {
+            var _a, _b, _c;
             const game = gameMap.get(doc.matchId);
             if (!game)
                 return null;
             const opponentTeam = doc.side === "home" ? game.bottomTeam.name : game.topTeam.name;
+            const st = doc.stats;
             return {
                 gameId: doc.matchId,
                 gameDate: game.date,
                 gameName: game.tournamentName,
                 opponentTeam,
-                batting: playerStatsToBatting(doc.stats),
+                batting: playerStatsToBatting(st),
+                fielding: {
+                    putouts: (_a = st.putouts) !== null && _a !== void 0 ? _a : 0,
+                    assists: (_b = st.assists) !== null && _b !== void 0 ? _b : 0,
+                    errors: (_c = st.errors) !== null && _c !== void 0 ? _c : 0,
+                },
+                side: doc.side,
             };
         })
             .filter((x) => x !== null)
@@ -219,16 +244,55 @@ exports.getPlayerBattingStatsDetail = functions.https.onCall(async (data, contex
     if (endDate && typeof endDate === "string") {
         filteredList = filteredList.filter((s) => s.gameDate <= endDate);
     }
+    // lineups から打順・守備位置を取得（prod は game の topTeam/bottomTeam で side 判定）
+    const gameIds = [...new Set(filteredList.map((s) => s.gameId))];
+    const lineupMap = new Map();
+    const gameMapForLineup = new Map();
+    for (const gid of gameIds) {
+        const [lineupSnap, gameSnap] = await Promise.all([
+            db.collection(LINEUPS_COLLECTION).doc(gid).get(),
+            db.collection(GAMES_COLLECTION).doc(gid).get(),
+        ]);
+        if (lineupSnap.exists) {
+            lineupMap.set(gid, lineupSnap.data());
+        }
+        if (gameSnap.exists) {
+            const g = gameSnap.data();
+            gameMapForLineup.set(gid, {
+                topTeamId: (_f = (_e = g.topTeam) === null || _e === void 0 ? void 0 : _e.id) !== null && _f !== void 0 ? _f : "",
+                bottomTeamId: (_h = (_g = g.bottomTeam) === null || _g === void 0 ? void 0 : _g.id) !== null && _h !== void 0 ? _h : "",
+            });
+        }
+    }
     const gameHistory = filteredList.map((s) => {
-        var _a;
+        var _a, _b, _c, _d, _e, _f;
         const row = battingToRow(s.batting, 1);
-        return Object.assign(Object.assign({}, row), { gameId: s.gameId, gameDate: s.gameDate, gameName: s.gameName, opponentTeam: (_a = s.opponentTeam) !== null && _a !== void 0 ? _a : "" });
+        let battingOrder;
+        let positionLabel;
+        const lineup = lineupMap.get(s.gameId);
+        const gameTeams = gameMapForLineup.get(s.gameId);
+        if (lineup) {
+            let entries = [];
+            if (s.side) {
+                entries = (_a = lineup[s.side]) !== null && _a !== void 0 ? _a : [];
+            }
+            else if (s.teamId && gameTeams) {
+                const side = s.teamId === gameTeams.topTeamId ? "home" : "away";
+                entries = (_b = lineup[side]) !== null && _b !== void 0 ? _b : [];
+            }
+            const entry = entries.find((e) => e.playerId === playerId);
+            if (entry) {
+                battingOrder = entry.battingOrder;
+                positionLabel = getPositionLabel(entry.position) || undefined;
+            }
+        }
+        return Object.assign(Object.assign({}, row), { gameId: s.gameId, gameDate: s.gameDate, gameName: s.gameName, opponentTeam: (_c = s.opponentTeam) !== null && _c !== void 0 ? _c : "", battingOrder, positionLabel: positionLabel !== null && positionLabel !== void 0 ? positionLabel : undefined, putouts: (_d = s.fielding) === null || _d === void 0 ? void 0 : _d.putouts, assists: (_e = s.fielding) === null || _e === void 0 ? void 0 : _e.assists, errors: (_f = s.fielding) === null || _f === void 0 ? void 0 : _f.errors });
     });
     // 通算: 期間フィルタなし かつ dev_playerSeasonStats がある場合は計算済み値をそのまま利用
     const seasonDoc = await db.collection(DEV_PLAYER_SEASON_STATS_COLLECTION).doc(playerId).get();
     let career;
     if (!hasPeriodFilter && seasonDoc.exists) {
-        const batting = (_e = seasonDoc.data()) === null || _e === void 0 ? void 0 : _e.batting;
+        const batting = (_j = seasonDoc.data()) === null || _j === void 0 ? void 0 : _j.batting;
         career = batting ? seasonStatsToRow(batting) : { g: 0, ab: 0, r: 0, h: 0, "2b": 0, "3b": 0, hr: 0, rbi: 0, bb: 0, so: 0, sb: 0, cs: 0, avg: ".---", obp: ".---", slg: ".---", ops: ".---" };
     }
     else if (filteredList.length > 0) {

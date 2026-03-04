@@ -13,7 +13,7 @@ import { AtBat, RunnerEvent, normalizeScoredRunners } from '../types/AtBat';
 type Side = 'home' | 'away';
 
 export interface PitcherStats {
-  winLoss: string;        // 勝敗 (勝, 敗, -)
+  winLoss: string;        // 勝敗 (win, loss, -)
   inningsPitched: string; // 投球回数 (例: "5.1")
   battersFaced: number;   // 打者
   pitches: number;         // 球数
@@ -590,9 +590,9 @@ const buildPitcherRowsForSide = async ({
 
     if (gameState?.status === 'finished') {
       if (currentPitcherId === winningPitcher) {
-        stats.winLoss = '勝';
+        stats.winLoss = 'win';
       } else if (currentPitcherId === losingPitcher) {
-        stats.winLoss = '敗';
+        stats.winLoss = 'loss';
       }
     }
 

@@ -55,7 +55,10 @@ const getStatValue = (row: PitcherStatsRowData, statKey: string): string | numbe
     return row.name || '';
   }
   if (statKey === 'winLoss') {
-    return row.stats.winLoss;
+    const v = row.stats.winLoss;
+    if (v === 'win') return '勝';
+    if (v === 'loss') return '敗';
+    return v ?? '-';
   }
   if (statKey === 'inningsPitched') {
     return row.stats.inningsPitched;

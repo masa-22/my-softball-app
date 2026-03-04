@@ -33,11 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onPitcherGameStatsWriteDryRun = exports.onPlayerGameStatsWriteDryRun = exports.onGameStatusChangeDryRun = exports.onAtBatWriteDryRun = exports.getPlayerBattingStatsDetail = void 0;
+exports.onPitcherGameStatsWriteDryRun = exports.onPlayerGameStatsWriteDryRun = exports.onGameStatusChangeDryRun = exports.onAtBatWriteDryRun = exports.getPlayerPitchingStatsDetail = exports.getPlayerBattingStatsDetail = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const getPlayerBattingStatsDetail_1 = require("./callable/getPlayerBattingStatsDetail");
 Object.defineProperty(exports, "getPlayerBattingStatsDetail", { enumerable: true, get: function () { return getPlayerBattingStatsDetail_1.getPlayerBattingStatsDetail; } });
+const getPlayerPitchingStatsDetail_1 = require("./callable/getPlayerPitchingStatsDetail");
+Object.defineProperty(exports, "getPlayerPitchingStatsDetail", { enumerable: true, get: function () { return getPlayerPitchingStatsDetail_1.getPlayerPitchingStatsDetail; } });
 const battingStats_1 = require("./logic/battingStats");
 const pitchingStats_1 = require("./logic/pitchingStats");
 const gameResult_1 = require("./logic/gameResult");
@@ -99,10 +101,19 @@ exports.onGameStatusChangeDryRun = functions.firestore
         const lineupDoc = await db.collection("lineups").doc(matchId).get();
         const lineup = lineupDoc.exists ? lineupDoc.data() : null;
         const allPitchers = Array.from(new Set(atBats.map(a => a.pitcherId).filter(id => id !== null)));
-        const winningPitcherHome = (0, gameResult_1.determineWinningPitcher)('home', atBats, after, lineup, allPitchers);
+        let winningPitcherHome = (0, gameResult_1.determineWinningPitcher)('home', atBats, after, lineup, allPitchers);
         const losingPitcherHome = (0, gameResult_1.determineLosingPitcher)('home', atBats, after);
-        const winningPitcherAway = (0, gameResult_1.determineWinningPitcher)('away', atBats, after, lineup, allPitchers);
+        let winningPitcherAway = (0, gameResult_1.determineWinningPitcher)('away', atBats, after, lineup, allPitchers);
         const losingPitcherAway = (0, gameResult_1.determineLosingPitcher)('away', atBats, after);
+        // ユーザー選択の勝利投手があれば優先
+        const winningPitchersDoc = await db.collection("winningPitchers").doc(matchId).get();
+        if (winningPitchersDoc.exists) {
+            const wpData = winningPitchersDoc.data();
+            if (wpData.home)
+                winningPitcherHome = wpData.home;
+            if (wpData.away)
+                winningPitcherAway = wpData.away;
+        }
         await db.collection("dev_gameResults").doc(matchId).set({
             matchId,
             home: {
@@ -115,6 +126,29 @@ exports.onGameStatusChangeDryRun = functions.firestore
             },
             calculatedAt: admin.firestore.FieldValue.serverTimestamp()
         });
+        // dev_pitcherGameStats の winLoss を勝利/敗戦投手に基づき更新
+        const updates = [];
+        if (winningPitcherHome)
+            updates.push({ playerId: winningPitcherHome, winLoss: 'win' });
+        if (losingPitcherHome)
+            updates.push({ playerId: losingPitcherHome, winLoss: 'loss' });
+        if (winningPitcherAway)
+            updates.push({ playerId: winningPitcherAway, winLoss: 'win' });
+        if (losingPitcherAway)
+            updates.push({ playerId: losingPitcherAway, winLoss: 'loss' });
+        for (const { playerId: pid, winLoss } of updates) {
+            const docId = `${matchId}_${pid}`;
+            const docRef = db.collection("dev_pitcherGameStats").doc(docId);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+                const data = docSnap.data();
+                const currentStats = ((data === null || data === void 0 ? void 0 : data.stats) || {});
+                await docRef.update({
+                    stats: Object.assign(Object.assign({}, currentStats), { winLoss }),
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                });
+            }
+        }
     }
 });
 // --- Season Stats Aggregation Triggers (Dry Run) ---
