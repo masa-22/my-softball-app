@@ -11,6 +11,7 @@ export interface PlayerBattingStats {
   deadballs: number;        // 死球
   strikeouts: number;       // 三振
   stolenBases: number;      // 盗塁
+  caughtStealing?: number;  // 盗塁死（既存データは0扱い）
   sacrificeBunts: number;   // 犠打
   sacrificeFlies: number;   // 犠飛
 }

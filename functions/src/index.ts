@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { getPlayerBattingStatsDetail } from "./callable/getPlayerBattingStatsDetail";
 import { AtBat } from "./types/AtBat";
 import { calculatePlayerStats } from "./logic/battingStats";
 import { calculatePitcherStats } from "./logic/pitchingStats";
@@ -14,6 +15,9 @@ import { calculateFieldingSeasonStats } from "./logic/season/fielding";
 
 admin.initializeApp();
 const db = admin.firestore();
+
+// --- Callable Functions ---
+export { getPlayerBattingStatsDetail };
 
 // --- Dry Run Triggers for Verification ---
 

@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlayerGameStats, PlayerBattingStats, PlayerPitchingStats } from '../../types/PlayerGameStats';
-import { getPlayerStatsByPlayerId } from '../../services/playerGameStatsService';
+import { PlayerGameStats, PlayerPitchingStats } from '../../types/PlayerGameStats';
+import {
+  getPlayerBattingStatsDetail,
+  getPlayerStatsByPlayerId,
+  type BattingStatsRow,
+  type GameHistoryRow,
+} from '../../services/playerGameStatsService';
 import LoadingIndicator from '../common/LoadingIndicator';
-import { Player } from '../../types/Player';
 
 interface PlayerStatsModalProps {
   isOpen: boolean;
@@ -16,131 +20,145 @@ interface PlayerStatsModalProps {
 }
 
 type TabType = 'career' | 'history';
+type PeriodOption = 'all' | '1month' | '3months' | 'custom';
+
+const BATTING_HEADERS: { key: keyof BattingStatsRow; label: string }[] = [
+  { key: 'g', label: 'G' },
+  { key: 'ab', label: 'AB' },
+  { key: 'r', label: 'R' },
+  { key: 'h', label: 'H' },
+  { key: '2b', label: '2B' },
+  { key: '3b', label: '3B' },
+  { key: 'hr', label: 'HR' },
+  { key: 'rbi', label: 'RBI' },
+  { key: 'bb', label: 'BB' },
+  { key: 'so', label: 'SO' },
+  { key: 'sb', label: 'SB' },
+  { key: 'cs', label: 'CS' },
+  { key: 'avg', label: 'AVG' },
+  { key: 'obp', label: 'OBP' },
+  { key: 'slg', label: 'SLG' },
+  { key: 'ops', label: 'OPS' },
+];
+
+function getPeriodDates(period: PeriodOption, customStart?: string, customEnd?: string): { startDate?: string; endDate?: string } {
+  const today = new Date();
+  const toYYYYMMDD = (d: Date) => d.toISOString().slice(0, 10);
+
+  switch (period) {
+    case 'all':
+      return {};
+    case '1month': {
+      const start = new Date(today);
+      start.setMonth(start.getMonth() - 1);
+      return { startDate: toYYYYMMDD(start), endDate: toYYYYMMDD(today) };
+    }
+    case '3months': {
+      const start = new Date(today);
+      start.setMonth(start.getMonth() - 3);
+      return { startDate: toYYYYMMDD(start), endDate: toYYYYMMDD(today) };
+    }
+    case 'custom':
+      return { startDate: customStart, endDate: customEnd };
+    default:
+      return {};
+  }
+}
 
 const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, player }) => {
   const [activeTab, setActiveTab] = useState<TabType>('career');
-  const [stats, setStats] = useState<PlayerGameStats[]>([]);
+  const [period, setPeriod] = useState<PeriodOption>('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [battingDetail, setBattingDetail] = useState<{ career: BattingStatsRow; gameHistory: GameHistoryRow[] } | null>(null);
+  const [allGameStats, setAllGameStats] = useState<PlayerGameStats[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { startDate, endDate } = useMemo(
+    () => getPeriodDates(period, customStart || undefined, customEnd || undefined),
+    [period, customStart, customEnd]
+  );
 
   useEffect(() => {
-    if (isOpen && player) {
-      setLoading(true);
-      setActiveTab('career'); // Reset tab on open
-      getPlayerStatsByPlayerId(player.playerId)
-        .then((data) => {
-          setStats(data);
-        })
-        .catch((err) => {
-          console.error(err);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-        setStats([]);
+    if (!isOpen || !player) {
+      setBattingDetail(null);
+      setAllGameStats([]);
+      setErrorMessage(null);
+      return;
     }
-  }, [isOpen, player]);
+    setLoading(true);
+    setErrorMessage(null);
+    setActiveTab('career');
+    Promise.all([
+      getPlayerBattingStatsDetail(player.playerId, startDate, endDate),
+      getPlayerStatsByPlayerId(player.playerId),
+    ])
+      .then(([batting, stats]) => {
+        setBattingDetail(batting);
+        setAllGameStats(stats);
+        setErrorMessage(null);
+      })
+      .catch((err) => {
+        console.error('[PlayerStatsModal]', err);
+        setBattingDetail(null);
+        setAllGameStats([]);
+        const msg = err?.message || err?.code || String(err);
+        setErrorMessage(`読み込みエラー: ${msg}`);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [isOpen, player?.playerId, startDate, endDate]);
 
-  const careerStats = useMemo(() => {
-    if (stats.length === 0) return null;
+  const filteredPitchingStats = useMemo(() => {
+    if (allGameStats.length === 0) return [];
+    if (!startDate && !endDate) return allGameStats.filter((s) => s.pitching);
+    return allGameStats.filter((s) => {
+      if (!s.pitching) return false;
+      if (startDate && s.gameDate < startDate) return false;
+      if (endDate && s.gameDate > endDate) return false;
+      return true;
+    });
+  }, [allGameStats, startDate, endDate]);
 
-    const batting: PlayerBattingStats = {
-      plateAppearances: 0,
-      atBats: 0,
-      hits: 0,
-      doubles: 0,
-      triples: 0,
-      homeruns: 0,
-      runsBattedIn: 0,
-      runsScored: 0,
+  const careerPitching = useMemo((): { pitching: PlayerPitchingStats; wins: number; losses: number; era: string } | null => {
+    if (filteredPitchingStats.length === 0) return null;
+    const pitching: PlayerPitchingStats = {
+      outsPitched: 0,
+      batterFaced: 0,
+      hitsAllowed: 0,
+      runsAllowed: 0,
+      earnedRuns: 0,
+      strikeouts: 0,
       walks: 0,
       deadballs: 0,
-      strikeouts: 0,
-      stolenBases: 0,
-      sacrificeBunts: 0,
-      sacrificeFlies: 0,
+      homersHit: 0,
+      win: false,
+      loss: false,
     };
-    
-    // 投手成績は登板した試合のみ集計
-    const pitchingStatsList = stats.filter(s => s.pitching).map(s => s.pitching!);
-    let pitching: PlayerPitchingStats | null = null;
-    
-    if (pitchingStatsList.length > 0) {
-        pitching = {
-            outsPitched: 0,
-            batterFaced: 0,
-            hitsAllowed: 0,
-            runsAllowed: 0,
-            earnedRuns: 0,
-            strikeouts: 0,
-            walks: 0,
-            deadballs: 0,
-            homersHit: 0,
-            win: false, // 勝利数のカウントに使用
-            loss: false, // 敗戦数のカウントに使用
-        };
-    }
-
     let wins = 0;
     let losses = 0;
-
-    stats.forEach((game) => {
-      // Batting
-      batting.plateAppearances += game.batting.plateAppearances;
-      batting.atBats += game.batting.atBats;
-      batting.hits += game.batting.hits;
-      batting.doubles += game.batting.doubles;
-      batting.triples += game.batting.triples;
-      batting.homeruns += game.batting.homeruns;
-      batting.runsBattedIn += game.batting.runsBattedIn;
-      batting.runsScored += game.batting.runsScored;
-      batting.walks += game.batting.walks;
-      batting.deadballs += game.batting.deadballs;
-      batting.strikeouts += game.batting.strikeouts;
-      batting.stolenBases += game.batting.stolenBases;
-      batting.sacrificeBunts += game.batting.sacrificeBunts;
-      batting.sacrificeFlies += game.batting.sacrificeFlies;
-
-      // Pitching
-      if (game.pitching && pitching) {
-        pitching.outsPitched += game.pitching.outsPitched;
-        pitching.batterFaced += game.pitching.batterFaced;
-        pitching.hitsAllowed += game.pitching.hitsAllowed;
-        pitching.runsAllowed += game.pitching.runsAllowed;
-        pitching.earnedRuns += game.pitching.earnedRuns;
-        pitching.strikeouts += game.pitching.strikeouts;
-        pitching.walks += game.pitching.walks;
-        pitching.deadballs += game.pitching.deadballs;
-        pitching.homersHit += game.pitching.homersHit;
-        if (game.pitching.win) wins++;
-        if (game.pitching.loss) losses++;
-      }
+    filteredPitchingStats.forEach((s) => {
+      const p = s.pitching!;
+      pitching.outsPitched += p.outsPitched;
+      pitching.batterFaced += p.batterFaced;
+      pitching.hitsAllowed += p.hitsAllowed;
+      pitching.runsAllowed += p.runsAllowed;
+      pitching.earnedRuns += p.earnedRuns;
+      pitching.strikeouts += p.strikeouts;
+      pitching.walks += p.walks;
+      pitching.deadballs += p.deadballs;
+      pitching.homersHit += p.homersHit;
+      if (p.win) wins++;
+      if (p.loss) losses++;
     });
-
-    const average = batting.atBats > 0 ? (batting.hits / batting.atBats).toFixed(3) : '.---';
-    const onBasePercentage = (batting.atBats + batting.walks + batting.deadballs + batting.sacrificeFlies) > 0 
-        ? ((batting.hits + batting.walks + batting.deadballs) / (batting.atBats + batting.walks + batting.deadballs + batting.sacrificeFlies)).toFixed(3)
-        : '.---';
-    
-    // ERA calculation: (Earned Runs * 7) / Innings Pitched
-    // Innings Pitched = outsPitched / 3
-    let era = '---';
-    if (pitching && pitching.outsPitched > 0) {
-        const innings = pitching.outsPitched / 3;
-        era = ((pitching.earnedRuns * 7) / innings).toFixed(2);
-    }
-
-    return {
-      batting,
-      pitching,
-      wins,
-      losses,
-      average,
-      onBasePercentage,
-      era,
-      gameCount: stats.length
-    };
-  }, [stats]);
+    const era =
+      pitching.outsPitched > 0
+        ? ((pitching.earnedRuns * 7) / (pitching.outsPitched / 3)).toFixed(2)
+        : '---';
+    return { pitching, wins, losses, era };
+  }, [filteredPitchingStats]);
 
   if (!isOpen || !player) return null;
 
@@ -161,7 +179,7 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
     backgroundColor: '#fff',
     borderRadius: '8px',
     width: '90%',
-    maxWidth: '800px',
+    maxWidth: '900px',
     maxHeight: '90vh',
     display: 'flex',
     flexDirection: 'column',
@@ -217,21 +235,40 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
     textAlign: 'center',
   };
 
+  const periodSelectStyle: React.CSSProperties = {
+    marginBottom: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+  };
+
+  const renderBattingRow = (row: BattingStatsRow) => (
+    <tr key="batting">
+      {BATTING_HEADERS.map(({ key }) => (
+        <td key={key} style={tdStyle}>
+          {typeof row[key] === 'number' ? row[key] : row[key]}
+        </td>
+      ))}
+    </tr>
+  );
+
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
         <div style={headerStyle}>
           <h2 style={{ margin: 0 }}>
-            {player.familyName} {player.givenName} <span style={{fontSize: '0.8em', color: '#666'}}>成績詳細</span>
+            {player.familyName} {player.givenName}{' '}
+            <span style={{ fontSize: '0.8em', color: '#666' }}>成績詳細</span>
           </h2>
-          <button 
+          <button
             onClick={onClose}
             style={{
               background: 'none',
               border: 'none',
               fontSize: '24px',
               cursor: 'pointer',
-              color: '#999'
+              color: '#999',
             }}
           >
             &times;
@@ -248,61 +285,76 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
         </div>
 
         <div style={contentStyle}>
+          <div style={periodSelectStyle}>
+            <span style={{ fontWeight: 600 }}>表示期間:</span>
+            {(['all', '1month', '3months', 'custom'] as const).map((p) => (
+              <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="period"
+                  checked={period === p}
+                  onChange={() => setPeriod(p)}
+                />
+                {p === 'all' && '全期間'}
+                {p === '1month' && '直近1ヶ月'}
+                {p === '3months' && '直近3ヶ月'}
+                {p === 'custom' && 'カスタム'}
+              </label>
+            ))}
+            {period === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  placeholder="開始日"
+                />
+                <span>〜</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  placeholder="終了日"
+                />
+              </>
+            )}
+          </div>
+
           {loading ? (
             <LoadingIndicator />
-          ) : stats.length === 0 ? (
-             <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-               成績データがありません。
-             </div>
-          ) : activeTab === 'career' && careerStats ? (
+          ) : errorMessage ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#c0392b' }}>
+              <div>{errorMessage}</div>
+              <div style={{ fontSize: 12, marginTop: 8, color: '#666' }}>
+                Functions のデプロイまたはエミュレータの起動を確認してください。
+              </div>
+            </div>
+          ) : !battingDetail || (battingDetail.career.g === 0 && battingDetail.gameHistory.length === 0) ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+              成績データがありません。
+              <div style={{ fontSize: 12, marginTop: 8 }}>
+                dev_playerSeasonStats または dev_playerGameStats にデータがあるか確認してください。
+              </div>
+            </div>
+          ) : activeTab === 'career' && battingDetail ? (
             <div>
-              <h3>打撃成績 (通算 {careerStats.gameCount}試合)</h3>
+              <h3>打撃成績 (通算 {battingDetail.career.g}試合)</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      <th style={thStyle}>打率</th>
-                      <th style={thStyle}>打席</th>
-                      <th style={thStyle}>打数</th>
-                      <th style={thStyle}>安打</th>
-                      <th style={thStyle}>二塁打</th>
-                      <th style={thStyle}>三塁打</th>
-                      <th style={thStyle}>本塁打</th>
-                      <th style={thStyle}>打点</th>
-                      <th style={thStyle}>得点</th>
-                      <th style={thStyle}>三振</th>
-                      <th style={thStyle}>四球</th>
-                      <th style={thStyle}>死球</th>
-                      <th style={thStyle}>犠打</th>
-                      <th style={thStyle}>犠飛</th>
-                      <th style={thStyle}>盗塁</th>
-                      <th style={thStyle}>出塁率</th>
+                      {BATTING_HEADERS.map(({ label }) => (
+                        <th key={label} style={thStyle}>
+                          {label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td style={tdStyle}>{careerStats.average}</td>
-                      <td style={tdStyle}>{careerStats.batting.plateAppearances}</td>
-                      <td style={tdStyle}>{careerStats.batting.atBats}</td>
-                      <td style={tdStyle}>{careerStats.batting.hits}</td>
-                      <td style={tdStyle}>{careerStats.batting.doubles}</td>
-                      <td style={tdStyle}>{careerStats.batting.triples}</td>
-                      <td style={tdStyle}>{careerStats.batting.homeruns}</td>
-                      <td style={tdStyle}>{careerStats.batting.runsBattedIn}</td>
-                      <td style={tdStyle}>{careerStats.batting.runsScored}</td>
-                      <td style={tdStyle}>{careerStats.batting.strikeouts}</td>
-                      <td style={tdStyle}>{careerStats.batting.walks}</td>
-                      <td style={tdStyle}>{careerStats.batting.deadballs}</td>
-                      <td style={tdStyle}>{careerStats.batting.sacrificeBunts}</td>
-                      <td style={tdStyle}>{careerStats.batting.sacrificeFlies}</td>
-                      <td style={tdStyle}>{careerStats.batting.stolenBases}</td>
-                      <td style={tdStyle}>{careerStats.onBasePercentage}</td>
-                    </tr>
-                  </tbody>
+                  <tbody>{renderBattingRow(battingDetail.career)}</tbody>
                 </table>
               </div>
 
-              {careerStats.pitching && (
+              {careerPitching && (
                 <div style={{ marginTop: '24px' }}>
                   <h3>投手成績</h3>
                   <div style={{ overflowX: 'auto' }}>
@@ -324,20 +376,22 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
                       </thead>
                       <tbody>
                         <tr>
-                          <td style={tdStyle}>{careerStats.era}</td>
-                          <td style={tdStyle}>{careerStats.wins}</td>
-                          <td style={tdStyle}>{careerStats.losses}</td>
+                          <td style={tdStyle}>{careerPitching.era}</td>
+                          <td style={tdStyle}>{careerPitching.wins}</td>
+                          <td style={tdStyle}>{careerPitching.losses}</td>
                           <td style={tdStyle}>
-                              {Math.floor(careerStats.pitching.outsPitched / 3)}
-                              {careerStats.pitching.outsPitched % 3 !== 0 ? ` ${careerStats.pitching.outsPitched % 3}/3` : ''}
+                            {Math.floor(careerPitching.pitching.outsPitched / 3)}
+                            {careerPitching.pitching.outsPitched % 3 !== 0
+                              ? ` ${careerPitching.pitching.outsPitched % 3}/3`
+                              : ''}
                           </td>
-                          <td style={tdStyle}>{careerStats.pitching.hitsAllowed}</td>
-                          <td style={tdStyle}>{careerStats.pitching.homersHit}</td>
-                          <td style={tdStyle}>{careerStats.pitching.strikeouts}</td>
-                          <td style={tdStyle}>{careerStats.pitching.walks}</td>
-                          <td style={tdStyle}>{careerStats.pitching.deadballs}</td>
-                          <td style={tdStyle}>{careerStats.pitching.runsAllowed}</td>
-                          <td style={tdStyle}>{careerStats.pitching.earnedRuns}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.hitsAllowed}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.homersHit}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.strikeouts}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.walks}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.deadballs}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.runsAllowed}</td>
+                          <td style={tdStyle}>{careerPitching.pitching.earnedRuns}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -347,37 +401,32 @@ const PlayerStatsModal: React.FC<PlayerStatsModalProps> = ({ isOpen, onClose, pl
             </div>
           ) : (
             <div>
+              <h3>試合ごとの打撃成績</h3>
               <div style={{ overflowX: 'auto' }}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      <th style={{...thStyle, textAlign: 'left'}}>日付</th>
-                      <th style={{...thStyle, textAlign: 'left'}}>大会/試合名</th>
-                      <th style={{...thStyle, textAlign: 'left'}}>対戦相手</th>
-                      <th style={thStyle}>打席</th>
-                      <th style={thStyle}>打数</th>
-                      <th style={thStyle}>安打</th>
-                      <th style={thStyle}>打点</th>
-                      <th style={thStyle}>本塁打</th>
-                      <th style={thStyle}>三振</th>
-                      <th style={thStyle}>四死球</th>
-                      <th style={thStyle}>盗塁</th>
+                      <th style={{ ...thStyle, textAlign: 'left' }}>日付</th>
+                      <th style={{ ...thStyle, textAlign: 'left' }}>大会/試合名</th>
+                      <th style={{ ...thStyle, textAlign: 'left' }}>対戦相手</th>
+                      {BATTING_HEADERS.map(({ label }) => (
+                        <th key={label} style={thStyle}>
+                          {label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {stats.map((game) => (
-                      <tr key={game.id}>
-                        <td style={{...tdStyle, textAlign: 'left', minWidth: '80px'}}>{game.gameDate}</td>
-                        <td style={{...tdStyle, textAlign: 'left', minWidth: '120px'}}>{game.gameName || '-'}</td>
-                        <td style={{...tdStyle, textAlign: 'left', minWidth: '120px'}}>{game.opponentTeam}</td>
-                        <td style={tdStyle}>{game.batting.plateAppearances}</td>
-                        <td style={tdStyle}>{game.batting.atBats}</td>
-                        <td style={tdStyle}>{game.batting.hits}</td>
-                        <td style={tdStyle}>{game.batting.runsBattedIn}</td>
-                        <td style={tdStyle}>{game.batting.homeruns}</td>
-                        <td style={tdStyle}>{game.batting.strikeouts}</td>
-                        <td style={tdStyle}>{game.batting.walks + game.batting.deadballs}</td>
-                        <td style={tdStyle}>{game.batting.stolenBases}</td>
+                    {battingDetail?.gameHistory.map((row) => (
+                      <tr key={row.gameId}>
+                        <td style={{ ...tdStyle, textAlign: 'left', minWidth: '90px' }}>{row.gameDate}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left', minWidth: '120px' }}>{row.gameName || '-'}</td>
+                        <td style={{ ...tdStyle, textAlign: 'left', minWidth: '120px' }}>{row.opponentTeam}</td>
+                        {BATTING_HEADERS.map(({ key }) => (
+                          <td key={key} style={tdStyle}>
+                            {typeof row[key] === 'number' ? row[key] : row[key]}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

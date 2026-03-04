@@ -1,4 +1,5 @@
-import { db } from '../firebaseConfig';
+import { db, functions } from '../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
 import { collection, doc, writeBatch, getDoc, setDoc, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { BatterResultType, normalizeScoredRunners } from '../types/AtBat';
 import { PlayerGameStats, PlayerBattingStats, PlayerFieldingStats, PlayerPitchingStats } from '../types/PlayerGameStats';
@@ -21,6 +22,7 @@ const initBattingStats = (): PlayerBattingStats => ({
   deadballs: 0,
   strikeouts: 0,
   stolenBases: 0,
+  caughtStealing: 0,
   sacrificeBunts: 0,
   sacrificeFlies: 0,
 });
@@ -143,12 +145,15 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
         });
       }
 
-      // --- 盗塁 ---
+      // --- 盗塁・盗塁死 ---
       if (atBat.runnerEvents && atBat.runnerEvents.length > 0) {
         atBat.runnerEvents.forEach(event => {
-          if (event.type === 'steal') {
+          if (event.type === 'steal' && !event.isOut) {
              const stats = getOrInitStats(event.runnerId, offenseTeamId);
              stats.batting.stolenBases++;
+          } else if (event.type === 'caughtstealing') {
+             const stats = getOrInitStats(event.runnerId, offenseTeamId);
+             stats.batting.caughtStealing++;
           }
         });
       }
@@ -295,6 +300,59 @@ export const getPlayerGameStats = async (gameId: string, playerId: string): Prom
     console.error('Error getting player game stats:', error);
     return null;
   }
+};
+
+/** 打撃成績の表示用1行（バックエンド計算結果） */
+export interface BattingStatsRow {
+  g: number;
+  ab: number;
+  r: number;
+  h: number;
+  '2b': number;
+  '3b': number;
+  hr: number;
+  rbi: number;
+  bb: number;
+  so: number;
+  sb: number;
+  cs: number;
+  avg: string;
+  obp: string;
+  slg: string;
+  ops: string;
+}
+
+/** 試合履歴1件 */
+export interface GameHistoryRow extends BattingStatsRow {
+  gameId: string;
+  gameDate: string;
+  gameName?: string;
+  opponentTeam: string;
+}
+
+/** 打撃成績詳細 API レスポンス */
+export interface PlayerBattingStatsDetailResponse {
+  career: BattingStatsRow;
+  gameHistory: GameHistoryRow[];
+}
+
+/**
+ * バックエンド経由で選手の打撃成績詳細を取得（期間指定可）
+ * @param playerId 選手ID
+ * @param startDate 期間開始日 YYYY-MM-DD（省略時は制限なし）
+ * @param endDate 期間終了日 YYYY-MM-DD（省略時は制限なし）
+ */
+export const getPlayerBattingStatsDetail = async (
+  playerId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<PlayerBattingStatsDetailResponse> => {
+  const callable = httpsCallable<
+    { playerId: string; startDate?: string; endDate?: string },
+    PlayerBattingStatsDetailResponse
+  >(functions, 'getPlayerBattingStatsDetail');
+  const result = await callable({ playerId, startDate, endDate });
+  return result.data;
 };
 
 /**
