@@ -328,12 +328,50 @@ export interface GameHistoryRow extends BattingStatsRow {
   gameDate: string;
   gameName?: string;
   opponentTeam: string;
+  battingOrder?: number;
+  positionLabel?: string;
+  putouts?: number;
+  assists?: number;
+  errors?: number;
 }
 
 /** 打撃成績詳細 API レスポンス */
 export interface PlayerBattingStatsDetailResponse {
   career: BattingStatsRow;
   gameHistory: GameHistoryRow[];
+}
+
+/** 投手成績の表示用1行 */
+export interface PitchingStatsRow {
+  g: number;
+  era: string;
+  wins: number;
+  losses: number;
+  inningsPitched: string;
+  battersFaced: number;
+  hits: number;
+  homeRuns: number;
+  strikeouts: number;
+  walks: number;
+  hitByPitch: number;
+  runs: number;
+  earnedRuns: number;
+  whip: string;
+  winPercentage: string;
+}
+
+/** 試合履歴1件（投手） */
+export interface GameHistoryPitcherRow extends PitchingStatsRow {
+  gameId: string;
+  gameDate: string;
+  gameName?: string;
+  opponentTeam: string;
+}
+
+/** 投手成績詳細 API レスポンス */
+export interface GetPlayerPitchingStatsDetailResponse {
+  career: PitchingStatsRow;
+  gameHistory: GameHistoryPitcherRow[];
 }
 
 /**
@@ -351,6 +389,25 @@ export const getPlayerBattingStatsDetail = async (
     { playerId: string; startDate?: string; endDate?: string },
     PlayerBattingStatsDetailResponse
   >(functions, 'getPlayerBattingStatsDetail');
+  const result = await callable({ playerId, startDate, endDate });
+  return result.data;
+};
+
+/**
+ * バックエンド経由で選手の投手成績詳細を取得（dev_pitcherGameStats / dev_pitcherSeasonStats 参照）
+ * @param playerId 選手ID
+ * @param startDate 期間開始日 YYYY-MM-DD（省略時は制限なし）
+ * @param endDate 期間終了日 YYYY-MM-DD（省略時は制限なし）
+ */
+export const getPlayerPitchingStatsDetail = async (
+  playerId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<GetPlayerPitchingStatsDetailResponse> => {
+  const callable = httpsCallable<
+    { playerId: string; startDate?: string; endDate?: string },
+    GetPlayerPitchingStatsDetailResponse
+  >(functions, 'getPlayerPitchingStatsDetail');
   const result = await callable({ playerId, startDate, endDate });
   return result.data;
 };

@@ -1,13 +1,26 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { PlayerGameStats, PlayerBattingStats } from "../types/PlayerGameStats";
+import { PlayerGameStats, PlayerBattingStats, PlayerFieldingStats } from "../types/PlayerGameStats";
 import { PlayerStats } from "../types/PlayerStats";
 import { PlayerSeasonStats } from "../types/PlayerSeasonStats";
+import { Lineup, LineupEntry } from "../types/Lineup";
 
 const PLAYER_GAME_STATS_COLLECTION = "playerGameStats";
 const DEV_PLAYER_GAME_STATS_COLLECTION = "dev_playerGameStats";
 const DEV_PLAYER_SEASON_STATS_COLLECTION = "dev_playerSeasonStats";
 const GAMES_COLLECTION = "games";
+const LINEUPS_COLLECTION = "lineups";
+
+/** 守備位置コード → 短縮ラベル */
+const POSITION_LABELS: Record<string, string> = {
+  "1": "投", "2": "捕", "3": "一", "4": "二", "5": "三", "6": "遊",
+  "7": "左", "8": "中", "9": "右", "DP": "DP", "PH": "PH", "PR": "PR", "TR": "TR",
+};
+
+function getPositionLabel(position?: string | null): string {
+  if (!position) return "";
+  return POSITION_LABELS[position] ?? position;
+}
 
 /** 打撃成績の表示用1行（写真順: G, AB, R, H, 2B, 3B, HR, RBI, BB, SO, SB, CS, AVG, OBP, SLG, OPS） */
 export interface BattingStatsRow {
@@ -29,12 +42,17 @@ export interface BattingStatsRow {
   ops: string;   // OPS
 }
 
-/** 試合履歴1件（BattingStatsRow + 試合メタ情報） */
+/** 試合履歴1件（BattingStatsRow + 試合メタ情報 + 打順・守備・守備成績） */
 export interface GameHistoryRow extends BattingStatsRow {
   gameId: string;
   gameDate: string;
   gameName?: string;
   opponentTeam: string;
+  battingOrder?: number;
+  positionLabel?: string;
+  putouts?: number;
+  assists?: number;
+  errors?: number;
 }
 
 /** レスポンス型 */
@@ -160,7 +178,17 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
     const endDate = data?.endDate as string | undefined;
 
     const db = admin.firestore();
-    let statsList: Array<{ gameId: string; gameDate: string; gameName?: string; opponentTeam: string; batting: PlayerBattingStats }> = [];
+    type StatsListItem = {
+      gameId: string;
+      gameDate: string;
+      gameName?: string;
+      opponentTeam: string;
+      batting: PlayerBattingStats;
+      fielding?: { putouts: number; assists: number; errors: number };
+      teamId?: string;
+      side?: "home" | "away";
+    };
+    let statsList: StatsListItem[] = [];
 
     // 1. 試合履歴用データ: playerGameStats または dev_playerGameStats から取得
     const prodSnapshot = await db.collection(PLAYER_GAME_STATS_COLLECTION)
@@ -171,12 +199,17 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
     if (prodSnapshot.size > 0) {
       statsList = prodSnapshot.docs.map((d) => {
         const s = d.data() as PlayerGameStats;
+        const fielding = s.fielding as PlayerFieldingStats | undefined;
         return {
           gameId: s.gameId,
           gameDate: s.gameDate,
           gameName: s.gameName,
           opponentTeam: s.opponentTeam ?? "",
           batting: s.batting,
+          fielding: fielding
+            ? { putouts: fielding.putouts ?? 0, assists: fielding.assists ?? 0, errors: fielding.errors ?? 0 }
+            : undefined,
+          teamId: s.teamId,
         };
       });
     } else {
@@ -214,12 +247,19 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
           const game = gameMap.get(doc.matchId);
           if (!game) return null;
           const opponentTeam = doc.side === "home" ? game.bottomTeam.name : game.topTeam.name;
+          const st = doc.stats;
           return {
             gameId: doc.matchId,
             gameDate: game.date,
             gameName: game.tournamentName,
             opponentTeam,
-            batting: playerStatsToBatting(doc.stats),
+            batting: playerStatsToBatting(st),
+            fielding: {
+              putouts: st.putouts ?? 0,
+              assists: st.assists ?? 0,
+              errors: st.errors ?? 0,
+            },
+            side: doc.side,
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -236,14 +276,60 @@ export const getPlayerBattingStatsDetail = functions.https.onCall(
       filteredList = filteredList.filter((s) => s.gameDate <= endDate);
     }
 
+    // lineups から打順・守備位置を取得（prod は game の topTeam/bottomTeam で side 判定）
+    const gameIds = [...new Set(filteredList.map((s) => s.gameId))];
+    const lineupMap = new Map<string, Lineup>();
+    const gameMapForLineup = new Map<string, { topTeamId: string; bottomTeamId: string }>();
+    for (const gid of gameIds) {
+      const [lineupSnap, gameSnap] = await Promise.all([
+        db.collection(LINEUPS_COLLECTION).doc(gid).get(),
+        db.collection(GAMES_COLLECTION).doc(gid).get(),
+      ]);
+      if (lineupSnap.exists) {
+        lineupMap.set(gid, lineupSnap.data() as Lineup);
+      }
+      if (gameSnap.exists) {
+        const g = gameSnap.data() as { topTeam?: { id: string }; bottomTeam?: { id: string } };
+        gameMapForLineup.set(gid, {
+          topTeamId: g.topTeam?.id ?? "",
+          bottomTeamId: g.bottomTeam?.id ?? "",
+        });
+      }
+    }
+
     const gameHistory: GameHistoryRow[] = filteredList.map((s) => {
       const row = battingToRow(s.batting, 1);
+      let battingOrder: number | undefined;
+      let positionLabel: string | undefined;
+
+      const lineup = lineupMap.get(s.gameId);
+      const gameTeams = gameMapForLineup.get(s.gameId);
+      if (lineup) {
+        let entries: LineupEntry[] = [];
+        if (s.side) {
+          entries = lineup[s.side] ?? [];
+        } else if (s.teamId && gameTeams) {
+          const side = s.teamId === gameTeams.topTeamId ? "home" : "away";
+          entries = lineup[side] ?? [];
+        }
+        const entry = entries.find((e) => e.playerId === playerId);
+        if (entry) {
+          battingOrder = entry.battingOrder;
+          positionLabel = getPositionLabel(entry.position) || undefined;
+        }
+      }
+
       return {
         ...row,
         gameId: s.gameId,
         gameDate: s.gameDate,
         gameName: s.gameName,
         opponentTeam: s.opponentTeam ?? "",
+        battingOrder,
+        positionLabel: positionLabel ?? undefined,
+        putouts: s.fielding?.putouts,
+        assists: s.fielding?.assists,
+        errors: s.fielding?.errors,
       };
     });
 

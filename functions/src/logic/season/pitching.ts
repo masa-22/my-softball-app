@@ -47,8 +47,8 @@ export const calculatePitchingSeasonStats = (gameStatsList: PitcherStats[]): Pit
     totalStats.earnedRuns += stats.earnedRuns;
     totalStats.wildPitches += stats.wildPitches;
 
-    if (stats.winLoss === '勝') totalStats.wins++;
-    if (stats.winLoss === '敗') totalStats.losses++;
+    if (stats.winLoss === 'win') totalStats.wins++;
+    if (stats.winLoss === 'loss') totalStats.losses++;
   });
 
   // Reconstruct Total Innings

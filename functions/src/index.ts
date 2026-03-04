@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { getPlayerBattingStatsDetail } from "./callable/getPlayerBattingStatsDetail";
+import { getPlayerPitchingStatsDetail } from "./callable/getPlayerPitchingStatsDetail";
 import { AtBat } from "./types/AtBat";
 import { calculatePlayerStats } from "./logic/battingStats";
 import { calculatePitcherStats } from "./logic/pitchingStats";
@@ -17,7 +18,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // --- Callable Functions ---
-export { getPlayerBattingStatsDetail };
+export { getPlayerBattingStatsDetail, getPlayerPitchingStatsDetail };
 
 // --- Dry Run Triggers for Verification ---
 
@@ -87,11 +88,19 @@ export const onGameStatusChangeDryRun = functions.firestore
 
       const allPitchers = Array.from(new Set(atBats.map(a => a.pitcherId).filter(id => id !== null))) as string[];
 
-      const winningPitcherHome = determineWinningPitcher('home', atBats, after, lineup, allPitchers);
+      let winningPitcherHome = determineWinningPitcher('home', atBats, after, lineup, allPitchers);
       const losingPitcherHome = determineLosingPitcher('home', atBats, after);
 
-      const winningPitcherAway = determineWinningPitcher('away', atBats, after, lineup, allPitchers);
+      let winningPitcherAway = determineWinningPitcher('away', atBats, after, lineup, allPitchers);
       const losingPitcherAway = determineLosingPitcher('away', atBats, after);
+
+      // ユーザー選択の勝利投手があれば優先
+      const winningPitchersDoc = await db.collection("winningPitchers").doc(matchId).get();
+      if (winningPitchersDoc.exists) {
+        const wpData = winningPitchersDoc.data() as { home?: string; away?: string };
+        if (wpData.home) winningPitcherHome = wpData.home;
+        if (wpData.away) winningPitcherAway = wpData.away;
+      }
 
       await db.collection("dev_gameResults").doc(matchId).set({
         matchId,
@@ -105,6 +114,27 @@ export const onGameStatusChangeDryRun = functions.firestore
         },
         calculatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
+
+      // dev_pitcherGameStats の winLoss を勝利/敗戦投手に基づき更新
+      const updates: Array<{ playerId: string; winLoss: 'win' | 'loss' }> = [];
+      if (winningPitcherHome) updates.push({ playerId: winningPitcherHome, winLoss: 'win' });
+      if (losingPitcherHome) updates.push({ playerId: losingPitcherHome, winLoss: 'loss' });
+      if (winningPitcherAway) updates.push({ playerId: winningPitcherAway, winLoss: 'win' });
+      if (losingPitcherAway) updates.push({ playerId: losingPitcherAway, winLoss: 'loss' });
+
+      for (const { playerId: pid, winLoss } of updates) {
+        const docId = `${matchId}_${pid}`;
+        const docRef = db.collection("dev_pitcherGameStats").doc(docId);
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          const currentStats = (data?.stats || {}) as PitcherStats;
+          await docRef.update({
+            stats: { ...currentStats, winLoss },
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      }
     }
   });
 
