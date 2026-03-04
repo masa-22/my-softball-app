@@ -15,6 +15,7 @@ interface ReplayCardProps {
   score?: { top: number; bottom: number };
   topTeamName?: string;
   bottomTeamName?: string;
+  compact?: boolean;
 }
 
 const styles = {
@@ -182,20 +183,23 @@ const ReplayCard: React.FC<ReplayCardProps> = ({
   onEdit,
   score,
   topTeamName,
-  bottomTeamName
+  bottomTeamName,
+  compact,
 }) => {
+  const cardStyle = compact ? { ...styles.card, padding: 12 } : styles.card;
   const {
     resultName,
     isHit,
     inningStr,
     count: { b, s, o },
     resultDescription,
+    runCount,
     getPitchTypeName,
     getPitchResultName,
   } = useReplayCardLogic(atBat);
 
   return (
-    <div style={styles.card}>
+    <div style={cardStyle}>
       <div style={styles.header}>
         <span>{inningStr}</span>
         {score && topTeamName && bottomTeamName && (
@@ -206,7 +210,14 @@ const ReplayCard: React.FC<ReplayCardProps> = ({
       </div>
 
       <div style={styles.resultSection}>
-        <div style={styles.resultMain(isHit)}>{resultName}</div>
+        <div style={styles.resultMain(isHit)}>
+          {resultName}
+          {runCount > 0 && (
+            <span style={{ marginLeft: 6, color: '#d6336c', fontSize: '0.85em' }}>
+              +{runCount}点
+            </span>
+          )}
+        </div>
         {resultDescription && (
            <div style={styles.resultSub}>
              {resultDescription}
@@ -238,7 +249,7 @@ const ReplayCard: React.FC<ReplayCardProps> = ({
         <div style={styles.chartTitle}>投球チャート</div>
         <div style={styles.chartContent}>
             <div style={styles.chartWrapper}>
-                <ReplayPitchChart pitches={atBat.pitches} />
+                <ReplayPitchChart compact={compact} pitches={atBat.pitches} />
             </div>
             <div style={styles.pitchList}>
               {atBat.pitches.map((p, i) => (

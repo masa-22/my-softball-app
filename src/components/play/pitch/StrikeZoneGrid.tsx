@@ -15,20 +15,24 @@ interface PitchData {
   result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
 }
 
+const GRID_WIDTH = 260;
+const GRID_WIDTH_MOBILE = 130; // スマホ時は1/2
+
 interface StrikeZoneGridProps {
   pitches: PitchData[];
   onClickZone: (x: number, y: number) => void;
   children?: React.ReactNode;
+  compact?: boolean;
 }
 
-const styles = {
+const getStyles = (compact: boolean) => ({
   gridWrapperOuter: {
     backgroundColor: '#fff',
     border: '1px solid #dee2e6',
-    padding: '16px',
+    padding: compact ? '8px' : '16px',
     borderRadius: 12,
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    width: '260px',
+    width: compact ? `${GRID_WIDTH_MOBILE}px` : `${GRID_WIDTH}px`,
     margin: '0 auto',
     display: 'flex',
     justifyContent: 'center',
@@ -87,29 +91,26 @@ const styles = {
   pitchPoint: (x: number, y: number) => ({
     // 廃止: 直接JSX内でスタイル定義
   }),
-};
+});
 
 // 座標計算用定数（StrikeZoneGridのサイズに合わせる）
 // 248 x 310 は固定値ではなく、このアスペクト比で表示されると想定
 const BASE_WIDTH = 260;
 const BASE_HEIGHT = 325;
 
-const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({ pitches, onClickZone, children }) => {
+const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({ pitches, onClickZone, children, compact = false }) => {
+  const styles = getStyles(compact);
+
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    // クリック位置を正規化された座標 (0-248, 0-310) に変換
+    // クリック位置を正規化された座標 (0-BASE_WIDTH, 0-BASE_HEIGHT) に変換
     const scaleX = BASE_WIDTH / rect.width;
     const scaleY = BASE_HEIGHT / rect.height;
-    
+
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
     onClickZone(x, y);
   };
-
-  // childrenにもスケーリングが必要な場合があるが、ここではPitchResultSelector等のダイアログ表示用
-  // children (PitchResultSelector) は position: absolute で表示されるが、
-  // 親要素 (gridWrapper) が相対配置なので、children内の配置ロジックによっては修正が必要かもしれない。
-  // 今回は単純なoverlayとして表示されていると仮定。
 
   return (
     <div style={styles.gridWrapperOuter}>
@@ -140,7 +141,7 @@ const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({ pitches, onClickZone, c
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <PitchSymbol type={p.type} number={p.order} size={30} result={p.result} /> 
+              <PitchSymbol type={p.type} number={p.order} size={compact ? 18 : 30} result={p.result} /> 
             </div>
           );
         })}

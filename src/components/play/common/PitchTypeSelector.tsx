@@ -94,6 +94,7 @@ export const PitchSymbol: React.FC<PitchSymbolProps> = ({ type, number, size = 3
 interface PitchTypeSelectorProps {
   selectedType: PitchType;
   onSelect: (type: PitchType) => void;
+  compact?: boolean;
 }
 
 const pitchTypesList: { type: PitchType; label: string }[] = [
@@ -106,51 +107,57 @@ const pitchTypesList: { type: PitchType; label: string }[] = [
   { type: 'unknown', label: '不明' },
 ];
 
-const styles = {
+const CONTAINER_WIDTH = 260;
+
+const getStyles = (compact: boolean) => ({
   container: {
     backgroundColor: '#fff',
     border: '1px solid #dee2e6',
-    padding: '12px',
+    padding: compact ? 6 : 10,
     borderRadius: 8,
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    width: '100%',
-    maxWidth: 260,
+    width: CONTAINER_WIDTH,
+    maxWidth: '100%',
     margin: '0 auto',
   },
   title: {
     fontWeight: 600,
-    fontSize: '13px',
-    marginBottom: '10px',
+    fontSize: compact ? 11 : 13,
+    marginBottom: compact ? 4 : 8,
     color: '#495057',
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(70px, 1fr))',
-    gap: '8px',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gridTemplateRows: 'auto auto',
+    gap: compact ? 4 : 6,
   },
   item: (selected: boolean) => ({
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '8px 6px',
+    padding: compact ? '2px 2px' : '4px 4px',
     cursor: 'pointer',
     backgroundColor: selected ? '#e7f5ff' : 'transparent',
-    borderRadius: '6px',
+    borderRadius: 6,
     border: selected ? '2px solid #4c6ef5' : '1px solid #dee2e6',
     transition: 'all 0.2s ease',
-    minHeight: '65px',
+    minHeight: compact ? 40 : 56,
   }),
   label: (selected: boolean) => ({
-    fontSize: '12px',
+    fontSize: compact ? 9 : 11,
     fontWeight: selected ? 600 : 400,
     color: selected ? '#1c7ed6' : '#495057',
-    marginTop: '4px',
+    marginTop: compact ? 1 : 2,
     textAlign: 'center' as const,
   }),
-};
+});
 
-const PitchTypeSelector: React.FC<PitchTypeSelectorProps> = ({ selectedType, onSelect }) => {
+const PitchTypeSelector: React.FC<PitchTypeSelectorProps> = ({ selectedType, onSelect, compact = false }) => {
+  const styles = getStyles(compact);
+  const symbolSize = compact ? 18 : 22;
+
   return (
     <div style={styles.container}>
       <div style={styles.title}>球種選択</div>
@@ -161,7 +168,7 @@ const PitchTypeSelector: React.FC<PitchTypeSelectorProps> = ({ selectedType, onS
             style={styles.item(selectedType === item.type)}
             onClick={() => onSelect(item.type)}
           >
-            <PitchSymbol type={item.type} size={26} />
+            <PitchSymbol type={item.type} size={symbolSize} />
             <div style={styles.label(selectedType === item.type)}>
               {item.label}
             </div>

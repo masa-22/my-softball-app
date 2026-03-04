@@ -8,7 +8,7 @@ import { getLineup } from '../services/lineupService';
 import { getWinningPitcher } from '../services/winningPitcherService';
 import { BATTING_RESULTS } from '../data/softball/battingResults';
 import { Player } from '../types/Player';
-import { AtBat, RunnerEvent } from '../types/AtBat';
+import { AtBat, RunnerEvent, normalizeScoredRunners } from '../types/AtBat';
 
 type Side = 'home' | 'away';
 
@@ -60,8 +60,8 @@ const hasErrorOrPassedBallInScoring = (
   scoringAtBat: AtBat,
   allAtBats: AtBat[]
 ): boolean => {
-  // その打席で得点したランナーかチェック
-  if (!scoringAtBat.scoredRunners.includes(runnerId)) {
+  const scoredList = normalizeScoredRunners(scoringAtBat.scoredRunners);
+  if (!scoredList.some((e) => e.runnerId === runnerId)) {
     return false;
   }
 
@@ -77,7 +77,7 @@ const hasErrorOrPassedBallInScoring = (
   // その打席の守備記録でエラーがあったかチェック
   if (scoringAtBat.playDetails?.fielding) {
     for (const fielding of scoringAtBat.playDetails.fielding) {
-      if (fielding.action === 'error') {
+      if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch') {
         return true;
       }
     }
@@ -104,7 +104,7 @@ const hasErrorOrPassedBallInScoring = (
     }
     if (onBaseAtBat.playDetails?.fielding) {
       for (const fielding of onBaseAtBat.playDetails.fielding) {
-        if (fielding.action === 'error') {
+        if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch') {
           return true;
         }
       }
@@ -133,7 +133,7 @@ const hasErrorOrPassedBallInScoring = (
       }
       if (betweenAtBat.playDetails?.fielding) {
         for (const fielding of betweenAtBat.playDetails.fielding) {
-          if (fielding.action === 'error') {
+          if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch') {
             return true;
           }
         }
@@ -235,26 +235,26 @@ const calculatePitcherStats = (
       }
     }
 
-    // 暴投
+    // 暴投（同じ球目の重複は1カウント）
     if (atBat.runnerEvents) {
+      const wpPitchSeqs = new Set<number | null>();
       atBat.runnerEvents.forEach((event) => {
         if (event.type === 'wildpitch') {
-          stats.wildPitches++;
+          wpPitchSeqs.add(event.pitchSeq ?? null);
         }
       });
+      stats.wildPitches += wpPitchSeqs.size;
     }
   });
 
   // 失点と自責点の計算
   // その投手が投げた打席で得点したランナーをカウント
   pitcherAtBats.forEach((atBat) => {
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
-      // その打席で得点したランナーは、その投手の失点
-      stats.runs += atBat.scoredRunners.length;
-      // 自責点の計算：エラーやパスボールがなかった得点のみカウント
-      atBat.scoredRunners.forEach((runnerId) => {
-        // そのランナーが出塁した時点から得点するまでの過程でエラーやパスボールがあったかチェック
-        if (!hasErrorOrPassedBallInScoring(runnerId, atBat, atBats)) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
+      stats.runs += scoredList.length;
+      scoredList.forEach((entry) => {
+        if (!hasErrorOrPassedBallInScoring(entry.runnerId, atBat, atBats)) {
           stats.earnedRuns++;
         }
       });
@@ -348,11 +348,12 @@ const getScoreAtAtBat = (
   const sortedAtBats = [...atBats].sort((a, b) => a.index - b.index);
   sortedAtBats.forEach((atBat) => {
     if (atBat.index > atBatIndex) return;
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
       if (atBat.topOrBottom === 'top') {
-        homeScore += atBat.scoredRunners.length;
+        homeScore += scoredList.length;
       } else {
-        awayScore += atBat.scoredRunners.length;
+        awayScore += scoredList.length;
       }
     }
   });
@@ -480,28 +481,22 @@ const determineLosingPitcher = (
   if (initiallyLosing) {
     // 最初から負けている場合、最初の失点を記録した投手を探す
     for (const atBat of sortedAtBats) {
-      if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
-        // この打席で得点があった場合、この投手が敗戦投手の候補
-        // ただし、この打席の前に既に負けていた場合は、さらにさかのぼる必要がある
+      const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+      if (scoredList.length > 0) {
         if (atBat.topOrBottom === 'top') {
-          currentHomeScore -= atBat.scoredRunners.length;
+          currentHomeScore -= scoredList.length;
         } else {
-          currentAwayScore -= atBat.scoredRunners.length;
+          currentAwayScore -= scoredList.length;
         }
-        
-        // この打席の前のスコアで、まだリードしていたか、または同点だった場合
         const wasLeadingOrTied =
           (isHomeTeam && currentHomeScore >= currentAwayScore) ||
           (!isHomeTeam && currentAwayScore >= currentHomeScore);
-        
         if (wasLeadingOrTied) {
-          // この打席で初めて負けた
           return atBat.pitcherId;
         }
       }
     }
-    // 最初から負けていた場合、最初の失点を記録した投手を返す
-    const firstScoringAtBat = sortedAtBats.find((a) => a.scoredRunners && a.scoredRunners.length > 0);
+    const firstScoringAtBat = sortedAtBats.find((a) => normalizeScoredRunners(a.scoredRunners).length > 0);
     return firstScoringAtBat?.pitcherId || null;
   }
 
@@ -511,20 +506,16 @@ const determineLosingPitcher = (
     const beforeHomeScore = currentHomeScore;
     const beforeAwayScore = currentAwayScore;
     
-    // その打席で得点したランナーを差し引く
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
       if (atBat.topOrBottom === 'top') {
-        currentHomeScore -= atBat.scoredRunners.length;
+        currentHomeScore -= scoredList.length;
       } else {
-        currentAwayScore -= atBat.scoredRunners.length;
+        currentAwayScore -= scoredList.length;
       }
-
-      // 得点を差し引く前のスコアでリードしていたかチェック
       const wasLeading =
         (isHomeTeam && beforeHomeScore > beforeAwayScore) ||
         (!isHomeTeam && beforeAwayScore > beforeHomeScore);
-      
-      // 得点を差し引いた後のスコアで同点または負けているかチェック
       const nowTiedOrBehind =
         (isHomeTeam && currentHomeScore <= currentAwayScore) ||
         (!isHomeTeam && currentAwayScore <= currentHomeScore);

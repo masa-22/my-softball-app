@@ -1,6 +1,6 @@
 import { db } from '../firebaseConfig';
 import { collection, doc, writeBatch, getDoc, setDoc, query, where, orderBy, getDocs } from 'firebase/firestore';
-import { BatterResultType } from '../types/AtBat';
+import { BatterResultType, normalizeScoredRunners } from '../types/AtBat';
 import { PlayerGameStats, PlayerBattingStats, PlayerFieldingStats, PlayerPitchingStats } from '../types/PlayerGameStats';
 import { getAtBats } from './atBatService';
 import { getGame } from './gameService';
@@ -135,10 +135,10 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
       }
 
       // --- 得点 ---
-      if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
-        atBat.scoredRunners.forEach(runnerId => {
-          // 得点したランナーは攻撃側
-          const stats = getOrInitStats(runnerId, offenseTeamId);
+      const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+      if (scoredList.length > 0) {
+        scoredList.forEach((entry) => {
+          const stats = getOrInitStats(entry.runnerId, offenseTeamId);
           stats.batting.runsScored++;
         });
       }
@@ -161,7 +161,7 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
             const stats = getOrInitStats(fielding.playerId, defenseTeamId);
             if (fielding.action === 'putout') stats.fielding.putouts++;
             if (fielding.action === 'assist') stats.fielding.assists++;
-            if (fielding.action === 'error') stats.fielding.errors++;
+            if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch') stats.fielding.errors++;
           }
         });
       }
@@ -206,10 +206,9 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
         pStats.outsPitched += outs;
 
         // 失点（簡易計算: この打席で記録された得点を、現在の投手の失点とする）
-        if (atBat.scoredRunners) {
-          const runs = atBat.scoredRunners.length;
-          pStats.runsAllowed += runs;
-          pStats.earnedRuns += runs; // 簡易的に自責点＝失点とする
+        if (scoredList.length > 0) {
+          pStats.runsAllowed += scoredList.length;
+          pStats.earnedRuns += scoredList.length; // 簡易的に自責点＝失点とする
         }
       }
     }

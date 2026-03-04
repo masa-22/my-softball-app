@@ -68,11 +68,31 @@ export type RunnerEventType =
   | 'leftbase'
   | 'balk'
   | 'advance'
+  | 'hit'
   | 'scored'
   | 'illegalpitch'
-  | 'out';
+  | 'out'
+  | 'error';
 
 export type BaseType = '1' | '2' | '3' | 'home';
+
+/** 得点したランナー1件（打点の有無を isRBI で保持） */
+export interface ScoredRunnerEntry {
+  runnerId: string;
+  isRBI: boolean;
+}
+
+/** 旧形式 string[] を含む scoredRunners を ScoredRunnerEntry[] に正規化する */
+export function normalizeScoredRunners(
+  raw: unknown
+): ScoredRunnerEntry[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const first = raw[0];
+  if (typeof first === 'object' && first !== null && 'runnerId' in first && 'isRBI' in first) {
+    return raw as ScoredRunnerEntry[];
+  }
+  return (raw as string[]).map((runnerId) => ({ runnerId, isRBI: true }));
+}
 
 export interface RunnerEvent {
   id: string;
@@ -98,8 +118,8 @@ export type BatDirection = 'left' | 'center' | 'right' | 'infield' | string;
 export interface FieldingAction {
   playerId?: string; // IDが不明な場合も許容
   position: string;
-  action: 'fielded' | 'assist' | 'putout' | 'error'; // putout(刺殺)を追加
-  quality: 'clean' | 'bobbled' | 'missed';
+  action: 'fielded' | 'assist' | 'putout' | 'error' | 'throw' | 'catch'; // throw/catch: 送球・捕球の失策
+  quality: 'clean' | 'bobbled' | 'missed' | 'error';
 }
 
 export interface PlayDetails {
@@ -129,8 +149,8 @@ export interface AtBat {
   situationAtPitchResult?: GameSnapshot;
   situationAfter: GameSnapshot;
 
-  // --- 得点した選手 ---
-  scoredRunners: string[];
+  // --- 得点した選手（打点判定を各要素の isRBI で保持） ---
+  scoredRunners: ScoredRunnerEntry[];
 
   // --- 投球記録 ---
   pitches: PitchRecord[];

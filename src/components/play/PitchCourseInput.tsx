@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 // import MiniScoreBoard from './common/MiniScoreBoard';
 // import MiniDiamondField from './pitch/MiniDiamondField';
 import PitchTypeSelector from './common/PitchTypeSelector';
@@ -76,7 +76,14 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   pitches = [],
   onPitchesChange,
 }) => {
-  // const [pitches, setPitches] = useState<PitchData[]>([]); // 内部管理廃止
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
   const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | ''>('');
@@ -164,6 +171,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
         {/* 右カラム: ストライクゾーンパネル＋球種選択 */}
         <div style={styles.rightColumn}>
           <StrikeZonePanel
+            compact={isMobile}
             pitches={pitches}
             pendingPoint={pendingPoint}
             pendingResult={pendingResult}
@@ -176,6 +184,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
           />
 
           <PitchTypeSelector
+            compact={isMobile}
             selectedType={selectedPitchType}
             onSelect={setSelectedPitchType}
           />

@@ -13,6 +13,7 @@ interface StrikeZonePanelProps {
   onSelectResult: (r: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | '') => void;
   onCommit: () => void;
   onCancel: () => void;
+  compact?: boolean;
 }
 
 const StrikeZonePanel: React.FC<StrikeZonePanelProps> = ({
@@ -25,9 +26,10 @@ const StrikeZonePanel: React.FC<StrikeZonePanelProps> = ({
   onSelectResult,
   onCommit,
   onCancel,
+  compact,
 }) => {
   return (
-    <StrikeZoneGrid pitches={pitches} onClickZone={onZoneClick}>
+    <StrikeZoneGrid compact={compact} pitches={pitches} onClickZone={onZoneClick}>
       {pendingPoint && (
         <PitchResultSelector
           selectedPitchType={selectedPitchType}

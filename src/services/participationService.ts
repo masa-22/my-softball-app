@@ -116,7 +116,7 @@ export const closeParticipationOnGameEnd = async (matchId: string, finalInning: 
       table[side].forEach(p => {
         if (p.endInning == null) {
           p.endInning = finalInning;
-          if (p.status === 'starter' || p.status === 'pinch_hitter' || p.status === 'pinch_runner') {
+          if (p.status === 'starter' || p.status === 'pinch_hitter' || p.status === 'pinch_runner' || p.status === 'reentry') {
             p.status = 'finished';
           }
           updated = true;
@@ -266,7 +266,7 @@ export const recordPlayerChange = async (params: {
       playerId: params.inPlayerId,
       side: params.side,
       battingOrder: params.battingOrder,
-      status: isReentry ? 'pinch_hitter' : 'pinch_hitter', // 再出場も途中出場として記録
+      status: isReentry ? 'reentry' : 'pinch_hitter',
       startInning: params.inning,
       endInning: null,
       positionAtStart: params.position ?? null,

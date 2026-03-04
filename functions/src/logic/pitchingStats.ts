@@ -1,4 +1,4 @@
-import { AtBat } from "../types/AtBat";
+import { AtBat, normalizeScoredRunners } from "../types/AtBat";
 import { GameState } from "../types/GameState";
 import { BATTING_RESULTS } from "../data/softball/battingResults";
 
@@ -26,7 +26,8 @@ const hasErrorOrPassedBallInScoring = (
   scoringAtBat: AtBat,
   allAtBats: AtBat[]
 ): boolean => {
-  if (!scoringAtBat.scoredRunners.includes(runnerId)) return false;
+  const scoredList = normalizeScoredRunners(scoringAtBat.scoredRunners);
+  if (!scoredList.some((e) => e.runnerId === runnerId)) return false;
 
   if (scoringAtBat.runnerEvents) {
     for (const event of scoringAtBat.runnerEvents) {
@@ -36,7 +37,7 @@ const hasErrorOrPassedBallInScoring = (
 
   if (scoringAtBat.playDetails?.fielding) {
     for (const fielding of scoringAtBat.playDetails.fielding) {
-      if (fielding.action === 'error') return true;
+      if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch') return true;
     }
   }
 
@@ -53,7 +54,7 @@ const hasErrorOrPassedBallInScoring = (
 
   if (onBaseAtBat) {
     if (onBaseAtBat.result?.type === 'error') return true;
-    if (onBaseAtBat.playDetails?.fielding?.some(f => f.action === 'error')) return true;
+    if (onBaseAtBat.playDetails?.fielding?.some(f => f.action === 'error' || f.action === 'throw' || f.action === 'catch')) return true;
     if (onBaseAtBat.runnerEvents?.some(e => e.runnerId === runnerId && ['passedball', 'wildpitch'].includes(e.type))) return true;
 
     const betweenAtBats = sortedAtBats.filter(
@@ -61,7 +62,7 @@ const hasErrorOrPassedBallInScoring = (
     );
     for (const betweenAtBat of betweenAtBats) {
       if (betweenAtBat.runnerEvents?.some(e => e.runnerId === runnerId && ['passedball', 'wildpitch'].includes(e.type))) return true;
-      if (betweenAtBat.playDetails?.fielding?.some(f => f.action === 'error')) return true;
+      if (betweenAtBat.playDetails?.fielding?.some(f => f.action === 'error' || f.action === 'throw' || f.action === 'catch')) return true;
     }
   }
 
@@ -124,14 +125,24 @@ export const calculatePitcherStats = (
       }
     }
 
-    if (atBat.runnerEvents?.some(e => e.type === 'wildpitch')) stats.wildPitches++;
+    // 暴投（同じ球目の重複は1カウント）
+    if (atBat.runnerEvents) {
+      const wpPitchSeqs = new Set<number | null>();
+      atBat.runnerEvents.forEach((event) => {
+        if (event.type === 'wildpitch') {
+          wpPitchSeqs.add(event.pitchSeq ?? null);
+        }
+      });
+      stats.wildPitches += wpPitchSeqs.size;
+    }
   });
 
   pitcherAtBats.forEach((atBat) => {
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
-      stats.runs += atBat.scoredRunners.length;
-      atBat.scoredRunners.forEach((runnerId) => {
-        if (!hasErrorOrPassedBallInScoring(runnerId, atBat, atBats)) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
+      stats.runs += scoredList.length;
+      scoredList.forEach((entry) => {
+        if (!hasErrorOrPassedBallInScoring(entry.runnerId, atBat, atBats)) {
           stats.earnedRuns++;
         }
       });

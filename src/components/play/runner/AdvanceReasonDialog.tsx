@@ -17,13 +17,17 @@ export interface RunnerAdvancement {
   toBase: '1' | '2' | '3' | 'home';
 }
 
+/** エラーの種類（送球・捕球） */
+export type ErrorType = 'throw' | 'catch';
+
 export interface AdvanceReasonResult {
   runnerId: string;
   reason: PitchAdvanceReason | BattingAdvanceReason;
   pitchOrder: number | null;
   eventSource: 'pitch' | 'non_pitch';
   errorDetail?: {
-    errorBy?: string; // エラーした守備位置
+    errorBy?: string;   // エラーした守備位置
+    errorType?: ErrorType; // 送球・捕球
   };
 }
 
@@ -216,7 +220,7 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
     }));
   };
 
-  const handleErrorDetailChange = (runnerId: string, field: string, value: string) => {
+  const handleErrorDetailChange = (runnerId: string, field: 'errorBy' | 'errorType', value: string) => {
     setResults(prev => ({
       ...prev,
       [runnerId]: {
@@ -239,9 +243,9 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
       const result = results[a.runnerId];
       if (!result) return false;
       
-      // エラーの場合、守備位置が必須
+      // エラーの場合、守備位置と送球/捕球の選択が必須
       if (result.reason === 'error') {
-        return !!result.errorDetail?.errorBy;
+        return !!result.errorDetail?.errorBy && !!result.errorDetail?.errorType;
       }
 
       if (requiresPitchOrder(result.reason)) {
@@ -337,19 +341,40 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
 
               {/* エラー詳細入力 */}
               {currentReason === 'error' && (
-                <div style={styles.detailGroup}>
-                  <div style={styles.detailLabel}>エラーした守備位置 *</div>
-                  <select
-                    value={errorDetail?.errorBy || ''}
-                    onChange={(e) => handleErrorDetailChange(advancement.runnerId, 'errorBy', e.target.value)}
-                    style={styles.select}
-                  >
-                    <option value="">選択してください</option>
-                    {positionOptions.map(pos => (
-                      <option key={pos.value} value={pos.value}>{pos.label}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div style={styles.detailGroup}>
+                    <div style={styles.detailLabel}>エラーした守備位置 *</div>
+                    <select
+                      value={errorDetail?.errorBy || ''}
+                      onChange={(e) => handleErrorDetailChange(advancement.runnerId, 'errorBy', e.target.value)}
+                      style={styles.select}
+                    >
+                      <option value="">選択してください</option>
+                      {positionOptions.map(pos => (
+                        <option key={pos.value} value={pos.value}>{pos.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={styles.detailGroup}>
+                    <div style={styles.detailLabel}>どういうエラーか *</div>
+                    <div style={styles.reasonOptions}>
+                      <button
+                        type="button"
+                        onClick={() => handleErrorDetailChange(advancement.runnerId, 'errorType', 'throw')}
+                        style={styles.reasonButton(errorDetail?.errorType === 'throw')}
+                      >
+                        送球
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleErrorDetailChange(advancement.runnerId, 'errorType', 'catch')}
+                        style={styles.reasonButton(errorDetail?.errorType === 'catch')}
+                      >
+                        捕球
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           );

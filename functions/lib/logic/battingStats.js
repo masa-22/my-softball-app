@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculatePlayerStats = void 0;
+const AtBat_1 = require("../types/AtBat");
 const battingResults_1 = require("../data/softball/battingResults");
 const calculatePlayerStats = (playerId, atBats, side) => {
     const stats = {
@@ -24,7 +25,7 @@ const calculatePlayerStats = (playerId, atBats, side) => {
         errors: 0,
     };
     atBats.forEach((atBat) => {
-        var _a, _b, _c;
+        var _a, _b;
         // Determine if this atBat belongs to the player's side (Offense)
         const isPlayerSide = (atBat.topOrBottom === 'top' && side === 'home') ||
             (atBat.topOrBottom === 'bottom' && side === 'away');
@@ -62,7 +63,8 @@ const calculatePlayerStats = (playerId, atBats, side) => {
             }
         }
         // Runs
-        if (((_b = atBat.scoredRunners) === null || _b === void 0 ? void 0 : _b.includes(playerId)) && isPlayerSide) {
+        const scoredList = (0, AtBat_1.normalizeScoredRunners)(atBat.scoredRunners);
+        if (scoredList.some((e) => e.runnerId === playerId) && isPlayerSide) {
             stats.runs++;
         }
         // Stolen Bases
@@ -74,14 +76,14 @@ const calculatePlayerStats = (playerId, atBats, side) => {
             });
         }
         // Fielding (Defense)
-        if ((_c = atBat.playDetails) === null || _c === void 0 ? void 0 : _c.fielding) {
+        if ((_b = atBat.playDetails) === null || _b === void 0 ? void 0 : _b.fielding) {
             atBat.playDetails.fielding.forEach((fieldingAction) => {
                 if (fieldingAction.playerId === playerId) {
                     if (fieldingAction.action === 'assist')
                         stats.assists++;
                     else if (fieldingAction.action === 'putout')
                         stats.putouts++;
-                    else if (fieldingAction.action === 'error')
+                    else if (fieldingAction.action === 'error' || fieldingAction.action === 'throw' || fieldingAction.action === 'catch')
                         stats.errors++;
                 }
             });

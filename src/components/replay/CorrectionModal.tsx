@@ -103,11 +103,9 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
     const simResult = simulatePlay(updated.situationBefore, resultType, batterId);
     
     updated.situationAfter = simResult.snapshot;
-    updated.scoredRunners = simResult.scoredRunners;
-    
-    // Update RBI estimate
+    updated.scoredRunners = simResult.scoredRunners.map((runnerId) => ({ runnerId, isRBI: true }));
     if (updated.result) {
-        updated.result.rbi = simResult.scoredRunners.length;
+        updated.result.rbi = updated.scoredRunners.filter((e) => e.isRBI).length;
     }
 
     onSave(updated);
