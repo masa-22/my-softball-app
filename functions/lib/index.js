@@ -33,9 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onPitcherGameStatsWriteDryRun = exports.onPlayerGameStatsWriteDryRun = exports.onGameStatusChangeDryRun = exports.onAtBatWriteDryRun = void 0;
+exports.onPitcherGameStatsWriteDryRun = exports.onPlayerGameStatsWriteDryRun = exports.onGameStatusChangeDryRun = exports.onAtBatWriteDryRun = exports.getPlayerBattingStatsDetail = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const getPlayerBattingStatsDetail_1 = require("./callable/getPlayerBattingStatsDetail");
+Object.defineProperty(exports, "getPlayerBattingStatsDetail", { enumerable: true, get: function () { return getPlayerBattingStatsDetail_1.getPlayerBattingStatsDetail; } });
 const battingStats_1 = require("./logic/battingStats");
 const pitchingStats_1 = require("./logic/pitchingStats");
 const gameResult_1 = require("./logic/gameResult");

@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 import { logConnectionStatus } from "./utils/devWarning";
 
 const firebaseConfig = {
@@ -30,6 +31,9 @@ export const rtdb = getDatabase(app);
 
 // Authを初期化
 export const auth = getAuth(app);
+
+// Cloud Functionsを初期化
+export const functions = getFunctions(app);
 
 // エミュレータへの接続（初期化直後、他のコードが実行される前に行う必要がある）
 if (useEmulator) {
@@ -65,6 +69,18 @@ if (useEmulator) {
     }
   }
   
+  // Functionsエミュレータに接続
+  try {
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.log('✅ Connected to Functions emulator at localhost:5001');
+  } catch (error: any) {
+    if (error?.message?.includes('already been connected') || error?.message?.includes('already connected')) {
+      console.log('Functions emulator already connected');
+    } else {
+      console.warn('⚠️ Functions emulator connection error:', error);
+    }
+  }
+
   // Authエミュレータに接続（getAuthの直後に行う必要がある）
   try {
     const authConfig = (auth as any)._delegate?._config;
