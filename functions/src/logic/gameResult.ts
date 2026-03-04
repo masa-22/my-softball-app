@@ -1,4 +1,4 @@
-import { AtBat } from "../types/AtBat";
+import { AtBat, normalizeScoredRunners } from "../types/AtBat";
 import { GameState } from "../types/GameState";
 import { Lineup } from "../types/Lineup";
 
@@ -80,11 +80,12 @@ const getScoreAtAtBat = (
   const sortedAtBats = [...atBats].sort((a, b) => a.index - b.index);
   sortedAtBats.forEach((atBat) => {
     if (atBat.index > atBatIndex) return;
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
       if (atBat.topOrBottom === 'top') {
-        homeScore += atBat.scoredRunners.length;
+        homeScore += scoredList.length;
       } else {
-        awayScore += atBat.scoredRunners.length;
+        awayScore += scoredList.length;
       }
     }
   });
@@ -185,21 +186,20 @@ export const determineLosingPitcher = (
   
   if (initiallyLosing) {
     for (const atBat of sortedAtBats) {
-      if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+      const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+      if (scoredList.length > 0) {
         if (atBat.topOrBottom === 'top') {
-          currentHomeScore -= atBat.scoredRunners.length;
+          currentHomeScore -= scoredList.length;
         } else {
-          currentAwayScore -= atBat.scoredRunners.length;
+          currentAwayScore -= scoredList.length;
         }
-        
         const wasLeadingOrTied =
           (isHomeTeam && currentHomeScore >= currentAwayScore) ||
           (!isHomeTeam && currentAwayScore >= currentHomeScore);
-        
         if (wasLeadingOrTied) return atBat.pitcherId!;
       }
     }
-    const firstScoringAtBat = sortedAtBats.find((a) => a.scoredRunners && a.scoredRunners.length > 0);
+    const firstScoringAtBat = sortedAtBats.find((a) => normalizeScoredRunners(a.scoredRunners).length > 0);
     return firstScoringAtBat?.pitcherId || null;
   }
 
@@ -207,11 +207,12 @@ export const determineLosingPitcher = (
     const beforeHomeScore = currentHomeScore;
     const beforeAwayScore = currentAwayScore;
     
-    if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.length > 0) {
       if (atBat.topOrBottom === 'top') {
-        currentHomeScore -= atBat.scoredRunners.length;
+        currentHomeScore -= scoredList.length;
       } else {
-        currentAwayScore -= atBat.scoredRunners.length;
+        currentAwayScore -= scoredList.length;
       }
 
       const wasLeading =

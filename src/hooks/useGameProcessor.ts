@@ -2,11 +2,97 @@ import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunn
 import { closeTemporaryRunner } from '../services/participationService';
 import { getAtBats, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
-import { AtBat, RunnerEvent, FieldingAction } from '../types/AtBat';
+import { AtBat, RunnerEvent, FieldingAction, ScoredRunnerEntry, BaseType, RunnerEventType } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 import { RunnerMovementResult } from '../components/play/RunnerMovementInput';
 import { LineupEntry } from '../types/Lineup';
 import { BATTING_RESULTS } from '../data/softball/battingResults';
+import { POSITIONS } from '../data/softball/positions';
+
+/** AdvanceReasonDialog の略称 (P, C, 1B 等) を lineup 用コード (1, 2, 3 等) に変換 */
+function positionAbbrToCode(abbr: string): string {
+  const entry = Object.entries(POSITIONS).find(([, p]) => p.abbr === abbr);
+  return entry ? entry[0] : abbr;
+}
+
+const createRunnerEventId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `runner-event-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+type RunnerMove = { runnerId: string; fromBase: BaseType; toBase: BaseType };
+
+function computeRunnerMoves(
+  runners: { '1': string | null; '2': string | null; '3': string | null },
+  batterId: string,
+  afterRunners: { '1': string | null; '2': string | null; '3': string | null },
+  scoredRunners: ScoredRunnerEntry[]
+): RunnerMove[] {
+  const scoredIds = new Set(scoredRunners.map((r) => r.runnerId));
+  const moves: RunnerMove[] = [];
+
+  const bases = ['1', '2', '3'] as const;
+  for (const base of bases) {
+    const runnerId = runners[base];
+    if (!runnerId) continue;
+    if (scoredIds.has(runnerId)) {
+      moves.push({ runnerId, fromBase: base, toBase: 'home' });
+    } else {
+      const toBase = (bases.find((b) => afterRunners[b] === runnerId) ?? null) as BaseType | null;
+      if (toBase) moves.push({ runnerId, fromBase: base, toBase });
+    }
+  }
+  if (batterId) {
+    if (scoredIds.has(batterId)) {
+      moves.push({ runnerId: batterId, fromBase: 'home', toBase: 'home' });
+    } else {
+      const toBase = (bases.find((b) => afterRunners[b] === batterId) ?? null) as BaseType | null;
+      if (toBase) moves.push({ runnerId: batterId, fromBase: 'home', toBase });
+    }
+  }
+  return moves;
+}
+
+function buildMergedRunnerEvents(
+  moves: RunnerMove[],
+  existingEvents: RunnerEvent[],
+  scoredRunnerReasons: Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'> | undefined
+): RunnerEvent[] {
+  const moveKey = (m: RunnerMove) => `${m.runnerId}:${m.fromBase}:${m.toBase}`;
+  const existingKeys = new Set(existingEvents.map((e) => `${e.runnerId}:${e.fromBase}:${e.toBase}`));
+
+  // 打席内の全走塁を保持: 既存イベント（WP/PB/盗塁等）をすべて含める
+  const result: RunnerEvent[] = [...existingEvents];
+
+  // movesのうち既存にない進塁のみ新規作成して追加
+  for (const m of moves) {
+    const k = moveKey(m);
+    if (existingKeys.has(k)) continue;
+
+    let type: RunnerEventType = 'hit';
+    if (m.toBase === 'home' && scoredRunnerReasons) {
+      const reason = scoredRunnerReasons[m.runnerId];
+      if (reason === 'wildpitch') type = 'wildpitch';
+      else if (reason === 'passball') type = 'passedball';
+      else if (reason === 'steal') type = 'steal';
+      else if (reason === 'error') type = 'error';
+      else type = 'hit';
+    }
+    result.push({
+      id: createRunnerEventId(),
+      pitchSeq: null,
+      eventSource: 'pitch',
+      type,
+      runnerId: m.runnerId,
+      fromBase: m.fromBase,
+      toBase: m.toBase,
+      isOut: false,
+    });
+  }
+  return result;
+}
 
 type PlayProcessingParams = {
   movementResult?: RunnerMovementResult;
@@ -81,19 +167,21 @@ export const useGameProcessor = ({
     quality,
   });
 
-  // 各投球の直前のストライクカウントを計算する関数
+  // 各投球の直前のストライクカウントを計算する関数（1球目は問答無用で 0-0、2球目以降は1球前の結果を反映）
   const calculateCountBefore = (
     pitches: PitchData[],
     initialBalls: number,
     initialStrikes: number,
     targetSeq: number
   ): { B: number; S: number } => {
+    // 1球目は計算せず常に 0-0
+    if (targetSeq <= 1) return { B: 0, S: 0 };
+
     let balls = initialBalls;
     let strikes = initialStrikes;
-
-    // targetSeqより前の投球の結果を順番に処理
-    for (const pitch of pitches) {
-      if (pitch.order >= targetSeq) break; // 対象の投球以降は無視
+    const sorted = [...pitches].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const pitch of sorted) {
+      if (pitch.order >= targetSeq) break;
 
       switch (pitch.result) {
         case 'ball':
@@ -104,14 +192,12 @@ export const useGameProcessor = ({
           strikes = Math.min(2, strikes + 1);
           break;
         case 'foul':
-          // ファウル: 2ストライク未満ならストライク+1、2ストライクなら据え置き
           if (strikes < 2) {
             strikes = Math.min(2, strikes + 1);
           }
           break;
         case 'inplay':
         case 'deadball':
-          // 打席終了するのでカウントは変わらない
           break;
       }
     }
@@ -152,7 +238,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
+          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -233,7 +319,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
+          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -258,6 +344,14 @@ export const useGameProcessor = ({
           afterRunners['1'] = batterId;
         }
 
+        // 満塁時の押し出し得点（打点付き）
+        const wasBasesLoaded = !!(runners['1'] && runners['2'] && runners['3']);
+        const scoredRunnersFromForce: ScoredRunnerEntry[] = wasBasesLoaded && runners['3']
+          ? [{ runnerId: runners['3'], isRBI: true }]
+          : [];
+        const resultRbi = scoredRunnersFromForce.length > 0 ? scoredRunnersFromForce.length : undefined;
+        const atBatResult = resultRbi != null ? { type: battingResultForMovement as any, rbi: resultRbi } : { type: battingResultForMovement as any };
+
         const atBat: AtBat = {
           playId: newPlayId,
           matchId,
@@ -268,9 +362,7 @@ export const useGameProcessor = ({
           batterId,
           pitcherId: currentPitcher?.playerId || '',
           battingOrder: currentHalf === 'top' ? homeBatIndex + 1 : awayBatIndex + 1,
-          result: {
-            type: battingResultForMovement as any,
-          },
+          result: atBatResult,
           situationBefore: {
             outs: currentO,
             runners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
@@ -283,7 +375,7 @@ export const useGameProcessor = ({
             balls: 0,
             strikes: 0,
           },
-          scoredRunners: [],
+          scoredRunners: scoredRunnersFromForce,
           pitches: pitchRecords,
           runnerEvents: runnerEvents.slice(),
           playDetails: {
@@ -308,12 +400,54 @@ export const useGameProcessor = ({
           '3b': afterRunners['3'],
         });
 
+        // 押し出し得点をスコアに加算
+        if (scoredRunnersFromForce.length > 0) {
+          addRunsRealtime(matchId, currentInningInfo.half, scoredRunnersFromForce.length);
+        }
+
         // カウントリセット
         updateCountsRealtime(matchId, { o: currentO, b: 0, s: 0 });
     }
     // 2. RunnerMovementあり (インプレイ、四死球など)
     else if (movementResult) {
-        const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons } = movementResult;
+        const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons, advanceErrorDetail } = movementResult;
+
+        // 打席内で PB/WP によりホームインしたランナーを runnerEvents から scoredRunners にマージ（isRBI: false で追加）
+        const pbWpHome = runnerEvents
+          .filter((e) => (e.type === 'passedball' || e.type === 'wildpitch') && e.toBase === 'home')
+          .map((e) => ({ runnerId: e.runnerId, isRBI: false } as ScoredRunnerEntry));
+        const mergedScoredRunners: ScoredRunnerEntry[] = [...scoredRunners];
+        pbWpHome.forEach((entry) => {
+          if (!mergedScoredRunners.some((r) => r.runnerId === entry.runnerId)) {
+            mergedScoredRunners.push(entry);
+          }
+        });
+
+        // 打点: 'hit' のとき、または四死球の満塁押し出し
+        const batterIdForRbi = currentBatter?.playerId ?? '';
+        const isWalk = battingResultForMovement === 'walk';
+        const isDeadball = battingResultForMovement === 'deadball';
+        const wasBasesLoaded = !!(runners['1'] && runners['2'] && runners['3']);
+        mergedScoredRunners.forEach((entry) => {
+          const reason = scoredRunnerReasons?.[entry.runnerId];
+          // 四死球かつ満塁の押し出し得点は打点
+          if ((isWalk || isDeadball) && wasBasesLoaded) {
+            entry.isRBI = true;
+            return;
+          }
+          if (reason !== 'hit') {
+            entry.isRBI = false;
+            return;
+          }
+          if (isWalk && !wasBasesLoaded && entry.runnerId !== batterIdForRbi) {
+            entry.isRBI = false;
+          }
+        });
+
+        // 全進塁を RunnerEvent として構築（自動進塁含む）。既存の runnerEvents とマージ
+        const batterIdForMoves = currentBatter?.playerId ?? '';
+        const moves = computeRunnerMoves(runners, batterIdForMoves, afterRunners, mergedScoredRunners);
+        const builtRunnerEvents = buildMergedRunnerEvents(moves, runnerEvents, scoredRunnerReasons);
 
         // --- at_bats 保存処理 ---
         const pitchRecords = pitches.map(p => ({
@@ -323,7 +457,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
+          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
         }));
 
         const atBatResult: any = {
@@ -334,27 +468,10 @@ export const useGameProcessor = ({
           atBatResult.fieldedBy = playDetailsForMovement.position;
         }
         
-        // 打点を追加する条件：
-        // 1. ヒットの場合
-        // 2. 四死球（押し出し）の場合
-        // 3. 内野ゴロで得点した場合
-        // 4. ランナーの進塁理由が「ヒット」である場合（打撃結果がヒットで、追加でホームインした場合など）
-        if (scoredRunners.length > 0) {
-          const battingResultDef = BATTING_RESULTS[battingResultForMovement as keyof typeof BATTING_RESULTS];
-          const isHit = battingResultDef && battingResultDef.stats.isHit;
-          const isFourBall = battingResultForMovement === 'walk' || battingResultForMovement === 'deadball';
-          const isGroundout = battingResultForMovement === 'groundout';
-          
-          // ランナーの進塁理由が「ヒット」である場合を確認
-          let hasHitAdvanceReason = false;
-          if (scoredRunnerReasons && scoredRunners.length > 0) {
-            // 得点したランナーのうち、少なくとも1人が「ヒット」で進塁した場合
-            hasHitAdvanceReason = scoredRunners.some(runnerId => scoredRunnerReasons[runnerId] === 'hit');
-          }
-          
-          if (isHit || isFourBall || isGroundout || hasHitAdvanceReason) {
-            atBatResult.rbi = scoredRunners.length;
-          }
+        // 打点: scoredRunners の isRBI で判定
+        const rbiCount = mergedScoredRunners.filter((r) => r.isRBI).length;
+        if (rbiCount > 0) {
+          atBatResult.rbi = rbiCount;
         }
 
         const existingAtBats = await getAtBats(matchId);
@@ -388,31 +505,30 @@ export const useGameProcessor = ({
             balls: 0,
             strikes: 0,
           },
-          scoredRunners: scoredRunners,
+          scoredRunners: mergedScoredRunners,
           pitches: pitchRecords,
-          runnerEvents: runnerEvents.slice(),
+          runnerEvents: builtRunnerEvents,
           playDetails: {
              batType: playDetailsForMovement.batType as any,
              direction: playDetailsForMovement.outfieldDirection || playDetailsForMovement.position,
              fielding: (() => {
                const list: FieldingAction[] = [];
                const position = playDetailsForMovement.position;
-               
+
+               // 打者出塁の失策: battingResultForMovement === 'error' の場合
+               if (battingResultForMovement === 'error' && position) {
+                 list.push(buildFieldingAction(position, 'error', 'error'));
+               }
+
+               // 進塁理由でエラーを選択した場合: advanceErrorDetail が存在するとき必ず該当ポジションのエラーを記録
+               if (advanceErrorDetail?.position && advanceErrorDetail?.errorType) {
+                 const errorPosition = positionAbbrToCode(advanceErrorDetail.position);
+                 list.push(buildFieldingAction(errorPosition, advanceErrorDetail.errorType, 'error'));
+               }
+
                if (playDetailsForMovement.fieldingOptions) {
                  // 明示的な守備オプションがある場合（ファーストゴロの分岐など）
-                 if (position) {
-                    // 補殺がある場合は、捕球記録(fielded)も残すのが一般的だが、
-                    // システム上 putout/assist があれば fielded は表示されないかもしれない。
-                    // 一旦、捕球者としてfieldedを追加しておく。
-                    // ただし、putoutPositionと同じ場合は重複するかもしれないので調整。
-                    // 既存ロジックでは flyout の場合 putout のみで fielded なし。
-                    // groundout の場合 assist + putout(3)。
-                    // ここではシンプルに構成する。
-                    
-                    // 1. 捕球
-                    // putoutPosition が自分自身なら putout が捕球を兼ねるため fielded 不要とする流儀もあるが、
-                    // ここでは念のためアシストの場合のみ fielded をつけるか？
-                    // いや、fielded は常に記録しておいたほうが無難。
+                 if (position && battingResultForMovement !== 'error') {
                     list.push(buildFieldingAction(position, 'fielded'));
                  }
                  
@@ -426,7 +542,7 @@ export const useGameProcessor = ({
                  const hasOutDetails = outDetails && outDetails.length > 0;
                  if (!hasOutDetails && battingResultForMovement === 'flyout') {
                     list.push(buildFieldingAction(position, 'putout'));
-                 } else {
+                 } else if (battingResultForMovement !== 'error') {
                     list.push(buildFieldingAction(position, 'fielded'));
                  }
                }
@@ -463,10 +579,10 @@ export const useGameProcessor = ({
         });
 
         // 得点更新
-        if (scoredRunners.length > 0) {
+        if (mergedScoredRunners.length > 0) {
           const gsForHalf = await getGameState(matchId);
           const half = gsForHalf?.top_bottom || 'top';
-          addRunsRealtime(matchId, half, scoredRunners.length);
+          addRunsRealtime(matchId, half, mergedScoredRunners.length);
         }
 
         // アウト更新
@@ -525,7 +641,7 @@ export const useGameProcessor = ({
         x: toPercentage(p.x, ZONE_WIDTH),
         y: toPercentage(p.y, ZONE_HEIGHT),
         result: p.result,
-        countBefore: calculateCountBefore(pitches, currentBSO.b, currentBSO.s, p.order),
+        countBefore: calculateCountBefore(pitches, 0, 0, p.order),
       }));
 
       const existingAtBats = await getAtBats(matchId);
@@ -592,6 +708,8 @@ export const useGameProcessor = ({
                 fielding.push(buildFieldingAction(details.position, 'assist'));
                 fielding.push(buildFieldingAction('3', 'putout'));
               }
+            } else if (battingResult === 'error') {
+              fielding.push(buildFieldingAction(details.position, 'error', 'error'));
             } else {
               fielding.push(buildFieldingAction(details.position, 'fielded'));
             }

@@ -64,16 +64,11 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
           const simResult = simulatePlay(currentState, resultType, atBat.batterId);
           
           atBat.situationAfter = simResult.snapshot;
-          atBat.scoredRunners = simResult.scoredRunners;
-          
-          // 得点があれば記録（AtBat内のrbiなども更新すべきだが、自動計算は難しいのでscoredRunnersのみ更新）
+          atBat.scoredRunners = simResult.scoredRunners.map((runnerId) => ({ runnerId, isRBI: true }));
           if (atBat.result) {
-             // rbiの再計算は簡易的に行う（得点数＝打点とする）
-             // ※エラー得点などが含まれる場合は不正確だが、修正機能の限界とする
-             atBat.result.rbi = simResult.scoredRunners.length;
+             atBat.result.rbi = atBat.scoredRunners.filter((e) => e.isRBI).length;
           }
       } else {
-          // 結果がない場合は変化なし（ありえないはず）
           atBat.situationAfter = { ...currentState };
           atBat.scoredRunners = [];
       }

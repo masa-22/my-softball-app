@@ -1,4 +1,4 @@
-export type ParticipationStatus = 'starter' | 'pinch_hitter' | 'pinch_runner' | 'substituted' | 'finished' | 'position_change';
+export type ParticipationStatus = 'starter' | 'pinch_hitter' | 'pinch_runner' | 'reentry' | 'substituted' | 'finished' | 'position_change';
 
 export type ParticipationEntry = {
   playerId: string;

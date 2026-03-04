@@ -10,22 +10,21 @@ import { formatAtBatSummary } from '../utils/scoreKeeping';
 import { LineupEntry } from '../types/Lineup';
 import { ParticipationEntry } from '../types/Participation';
 import { Player } from '../types/Player';
-import { AtBat } from '../types/AtBat';
+import { AtBat, normalizeScoredRunners } from '../types/AtBat';
 
 export const MAX_BOX_SCORE_INNINGS = 7;
 
 type Side = 'home' | 'away';
 
+type InningCellResult = {
+  label: string;
+  hasHit: boolean;
+  hasRbi: boolean;
+};
+
 type PlayerResultMap = Record<
   string,
-  Record<
-    number,
-    {
-      labels: string[];
-      hasHit: boolean;
-      hasRbi: boolean;
-    }
-  >
+  Record<number, (InningCellResult | undefined)[]>
 >;
 
 export interface BoxScoreRowData {
@@ -36,8 +35,8 @@ export interface BoxScoreRowData {
   positionLabel: string;
   roleLabel: string;
   isSubstitute: boolean;
-  resultsByInning: Record<number, string>;
-  inningStyles: Record<number, 'hit' | 'rbi' | null>;
+  resultsByInning: Record<number, string[]>;
+  inningStyles: Record<number, ('hit' | 'rbi' | null)[]>;
   orderLabel?: string;
 }
 
@@ -54,6 +53,8 @@ export interface BoxScoreTeamData {
   rows: BoxScoreRowData[];
   runnerRecords: RunnerRecord[];
   leftOnBase: number; // 残塁数（合計）
+  /** 各イニングの列数（同一イニング複数打席時は2以上） */
+  columnsPerInning: Record<number, number>;
 }
 
 export interface BoxScoreData {
@@ -101,29 +102,54 @@ const formatPlayerName = (player: Player | undefined) => {
   return `${family} ${given}`.trim();
 };
 
-const buildResultMap = (atBats: AtBat[]): Record<Side, PlayerResultMap> => {
-  const result: Record<Side, PlayerResultMap> = { home: {}, away: {} };
+const buildResultMapAndColumns = (
+  atBats: AtBat[]
+): { resultMap: Record<Side, PlayerResultMap>; columnsPerInning: Record<Side, Record<number, number>> } => {
+  const batOnly = atBats.filter(
+    (a) => a.type === 'bat' && a.batterId && (a.inning ?? 0) >= 1 && (a.inning ?? 0) <= MAX_BOX_SCORE_INNINGS
+  );
+  const sorted = [...batOnly].sort((a, b) => {
+    const sideA = a.topOrBottom === 'top' ? 0 : 1;
+    const sideB = b.topOrBottom === 'top' ? 0 : 1;
+    if (sideA !== sideB) return sideA - sideB;
+    const inA = a.inning ?? 0;
+    const inB = b.inning ?? 0;
+    if (inA !== inB) return inA - inB;
+    return a.index - b.index;
+  });
 
-  atBats.forEach((atBat) => {
-    if (atBat.type !== 'bat' || !atBat.batterId) return;
+  // 打者が一巡するごとに改列。同一イニングでその打者が何回目の打席か（0=1巡目, 1=2巡目）を列インデックスにする
+  const appearanceCount: Record<Side, Record<number, Record<string, number>>> = {
+    home: {},
+    away: {},
+  };
+  const maxColumnIndex: Record<Side, Record<number, number>> = { home: {}, away: {} };
+
+  const resultMap: Record<Side, PlayerResultMap> = { home: {}, away: {} };
+  sorted.forEach((atBat) => {
     const label = formatAtBatSummary(atBat);
-    if (!label) return;
-
-    const inning = atBat.inning ?? 0;
-    if (inning < 1 || inning > MAX_BOX_SCORE_INNINGS) return;
-
+    if (!label || !atBat.batterId) return;
     const side: Side = atBat.topOrBottom === 'top' ? 'home' : 'away';
-    const sideMap = result[side];
-    const playerMap = sideMap[atBat.batterId] || (sideMap[atBat.batterId] = {});
-    const inningEntry =
-      playerMap[inning] ||
-      (playerMap[inning] = {
-        labels: [],
-        hasHit: false,
-        hasRbi: false,
-      });
-    inningEntry.labels.push(label);
+    const inning = atBat.inning ?? 0;
 
+    if (!appearanceCount[side][inning]) {
+      appearanceCount[side][inning] = {};
+    }
+    const columnIndex = appearanceCount[side][inning][atBat.batterId] ?? 0;
+    appearanceCount[side][inning][atBat.batterId] = columnIndex + 1;
+
+    const currentMax = maxColumnIndex[side][inning] ?? -1;
+    maxColumnIndex[side][inning] = Math.max(currentMax, columnIndex);
+
+    const sideMap = resultMap[side];
+    const playerMap = sideMap[atBat.batterId] || (sideMap[atBat.batterId] = {});
+    if (!playerMap[inning]) {
+      playerMap[inning] = [];
+    }
+    const arr = playerMap[inning];
+    while (arr.length <= columnIndex) {
+      arr.push(undefined);
+    }
     const hitTypes: AtBat['result']['type'][] = [
       'single',
       'double',
@@ -131,16 +157,22 @@ const buildResultMap = (atBats: AtBat[]): Record<Side, PlayerResultMap> => {
       'homerun',
       'runninghomerun',
     ];
-    if (atBat.result && hitTypes.includes(atBat.result.type)) {
-      inningEntry.hasHit = true;
-    }
-    const rbi = atBat.result?.rbi ?? atBat.scoredRunners?.length ?? 0;
-    if (rbi > 0) {
-      inningEntry.hasRbi = true;
-    }
+    const hasHit = !!(atBat.result && hitTypes.includes(atBat.result.type));
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    const rbi = atBat.result?.rbi ?? scoredList.filter((e) => e.isRBI).length ?? 0;
+    const hasRbi = rbi > 0;
+    arr[columnIndex] = { label, hasHit, hasRbi };
   });
 
-  return result;
+  const columnsPerInning: Record<Side, Record<number, number>> = { home: {}, away: {} };
+  for (const side of ['home', 'away'] as Side[]) {
+    for (let inning = 1; inning <= MAX_BOX_SCORE_INNINGS; inning++) {
+      const maxCol = maxColumnIndex[side][inning] ?? -1;
+      columnsPerInning[side][inning] = maxCol >= 0 ? maxCol + 1 : 1;
+    }
+  }
+
+  return { resultMap, columnsPerInning };
 };
 
 const buildRunnerRecords = (
@@ -271,10 +303,26 @@ const roleLabelMap: Record<string, string> = {
   starter: '',
   pinch_hitter: '代打',
   pinch_runner: '代走',
+  reentry: 'リエントリー',
   temporary_runner: '臨代',
   substituted: '',
   finished: '',
   position_change: '',
+};
+
+const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP']);
+const isDefensivePosition = (p: string) => DEFENSIVE_POSITIONS.has(p);
+
+// 同じ選手のエントリから守備位置シーケンスを収集（PH/PRで退場したエントリの守備位置は含めない）
+const collectPositionSeq = (entries: ParticipationEntry[]): string[] => {
+  const positionSeq: string[] = [];
+  entries.forEach((entry) => {
+    if (!entry.positionAtStart || entry.positionAtStart === 'TR') return;
+    const leftAsPhPr = (entry.status === 'pinch_hitter' || entry.status === 'pinch_runner') && entry.endInning != null;
+    if (leftAsPhPr && isDefensivePosition(entry.positionAtStart)) return;
+    positionSeq.push(entry.positionAtStart);
+  });
+  return positionSeq;
 };
 
 const getStatusPriority = (entry: ParticipationEntry) => {
@@ -304,12 +352,14 @@ const buildRowsForSide = ({
   participationEntries,
   players,
   resultMap,
+  columnsPerInning,
 }: {
   side: Side;
   lineupEntries: LineupEntry[];
   participationEntries: ParticipationEntry[];
   players: Player[];
   resultMap: PlayerResultMap;
+  columnsPerInning: Record<number, number>;
 }): BoxScoreRowData[] => {
   const rows: BoxScoreRowData[] = [];
   const playersById = players.reduce<Record<string, Player>>((acc, player) => {
@@ -364,6 +414,13 @@ const buildRowsForSide = ({
     const baseOrderLabel = order === 10 ? 'FP' : String(order);
 
     if (!participants.length) {
+      const emptyResults: Record<number, string[]> = {};
+      const emptyStyles: Record<number, ('hit' | 'rbi' | null)[]> = {};
+      INNING_COLUMNS.forEach((inning) => {
+        const cols = columnsPerInning[inning] ?? 1;
+        emptyResults[inning] = Array.from({ length: cols }, () => '');
+        emptyStyles[inning] = Array.from({ length: cols }, () => null);
+      });
       rows.push({
         key: `${side}-${order}-empty`,
         battingOrder: order,
@@ -372,8 +429,8 @@ const buildRowsForSide = ({
         positionLabel: lineupEntry ? getPositionLabel(lineupEntry.position) : '',
         roleLabel: '',
         isSubstitute: false,
-        resultsByInning: {},
-        inningStyles: {},
+        resultsByInning: emptyResults,
+        inningStyles: emptyStyles,
         orderLabel: baseOrderLabel,
       });
       continue;
@@ -430,34 +487,31 @@ const buildRowsForSide = ({
         
         // 同じ選手の全エントリから守備位置を収集
         const samePlayerEntries = entriesByPlayer.get(playerId) || [];
-        const positionSeq: string[] = [];
-        samePlayerEntries.forEach(entry => {
-          if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-            positionSeq.push(entry.positionAtStart);
-          }
-        });
-        if (lineupEntry?.position && lineupEntry.position !== 'TR') {
+        const positionSeq = collectPositionSeq(samePlayerEntries);
+        const isCurrentPlayer = lineupEntry?.playerId === playerId;
+        if (isCurrentPlayer && lineupEntry?.position && lineupEntry.position !== 'TR') {
           positionSeq.push(lineupEntry.position);
         }
+        const fallback = isCurrentPlayer ? (lineupEntry?.position || '') : '';
+        let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+        if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner')) {
+          positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+        }
         
-        const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
-        
-        // 打席結果は全エントリを統合（既にresultMapで統合されているのでそのまま使用）
         const perInning = resultMap[playerId] || {};
-        const resultsByInning: Record<number, string> = {};
-        const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+        const resultsByInning: Record<number, string[]> = {};
+        const inningStyles: Record<number, ('hit' | 'rbi' | null)[]> = {};
         INNING_COLUMNS.forEach((inning) => {
-          const info = perInning[inning];
-          if (info?.labels.length) {
-            resultsByInning[inning] = info.labels.join(' / ');
-            if (info.hasRbi) {
-              inningStyles[inning] = 'rbi';
-            } else if (info.hasHit) {
-              inningStyles[inning] = 'hit';
-            } else {
-              inningStyles[inning] = null;
-            }
-          }
+          const cols = columnsPerInning[inning] ?? 1;
+          const cells = perInning[inning] ?? Array.from({ length: cols }, () => undefined);
+          resultsByInning[inning] = Array.from({ length: cols }, (_, ci) => cells[ci]?.label ?? '');
+          inningStyles[inning] = Array.from({ length: cols }, (_, ci) => {
+            const c = cells[ci];
+            if (!c) return null;
+            if (c.hasRbi) return 'rbi';
+            if (c.hasHit) return 'hit';
+            return null;
+          });
         });
 
         rows.push({
@@ -485,39 +539,33 @@ const buildRowsForSide = ({
       const displayName = formatPlayerName(player) || '未登録';
       const roleLabel = roleLabelMap[participant.status] || '';
       
-      let positionLabel = '';
+      // 同じ選手の全エントリから守備位置を収集
+      const samePlayerEntries = entriesByPlayer.get(playerId) || [];
+      const positionSeq = collectPositionSeq(samePlayerEntries);
+      const isCurrentPlayer = lineupEntry?.playerId === playerId;
+      if (isCurrentPlayer && lineupEntry?.position && lineupEntry.position !== 'TR') {
+        positionSeq.push(lineupEntry.position);
+      }
+      const fallback = isCurrentPlayer ? (lineupEntry?.position || '') : '';
+      let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+      if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner' || participant.status === 'reentry')) {
+        positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+      }
       
-       // 同じ選手の全エントリから守備位置を収集
-       const samePlayerEntries = entriesByPlayer.get(playerId) || [];
-       const positionSeq: string[] = [];
-       samePlayerEntries.forEach(entry => {
-         if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-           positionSeq.push(entry.positionAtStart);
-         }
-       });
-      // lineupEntryの位置も追加
-       if (lineupEntry?.position && lineupEntry.position !== 'TR') {
-         positionSeq.push(lineupEntry.position);
-       }
-      
-      positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
-      
-      const resultsByInning: Record<number, string> = {};
-      const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
-
+      const resultsByInning: Record<number, string[]> = {};
+      const inningStyles: Record<number, ('hit' | 'rbi' | null)[]> = {};
       const perInning = resultMap[playerId] || {};
       INNING_COLUMNS.forEach((inning) => {
-        const info = perInning[inning];
-        if (info?.labels.length) {
-          resultsByInning[inning] = info.labels.join(' / ');
-          if (info.hasRbi) {
-            inningStyles[inning] = 'rbi';
-          } else if (info.hasHit) {
-            inningStyles[inning] = 'hit';
-          } else {
-            inningStyles[inning] = null;
-          }
-        }
+        const cols = columnsPerInning[inning] ?? 1;
+        const cells = perInning[inning] ?? Array.from({ length: cols }, () => undefined);
+        resultsByInning[inning] = Array.from({ length: cols }, (_, ci) => cells[ci]?.label ?? '');
+        inningStyles[inning] = Array.from({ length: cols }, (_, ci) => {
+          const c = cells[ci];
+          if (!c) return null;
+          if (c.hasRbi) return 'rbi';
+          if (c.hasHit) return 'hit';
+          return null;
+        });
       });
 
       const isStarterRow = getStatusPriority(participant) === 0;
@@ -564,34 +612,31 @@ const buildRowsForSide = ({
       
       // 同じ選手の全エントリから守備位置を収集
       const samePlayerEntries = unassignedByPlayer.get(playerId) || [];
-      const positionSeq: string[] = [];
-      samePlayerEntries.forEach(entry => {
-        if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-          positionSeq.push(entry.positionAtStart);
-        }
-      });
-      // fallbackLineupの位置も追加
-      if (fallbackLineup?.position && fallbackLineup.position !== 'TR') {
+      const positionSeq = collectPositionSeq(samePlayerEntries);
+      const isCurrentPlayer = fallbackLineup?.playerId === playerId;
+      if (isCurrentPlayer && fallbackLineup?.position && fallbackLineup.position !== 'TR') {
         positionSeq.push(fallbackLineup.position);
       }
-      
-      const positionLabel = buildPositionHistoryLabel(positionSeq, fallbackLineup?.position || '');
+      const fallback = isCurrentPlayer ? (fallbackLineup?.position || '') : '';
+      let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+      if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner' || participant.status === 'reentry')) {
+        positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+      }
       
       const perInning = resultMap[playerId] || {};
-      const resultsByInning: Record<number, string> = {};
-      const inningStyles: Record<number, 'hit' | 'rbi' | null> = {};
+      const resultsByInning: Record<number, string[]> = {};
+      const inningStyles: Record<number, ('hit' | 'rbi' | null)[]> = {};
       INNING_COLUMNS.forEach((inning) => {
-        const info = perInning[inning];
-        if (info?.labels.length) {
-          resultsByInning[inning] = info.labels.join(' / ');
-          if (info.hasRbi) {
-            inningStyles[inning] = 'rbi';
-          } else if (info.hasHit) {
-            inningStyles[inning] = 'hit';
-          } else {
-            inningStyles[inning] = null;
-          }
-        }
+        const cols = columnsPerInning[inning] ?? 1;
+        const cells = perInning[inning] ?? Array.from({ length: cols }, () => undefined);
+        resultsByInning[inning] = Array.from({ length: cols }, (_, ci) => cells[ci]?.label ?? '');
+        inningStyles[inning] = Array.from({ length: cols }, (_, ci) => {
+          const c = cells[ci];
+          if (!c) return null;
+          if (c.hasRbi) return 'rbi';
+          if (c.hasHit) return 'hit';
+          return null;
+        });
       });
       rows.push({
         key: `${side}-extra-${playerId || idx}`,
@@ -618,7 +663,7 @@ const buildBoxScoreData = async (matchId: string, atBats: AtBat[]): Promise<BoxS
   const participations = await getParticipations(matchId);
   const homePlayers = await getPlayers(game.topTeam.id);
   const awayPlayers = await getPlayers(game.bottomTeam.id);
-  const resultMap = buildResultMap(atBats);
+  const { resultMap, columnsPerInning } = buildResultMapAndColumns(atBats);
 
   const homeTeam: BoxScoreTeamData = {
     teamName: game.topTeam.name,
@@ -629,9 +674,11 @@ const buildBoxScoreData = async (matchId: string, atBats: AtBat[]): Promise<BoxS
       participationEntries: participations?.home ?? [],
       players: homePlayers,
       resultMap: resultMap.home,
+      columnsPerInning: columnsPerInning.home,
     }),
     runnerRecords: buildRunnerRecords(atBats, 'home', homePlayers),
     leftOnBase: buildLeftOnBase(atBats, 'home'),
+    columnsPerInning: columnsPerInning.home,
   };
 
   const awayTeam: BoxScoreTeamData = {
@@ -643,9 +690,11 @@ const buildBoxScoreData = async (matchId: string, atBats: AtBat[]): Promise<BoxS
       participationEntries: participations?.away ?? [],
       players: awayPlayers,
       resultMap: resultMap.away,
+      columnsPerInning: columnsPerInning.away,
     }),
     runnerRecords: buildRunnerRecords(atBats, 'away', awayPlayers),
     leftOnBase: buildLeftOnBase(atBats, 'away'),
+    columnsPerInning: columnsPerInning.away,
   };
 
   return { home: homeTeam, away: awayTeam };

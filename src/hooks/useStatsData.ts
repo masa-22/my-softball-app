@@ -10,7 +10,7 @@ import { BATTING_RESULTS } from '../data/softball/battingResults';
 import { LineupEntry } from '../types/Lineup';
 import { ParticipationEntry } from '../types/Participation';
 import { Player } from '../types/Player';
-import { AtBat } from '../types/AtBat';
+import { AtBat, normalizeScoredRunners } from '../types/AtBat';
 
 type Side = 'home' | 'away';
 
@@ -184,7 +184,8 @@ const calculatePlayerStats = (
     }
 
     // 得点（ランナーとして）
-    if (atBat.scoredRunners && atBat.scoredRunners.includes(playerId) && isPlayerSide) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.some((e) => e.runnerId === playerId) && isPlayerSide) {
       stats.runs++;
     }
 
@@ -205,7 +206,7 @@ const calculatePlayerStats = (
             stats.assists++;
           } else if (fieldingAction.action === 'putout') {
             stats.putouts++;
-          } else if (fieldingAction.action === 'error') {
+          } else if (fieldingAction.action === 'error' || fieldingAction.action === 'throw' || fieldingAction.action === 'catch') {
             stats.errors++;
           }
         }
@@ -248,8 +249,24 @@ const roleLabelMap: Record<string, string> = {
   starter: '',
   pinch_hitter: '代打',
   pinch_runner: '代走',
+  reentry: 'リエントリー',
   substituted: '',
   finished: '',
+};
+
+const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP']);
+const isDefensivePosition = (p: string) => DEFENSIVE_POSITIONS.has(p);
+
+// 同じ選手のエントリから守備位置シーケンスを収集（PH/PRで退場したエントリの守備位置は含めない）
+const collectPositionSeq = (entries: ParticipationEntry[]): string[] => {
+  const positionSeq: string[] = [];
+  entries.forEach((entry) => {
+    if (!entry.positionAtStart || entry.positionAtStart === 'TR') return;
+    const leftAsPhPr = (entry.status === 'pinch_hitter' || entry.status === 'pinch_runner') && entry.endInning != null;
+    if (leftAsPhPr && isDefensivePosition(entry.positionAtStart)) return;
+    positionSeq.push(entry.positionAtStart);
+  });
+  return positionSeq;
 };
 
 const getStatusPriority = (entry: ParticipationEntry) => {
@@ -418,17 +435,16 @@ const buildRowsForSide = ({
         
         // 同じ選手の全エントリから守備位置を収集
         const samePlayerEntries = entriesByPlayer.get(playerId) || [];
-        const positionSeq: string[] = [];
-        samePlayerEntries.forEach(entry => {
-          if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-            positionSeq.push(entry.positionAtStart);
-          }
-        });
-        if (lineupEntry?.position && lineupEntry.position !== 'TR') {
+        const positionSeq = collectPositionSeq(samePlayerEntries);
+        const isCurrentPlayer = lineupEntry?.playerId === playerId;
+        if (isCurrentPlayer && lineupEntry?.position && lineupEntry.position !== 'TR') {
           positionSeq.push(lineupEntry.position);
         }
-        
-        const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
+        const fallback = isCurrentPlayer ? (lineupEntry?.position || '') : '';
+        let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+        if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner')) {
+          positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+        }
         
         // 統計データは全エントリを統合（calculatePlayerStatsで既に統合されている）
         const stats = calculatePlayerStats(playerId, atBats, side);
@@ -459,18 +475,16 @@ const buildRowsForSide = ({
       
       // 同じ選手の全エントリから守備位置を収集
       const samePlayerEntries = entriesByPlayer.get(playerId) || [];
-      const positionSeq: string[] = [];
-      samePlayerEntries.forEach(entry => {
-        if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-          positionSeq.push(entry.positionAtStart);
-        }
-      });
-      // lineupEntryの位置も追加
-      if (lineupEntry?.position && lineupEntry.position !== 'TR') {
+      const positionSeq = collectPositionSeq(samePlayerEntries);
+      const isCurrentPlayer = lineupEntry?.playerId === playerId;
+      if (isCurrentPlayer && lineupEntry?.position && lineupEntry.position !== 'TR') {
         positionSeq.push(lineupEntry.position);
       }
-      
-      const positionLabel = buildPositionHistoryLabel(positionSeq, lineupEntry?.position || '');
+      const fallback = isCurrentPlayer ? (lineupEntry?.position || '') : '';
+      let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+      if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner' || participant.status === 'reentry')) {
+        positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+      }
       
       const stats = calculatePlayerStats(playerId, atBats, side);
 
@@ -519,18 +533,16 @@ const buildRowsForSide = ({
       
       // 同じ選手の全エントリから守備位置を収集
       const samePlayerEntries = unassignedByPlayer.get(playerId) || [];
-      const positionSeq: string[] = [];
-      samePlayerEntries.forEach(entry => {
-        if (entry.positionAtStart && entry.positionAtStart !== 'TR') {
-          positionSeq.push(entry.positionAtStart);
-        }
-      });
-      // fallbackLineupの位置も追加
-      if (fallbackLineup?.position && fallbackLineup.position !== 'TR') {
+      const positionSeq = collectPositionSeq(samePlayerEntries);
+      const isCurrentPlayer = fallbackLineup?.playerId === playerId;
+      if (isCurrentPlayer && fallbackLineup?.position && fallbackLineup.position !== 'TR') {
         positionSeq.push(fallbackLineup.position);
       }
-      
-      const positionLabel = buildPositionHistoryLabel(positionSeq, fallbackLineup?.position || '');
+      const fallback = isCurrentPlayer ? (fallbackLineup?.position || '') : '';
+      let positionLabel = buildPositionHistoryLabel(positionSeq, fallback || undefined);
+      if (!positionLabel && (participant.status === 'pinch_hitter' || participant.status === 'pinch_runner' || participant.status === 'reentry')) {
+        positionLabel = participant.status === 'pinch_runner' ? 'PR' : 'PH';
+      }
       
       const stats: PlayerStats = playerId
         ? calculatePlayerStats(playerId, atBats, side)

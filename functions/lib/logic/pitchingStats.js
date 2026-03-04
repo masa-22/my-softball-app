@@ -1,10 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.calculatePitcherStats = void 0;
+const AtBat_1 = require("../types/AtBat");
 const battingResults_1 = require("../data/softball/battingResults");
 const hasErrorOrPassedBallInScoring = (runnerId, scoringAtBat, allAtBats) => {
     var _a, _b, _c, _d, _e, _f, _g, _h;
-    if (!scoringAtBat.scoredRunners.includes(runnerId))
+    const scoredList = (0, AtBat_1.normalizeScoredRunners)(scoringAtBat.scoredRunners);
+    if (!scoredList.some((e) => e.runnerId === runnerId))
         return false;
     if (scoringAtBat.runnerEvents) {
         for (const event of scoringAtBat.runnerEvents) {
@@ -14,7 +16,7 @@ const hasErrorOrPassedBallInScoring = (runnerId, scoringAtBat, allAtBats) => {
     }
     if ((_a = scoringAtBat.playDetails) === null || _a === void 0 ? void 0 : _a.fielding) {
         for (const fielding of scoringAtBat.playDetails.fielding) {
-            if (fielding.action === 'error')
+            if (fielding.action === 'error' || fielding.action === 'throw' || fielding.action === 'catch')
                 return true;
         }
     }
@@ -30,7 +32,7 @@ const hasErrorOrPassedBallInScoring = (runnerId, scoringAtBat, allAtBats) => {
     if (onBaseAtBat) {
         if (((_b = onBaseAtBat.result) === null || _b === void 0 ? void 0 : _b.type) === 'error')
             return true;
-        if ((_d = (_c = onBaseAtBat.playDetails) === null || _c === void 0 ? void 0 : _c.fielding) === null || _d === void 0 ? void 0 : _d.some(f => f.action === 'error'))
+        if ((_d = (_c = onBaseAtBat.playDetails) === null || _c === void 0 ? void 0 : _c.fielding) === null || _d === void 0 ? void 0 : _d.some(f => f.action === 'error' || f.action === 'throw' || f.action === 'catch'))
             return true;
         if ((_e = onBaseAtBat.runnerEvents) === null || _e === void 0 ? void 0 : _e.some(e => e.runnerId === runnerId && ['passedball', 'wildpitch'].includes(e.type)))
             return true;
@@ -38,7 +40,7 @@ const hasErrorOrPassedBallInScoring = (runnerId, scoringAtBat, allAtBats) => {
         for (const betweenAtBat of betweenAtBats) {
             if ((_f = betweenAtBat.runnerEvents) === null || _f === void 0 ? void 0 : _f.some(e => e.runnerId === runnerId && ['passedball', 'wildpitch'].includes(e.type)))
                 return true;
-            if ((_h = (_g = betweenAtBat.playDetails) === null || _g === void 0 ? void 0 : _g.fielding) === null || _h === void 0 ? void 0 : _h.some(f => f.action === 'error'))
+            if ((_h = (_g = betweenAtBat.playDetails) === null || _g === void 0 ? void 0 : _g.fielding) === null || _h === void 0 ? void 0 : _h.some(f => f.action === 'error' || f.action === 'throw' || f.action === 'catch'))
                 return true;
         }
     }
@@ -72,7 +74,6 @@ const calculatePitcherStats = (playerId, atBats, side, gameState) => {
     stats.inningsPitched = `${inningWhole}.${inningRemainder}`;
     stats.battersFaced = pitcherAtBats.length;
     pitcherAtBats.forEach((atBat) => {
-        var _a;
         stats.pitches += atBat.pitches.length;
         if (atBat.result) {
             const resultDef = battingResults_1.BATTING_RESULTS[atBat.result.type];
@@ -94,14 +95,24 @@ const calculatePitcherStats = (playerId, atBats, side, gameState) => {
                     stats.hitByPitch++;
             }
         }
-        if ((_a = atBat.runnerEvents) === null || _a === void 0 ? void 0 : _a.some(e => e.type === 'wildpitch'))
-            stats.wildPitches++;
+        // 暴投（同じ球目の重複は1カウント）
+        if (atBat.runnerEvents) {
+            const wpPitchSeqs = new Set();
+            atBat.runnerEvents.forEach((event) => {
+                var _a;
+                if (event.type === 'wildpitch') {
+                    wpPitchSeqs.add((_a = event.pitchSeq) !== null && _a !== void 0 ? _a : null);
+                }
+            });
+            stats.wildPitches += wpPitchSeqs.size;
+        }
     });
     pitcherAtBats.forEach((atBat) => {
-        if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
-            stats.runs += atBat.scoredRunners.length;
-            atBat.scoredRunners.forEach((runnerId) => {
-                if (!hasErrorOrPassedBallInScoring(runnerId, atBat, atBats)) {
+        const scoredList = (0, AtBat_1.normalizeScoredRunners)(atBat.scoredRunners);
+        if (scoredList.length > 0) {
+            stats.runs += scoredList.length;
+            scoredList.forEach((entry) => {
+                if (!hasErrorOrPassedBallInScoring(entry.runnerId, atBat, atBats)) {
                     stats.earnedRuns++;
                 }
             });

@@ -1,9 +1,10 @@
 import React from 'react';
+import type { ScoredRunnerEntry } from '../../../types/AtBat';
 
 interface FinalConfirmDialogProps {
   initialOuts: number;
   outsAfter: number;
-  scoredRunners: string[];
+  scoredRunners: ScoredRunnerEntry[];
   beforeRunners: { '1': string | null; '2': string | null; '3': string | null };
   afterRunners: { '1': string | null; '2': string | null; '3': string | null };
   getPlayerName: (playerId: string | null) => string;
@@ -101,8 +102,8 @@ const FinalConfirmDialog: React.FC<FinalConfirmDialogProps> = ({
               <div style={{ fontSize: 13, fontWeight: 600, color: '#1c7ed6', marginBottom: 8 }}>
                 得点 ({scoredRunners.length}点)
               </div>
-              {scoredRunners.map((playerId, idx) => (
-                <div key={idx} style={{ fontSize: 14, marginBottom: 4 }}>• {getPlayerName(playerId)}</div>
+              {scoredRunners.map((e, idx) => (
+                <div key={idx} style={{ fontSize: 14, marginBottom: 4 }}>• {getPlayerName(e.runnerId)}</div>
               ))}
             </div>
           )}

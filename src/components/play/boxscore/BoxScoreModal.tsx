@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BoxScoreData,
   BoxScoreRowData,
@@ -33,9 +33,13 @@ const headerCellStyle: React.CSSProperties = {
   textAlign: 'center',
 };
 
-const getInningCellStyle = (row: BoxScoreRowData, inning: number): React.CSSProperties => {
+const getInningCellStyle = (
+  row: BoxScoreRowData,
+  inning: number,
+  colIndex: number
+): React.CSSProperties => {
   const baseStyle: React.CSSProperties = { ...cellStyle, textAlign: 'center', minWidth: 48 };
-  const status = row.inningStyles[inning];
+  const status = row.inningStyles[inning]?.[colIndex] ?? null;
   if (status === 'rbi') {
     return { ...baseStyle, backgroundColor: '#d0ebff', color: '#0b7285', fontWeight: 600 };
   }
@@ -47,6 +51,7 @@ const getInningCellStyle = (row: BoxScoreRowData, inning: number): React.CSSProp
 
 const renderRow = (
   row: BoxScoreRowData,
+  columnsPerInning: Record<number, number>,
   onPlayerNameClick: (playerId: string, playerName: string) => void,
   onMemoClick: (playerId: string, playerName: string) => void
 ) => {
@@ -118,11 +123,14 @@ const renderRow = (
           )}
         </div>
       </td>
-      {INNING_HEADERS.map((inning) => (
-        <td key={inning} style={getInningCellStyle(row, inning)}>
-          {row.resultsByInning[inning] || ''}
-        </td>
-      ))}
+      {INNING_HEADERS.map((inning) => {
+        const cols = columnsPerInning[inning] ?? 1;
+        return Array.from({ length: cols }, (_, colIndex) => (
+          <td key={`${inning}-${colIndex}`} style={getInningCellStyle(row, inning, colIndex)}>
+            {row.resultsByInning[inning]?.[colIndex] ?? ''}
+          </td>
+        ));
+      })}
     </tr>
   );
 };
@@ -141,15 +149,24 @@ const renderTeamBlock = (
             <th style={{ ...headerCellStyle, width: 40 }}>打順</th>
             <th style={{ ...headerCellStyle, width: 40, minWidth: 40, whiteSpace: 'nowrap' }}>守備</th>
             <th style={{ ...headerCellStyle, minWidth: 140 }}>選手</th>
-            {INNING_HEADERS.map((inning) => (
-              <th key={inning} style={{ ...headerCellStyle, minWidth: 48 }}>
-                {inning}回
-              </th>
-            ))}
+            {INNING_HEADERS.map((inning) => {
+              const cols = team.columnsPerInning[inning] ?? 1;
+              return (
+                <th
+                  key={inning}
+                  colSpan={cols}
+                  style={{ ...headerCellStyle, minWidth: 48 * cols }}
+                >
+                  {inning}回
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {team.rows.map((row) => renderRow(row, onPlayerNameClick, onMemoClick))}
+          {team.rows.map((row) =>
+            renderRow(row, team.columnsPerInning, onPlayerNameClick, onMemoClick)
+          )}
         </tbody>
       </table>
       <div style={{ marginTop: 6, fontSize: 11, color: '#868e96' }}>
@@ -201,33 +218,69 @@ const BoxScoreModal: React.FC<BoxScoreModalProps> = ({ open, data, loading, onCl
     givenName: string;
   } | null>(null);
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   if (!open) return null;
 
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    zIndex: 2000,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    padding: '60px 16px',
-    boxSizing: 'border-box',
-  };
+  const overlayStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        minHeight: '100dvh',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 2000,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        padding: 0,
+        boxSizing: 'border-box',
+      }
+    : {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 2000,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        padding: '60px 16px',
+        boxSizing: 'border-box',
+      };
 
-  const modalStyle: React.CSSProperties = {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: '24px 24px 16px',
-    maxWidth: 960,
-    width: '100%',
-    maxHeight: '100%',
-    overflowY: 'auto',
-    boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
-  };
+  const modalStyle: React.CSSProperties = isMobile
+    ? {
+        backgroundColor: '#fff',
+        borderRadius: 0,
+        padding: '16px 16px 24px',
+        maxWidth: '100%',
+        width: '100%',
+        maxHeight: '100vh',
+        minHeight: 0,
+        overflowY: 'auto',
+        boxShadow: 'none',
+      }
+    : {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: '24px 24px 16px',
+        maxWidth: 960,
+        width: '100%',
+        maxHeight: '100%',
+        overflowY: 'auto',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+      };
 
   const handleOverlayClick = () => onClose();
   const handleModalClick: React.MouseEventHandler<HTMLDivElement> = (e) => e.stopPropagation();
@@ -283,9 +336,11 @@ const BoxScoreModal: React.FC<BoxScoreModalProps> = ({ open, data, loading, onCl
                 border: 'none',
                 background: '#e9ecef',
                 borderRadius: 20,
-                padding: '6px 14px',
+                padding: '10px 16px',
+                minHeight: 44,
                 cursor: 'pointer',
                 fontWeight: 600,
+                fontSize: 15,
               }}
             >
               閉じる

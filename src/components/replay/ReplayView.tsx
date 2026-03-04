@@ -7,7 +7,7 @@ import { getAtBats } from '../../services/atBatService';
 import { getPlayers } from '../../services/playerService';
 import { recalculateGame } from '../../services/gameCorrectionService';
 import { Game } from '../../types/Game';
-import { AtBat } from '../../types/AtBat';
+import { AtBat, normalizeScoredRunners } from '../../types/AtBat';
 import { Player } from '../../types/Player';
 
 const ReplayView: React.FC = () => {
@@ -21,6 +21,13 @@ const ReplayView: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
   const [scores, setScores] = useState<{top: number, bottom: number}[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const loadData = useCallback(async (isInitial = false) => {
     if (!matchId) return;
@@ -52,17 +59,19 @@ const ReplayView: React.FC = () => {
       let bottom = 0;
       const calculatedScores = atBatsData.map(atBat => {
         const currentScore = { top, bottom };
+        const scoredList = normalizeScoredRunners(atBat.scoredRunners);
         if (atBat.topOrBottom === 'top') {
-            top += atBat.scoredRunners.length;
+            top += scoredList.length;
         } else {
-            bottom += atBat.scoredRunners.length;
+            bottom += scoredList.length;
         }
         return currentScore;
       });
       setScores(calculatedScores);
 
       if (isInitial && atBatsData.length > 0) {
-          setCurrentIndex(atBatsData.length - 1);
+          const isFinished = gameData?.status === 'FINISHED';
+          setCurrentIndex(isFinished ? 0 : atBatsData.length - 1);
       }
     } catch (error) {
       console.error('Error loading replay data:', error);
@@ -119,10 +128,14 @@ const ReplayView: React.FC = () => {
   const currentTeamId = currentAtBat.topOrBottom === 'top' ? game.topTeam.id : game.bottomTeam.id;
   const relevantPlayers = Object.values(players).filter(p => p.teamId === currentTeamId);
 
+  const containerPadding = isMobile ? 12 : 20;
+  const headerMarginBottom = isMobile ? 12 : 16;
+  const titleFontSize = isMobile ? 16 : 18;
+
   return (
-    <div style={{ padding: '20px', backgroundColor: '#f1f3f5', minHeight: '100vh' }}>
+    <div style={{ padding: containerPadding, backgroundColor: '#f1f3f5', minHeight: '100vh', boxSizing: 'border-box' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center' }}>
+        <div style={{ marginBottom: headerMarginBottom, display: 'flex', alignItems: 'center' }}>
           <button 
             onClick={() => navigate(-1)}
             style={{ 
@@ -131,17 +144,20 @@ const ReplayView: React.FC = () => {
                 background: 'none', 
                 cursor: 'pointer', 
                 fontSize: '16px',
-                color: '#4c6ef5'
+                color: '#4c6ef5',
+                minHeight: 44,
+                padding: '8px 0',
             }}
           >
             ← 戻る
           </button>
-          <h2 style={{ margin: 0, fontSize: '18px', color: '#333' }}>
+          <h2 style={{ margin: 0, fontSize: titleFontSize, color: '#333', flex: 1 }}>
             リプレイ: {game.topTeam.name} vs {game.bottomTeam.name}
           </h2>
         </div>
 
         <ReplayCard
+          compact={isMobile}
           atBat={currentAtBat}
           getPlayerName={getPlayerName}
           onNext={handleNext}

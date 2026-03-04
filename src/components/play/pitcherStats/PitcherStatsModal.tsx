@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PitcherStatsData,
   PitcherStatsRowData,
@@ -177,33 +177,69 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
     givenName: string;
   } | null>(null);
 
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   if (!open) return null;
 
-  const overlayStyle: React.CSSProperties = {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    zIndex: 2000,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    padding: '60px 16px',
-    boxSizing: 'border-box',
-  };
+  const overlayStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        minHeight: '100dvh',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 2000,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'stretch',
+        padding: 0,
+        boxSizing: 'border-box',
+      }
+    : {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        zIndex: 2000,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+        padding: '60px 16px',
+        boxSizing: 'border-box',
+      };
 
-  const modalStyle: React.CSSProperties = {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: '24px 24px 16px',
-    maxWidth: 960,
-    width: '100%',
-    maxHeight: '100%',
-    overflowY: 'auto',
-    boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
-  };
+  const modalStyle: React.CSSProperties = isMobile
+    ? {
+        backgroundColor: '#fff',
+        borderRadius: 0,
+        padding: '16px 16px 24px',
+        maxWidth: '100%',
+        width: '100%',
+        maxHeight: '100vh',
+        minHeight: 0,
+        overflowY: 'auto',
+        boxShadow: 'none',
+      }
+    : {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: '24px 24px 16px',
+        maxWidth: 960,
+        width: '100%',
+        maxHeight: '100%',
+        overflowY: 'auto',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
+      };
 
   const handleOverlayClick = () => onClose();
   const handleModalClick: React.MouseEventHandler<HTMLDivElement> = (e) => e.stopPropagation();
@@ -257,9 +293,11 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
                   background: '#4c6ef5',
                   color: '#fff',
                   borderRadius: 20,
-                  padding: '6px 14px',
+                  padding: '10px 16px',
+                  minHeight: 44,
                   cursor: 'pointer',
                   fontWeight: 600,
+                  fontSize: 15,
                 }}
               >
                 投球チャート
@@ -271,9 +309,11 @@ const PitcherStatsModal: React.FC<PitcherStatsModalProps> = ({ open, data, loadi
                   border: 'none',
                   background: '#e9ecef',
                   borderRadius: 20,
-                  padding: '6px 14px',
+                  padding: '10px 16px',
+                  minHeight: 44,
                   cursor: 'pointer',
                   fontWeight: 600,
+                  fontSize: 15,
                 }}
               >
                 閉じる

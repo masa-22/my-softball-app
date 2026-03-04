@@ -1,4 +1,4 @@
-import { AtBat } from "../types/AtBat";
+import { AtBat, normalizeScoredRunners } from "../types/AtBat";
 import { PlayerStats } from "../types/PlayerStats";
 import { BATTING_RESULTS } from "../data/softball/battingResults";
 
@@ -62,7 +62,8 @@ export const calculatePlayerStats = (
     }
 
     // Runs
-    if (atBat.scoredRunners?.includes(playerId) && isPlayerSide) {
+    const scoredList = normalizeScoredRunners(atBat.scoredRunners);
+    if (scoredList.some((e) => e.runnerId === playerId) && isPlayerSide) {
       stats.runs++;
     }
 
@@ -81,7 +82,7 @@ export const calculatePlayerStats = (
         if (fieldingAction.playerId === playerId) {
           if (fieldingAction.action === 'assist') stats.assists++;
           else if (fieldingAction.action === 'putout') stats.putouts++;
-          else if (fieldingAction.action === 'error') stats.errors++;
+          else if (fieldingAction.action === 'error' || fieldingAction.action === 'throw' || fieldingAction.action === 'catch') stats.errors++;
         }
       });
     }

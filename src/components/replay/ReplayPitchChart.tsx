@@ -5,12 +5,13 @@ import { PitchData } from '../../types/PitchData';
 
 interface ReplayPitchChartProps {
   pitches: PitchRecord[];
+  compact?: boolean;
 }
 
 const BASE_WIDTH = 260;
 const BASE_HEIGHT = 325;
 
-const ReplayPitchChart: React.FC<ReplayPitchChartProps> = ({ pitches }) => {
+const ReplayPitchChart: React.FC<ReplayPitchChartProps> = ({ pitches, compact }) => {
   const displayPitches: PitchData[] = pitches.map((p, index) => ({
     id: index,
     x: (p.x ?? 0) / 100 * BASE_WIDTH,
@@ -22,6 +23,7 @@ const ReplayPitchChart: React.FC<ReplayPitchChartProps> = ({ pitches }) => {
 
   return (
     <StrikeZoneGrid
+      compact={compact}
       pitches={displayPitches}
       onClickZone={() => {}} // Read-only
     />

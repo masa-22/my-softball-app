@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { RunnerAdvancement, AdvanceReasonResult } from '../components/play/runner/AdvanceReasonDialog';
 import { RunnerOut, OutReasonResult } from '../components/play/runner/OutReasonDialog';
-import { getGameState, updateRunnersRealtime, addRunsRealtime, updateCountsRealtime, closeHalfInningRealtime } from '../services/gameStateService';
+import { getGameState, updateRunnersRealtime, updateCountsRealtime, closeHalfInningRealtime } from '../services/gameStateService';
 import { RunnerEvent } from '../types/AtBat';
 
 interface UseRunnerManagerProps {
@@ -30,11 +30,11 @@ const mapAdvanceReasonToEventType = (reason: AdvanceReasonResult['reason']) => {
       return 'passedball';
     case 'illegalpitch':
       return 'illegalpitch';
-    case 'hit':
     case 'error':
-      return 'advance';
+      return 'error';
+    case 'hit':
     default:
-      return 'advance';
+      return 'hit';
   }
 };
 
@@ -167,13 +167,8 @@ export const useRunnerManager = ({
       });
     });
 
-    // 得点加算
-    const scoredCount = advs.filter(a => a.toBase === 'home').length;
-    if (scoredCount > 0) {
-      const gs = await getGameState(matchId!);
-      const half = gs?.top_bottom || 'top';
-      addRunsRealtime(matchId!, half, scoredCount);
-    }
+    // 得点は atBat 保存時（useGameProcessor の mergedScoredRunners）でまとめて加算する。
+    // ここで addRunsRealtime すると、同じプレーを RunnerMovementInput で完了した際に二重カウントになるため行わない。
 
     // 同期・状態更新
     setRunners(next);

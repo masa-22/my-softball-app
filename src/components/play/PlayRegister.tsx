@@ -685,20 +685,40 @@ const PlayRegister: React.FC = () => {
         .area-right { grid-area: right; }
 
         @media (max-width: 768px) {
-          .area-scoreboard { display: none; }
+          .play-register-container { padding: 12px 8px; }
+          .area-scoreboard {
+            display: block;
+            margin-bottom: 12px;
+            max-width: 100%;
+            overflow-x: auto;
+          }
+          .area-scoreboard .scoreboard-inner { min-width: 280px; }
+          .boxscore-trigger {
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+          }
+          .boxscore-button, .special-button {
+            min-height: 44px;
+            padding: 10px 14px;
+            margin-right: 0;
+            font-size: 14px;
+          }
           .play-grid {
             grid-template-columns: 1fr 1fr;
             grid-template-rows: auto auto;
             grid-template-areas:
               "center center"
               "left right";
+            gap: 12px;
           }
+          .area-left, .area-right { min-width: 0; }
         }
       `}</style>
 
       <div className="play-register-container">
         <div className="area-scoreboard">
-          <div style={{ minWidth: 320 }}>
+          <div className="scoreboard-inner" style={{ minWidth: 320 }}>
             <ScoreBoard />
             <div className="boxscore-trigger">
               <button

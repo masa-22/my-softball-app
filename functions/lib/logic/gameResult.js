@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.determineLosingPitcher = exports.determineWinningPitcher = void 0;
+const AtBat_1 = require("../types/AtBat");
 const getStartingPitcher = (side, atBats, lineup) => {
     if (lineup) {
         const lineupSide = side === 'home' ? lineup.away : lineup.home;
@@ -58,12 +59,13 @@ const getScoreAtAtBat = (atBatIndex, atBats) => {
     sortedAtBats.forEach((atBat) => {
         if (atBat.index > atBatIndex)
             return;
-        if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+        const scoredList = (0, AtBat_1.normalizeScoredRunners)(atBat.scoredRunners);
+        if (scoredList.length > 0) {
             if (atBat.topOrBottom === 'top') {
-                homeScore += atBat.scoredRunners.length;
+                homeScore += scoredList.length;
             }
             else {
-                awayScore += atBat.scoredRunners.length;
+                awayScore += scoredList.length;
             }
         }
     });
@@ -136,12 +138,13 @@ const determineLosingPitcher = (side, atBats, gameState) => {
         (!isHomeTeam && currentAwayScore < currentHomeScore);
     if (initiallyLosing) {
         for (const atBat of sortedAtBats) {
-            if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+            const scoredList = (0, AtBat_1.normalizeScoredRunners)(atBat.scoredRunners);
+            if (scoredList.length > 0) {
                 if (atBat.topOrBottom === 'top') {
-                    currentHomeScore -= atBat.scoredRunners.length;
+                    currentHomeScore -= scoredList.length;
                 }
                 else {
-                    currentAwayScore -= atBat.scoredRunners.length;
+                    currentAwayScore -= scoredList.length;
                 }
                 const wasLeadingOrTied = (isHomeTeam && currentHomeScore >= currentAwayScore) ||
                     (!isHomeTeam && currentAwayScore >= currentHomeScore);
@@ -149,18 +152,19 @@ const determineLosingPitcher = (side, atBats, gameState) => {
                     return atBat.pitcherId;
             }
         }
-        const firstScoringAtBat = sortedAtBats.find((a) => a.scoredRunners && a.scoredRunners.length > 0);
+        const firstScoringAtBat = sortedAtBats.find((a) => (0, AtBat_1.normalizeScoredRunners)(a.scoredRunners).length > 0);
         return (firstScoringAtBat === null || firstScoringAtBat === void 0 ? void 0 : firstScoringAtBat.pitcherId) || null;
     }
     for (const atBat of sortedAtBats) {
         const beforeHomeScore = currentHomeScore;
         const beforeAwayScore = currentAwayScore;
-        if (atBat.scoredRunners && atBat.scoredRunners.length > 0) {
+        const scoredList = (0, AtBat_1.normalizeScoredRunners)(atBat.scoredRunners);
+        if (scoredList.length > 0) {
             if (atBat.topOrBottom === 'top') {
-                currentHomeScore -= atBat.scoredRunners.length;
+                currentHomeScore -= scoredList.length;
             }
             else {
-                currentAwayScore -= atBat.scoredRunners.length;
+                currentAwayScore -= scoredList.length;
             }
             const wasLeading = (isHomeTeam && beforeHomeScore > beforeAwayScore) ||
                 (!isHomeTeam && beforeAwayScore > beforeHomeScore);

@@ -18,6 +18,11 @@ const PitchChartModal: React.FC<PitchChartModalProps> = ({ open, onClose, matchI
   const [atBats, setAtBats] = useState<AtBat[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // モーダルを開く/閉じるたびに選択をリセット（開いたときは最初の投手が選ばれ、閉じたときは状態をクリア）
+  useEffect(() => {
+    setSelectedPitcherId(null);
+  }, [open]);
+
   // 登板した投手のリストを取得
   useEffect(() => {
     if (!open || !matchId) return;
@@ -197,7 +202,7 @@ const PitchChartModal: React.FC<PitchChartModalProps> = ({ open, onClose, matchI
             </div>
 
             {selectedPitcherId && pitcherPitchData.length > 0 ? (
-              <PitchChartView pitches={pitcherPitchData} />
+              <PitchChartView key={selectedPitcherId ?? ''} pitches={pitcherPitchData} />
             ) : selectedPitcherId ? (
               <div style={{ padding: '24px 0', textAlign: 'center', color: '#868e96' }}>
                 この投手の投球データがありません。

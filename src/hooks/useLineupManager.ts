@@ -428,7 +428,7 @@ export const useLineupManager = ({
     participationList
       .filter(
         entry =>
-          entry.endInning == null && (entry.status === 'pinch_hitter' || entry.status === 'pinch_runner')
+          entry.endInning == null && (entry.status === 'pinch_hitter' || entry.status === 'pinch_runner' || entry.status === 'reentry')
       )
       .forEach(entry => {
         if (!entry.playerId) return;
@@ -443,7 +443,7 @@ export const useLineupManager = ({
         const derivedRole: SpecialEntryRole =
           roleFromPosition === 'TR'
             ? 'TR'
-            : entry.status === 'pinch_hitter'
+            : entry.status === 'pinch_hitter' || entry.status === 'reentry'
             ? 'PH'
             : 'PR';
         const previousParticipant = findPreviousParticipant(participationList, entry.battingOrder, entry.playerId);
