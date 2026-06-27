@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-// import MiniScoreBoard from './common/MiniScoreBoard';
-// import MiniDiamondField from './pitch/MiniDiamondField';
 import PitchTypeSelector from './common/PitchTypeSelector';
 import { PitchType } from '../../types/PitchType';
-// import StrikeZoneGrid from './pitch/StrikeZoneGrid';
-// import PitchResultSelector from './pitch/PitchResultSelector';
 import PitchLeftColumn from './pitch/PitchLeftColumn';
 import StrikeZonePanel from './pitch/StrikeZonePanel';
+import StrikeZoneGrid from './pitch/StrikeZoneGrid';
+import PitchResultSelector from './pitch/PitchResultSelector';
 import { PitchData } from '../../types/PitchData';
+import { ZONE_WIDTH, ZONE_HEIGHT } from '../../utils/scoreKeeping';
 
-// スタイル変更（タイトル削除・任意座標プロット対応）
 const styles = {
   container: {
     fontFamily: '"Hiragino Kaku Gothic ProN", "Meiryo", sans-serif',
@@ -35,34 +33,19 @@ const styles = {
     gap: '12px',
     maxWidth: '308px',
   },
-  runnerDisplayGrid: {
-    backgroundColor: '#fff',
-    border: '1px solid #dee2e6',
-    padding: '12px',
-    borderRadius: 8,
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-    position: 'relative' as const,
-    minHeight: '180px',
-  },
-  runnerTitle: {
-    fontWeight: 600,
-    fontSize: '13px',
-    marginBottom: 8,
-    color: '#495057',
-  },
 };
 
 interface PitchCourseInputProps {
   onInplayCommit?: () => void;
   onStrikeoutCommit?: (isSwinging: boolean) => void;
   onWalkCommit?: (isDeadball?: boolean) => void;
-  // 追加: 親から受け取る表示用状態と更新コールバック
   bso: { b: number; s: number; o: number };
   runners: { '1': string | null; '2': string | null; '3': string | null };
   onCountsChange: (next: { b?: number; s?: number; o?: number }) => void;
   onCountsReset: () => void;
-  pitches?: PitchData[]; // 追加
-  onPitchesChange?: React.Dispatch<React.SetStateAction<PitchData[]>>; // 追加
+  pitches?: PitchData[];
+  onPitchesChange?: React.Dispatch<React.SetStateAction<PitchData[]>>;
+  pitchInputMode?: 'full' | 'simple';
 }
 
 const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
@@ -75,6 +58,7 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   onCountsReset,
   pitches = [],
   onPitchesChange,
+  pitchInputMode = 'full',
 }) => {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -87,10 +71,64 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
   const [selectedPitchType, setSelectedPitchType] = useState<PitchType>('rise');
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
   const [pendingResult, setPendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | ''>('');
+  const [simplePendingResult, setSimplePendingResult] = useState<'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | ''>('');
+
+  useEffect(() => {
+    setPendingPoint(null);
+    setPendingResult('');
+    setSimplePendingResult('');
+  }, [pitchInputMode]);
 
   const handleZoneClick = (x: number, y: number) => {
     setPendingPoint({ x, y });
     setPendingResult('');
+  };
+
+  const appendPitchAndApplyResult = (
+    newPitch: PitchData,
+    result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'
+  ) => {
+    if (onPitchesChange) {
+      onPitchesChange((prev) => [...prev, newPitch]);
+    }
+
+    const currentBalls = bso.b;
+    const currentStrikes = bso.s;
+
+    if (result === 'deadball') {
+      onCountsReset && onCountsReset();
+      onWalkCommit && onWalkCommit(true);
+      return;
+    }
+
+    if (result === 'ball') {
+      onCountsChange({ b: Math.min(3, bso.b + 1) });
+      if (currentBalls === 3) {
+        onWalkCommit && onWalkCommit();
+      }
+      return;
+    }
+
+    if (result === 'swing' || result === 'looking') {
+      onCountsChange({ s: Math.min(2, bso.s + 1) });
+      if (currentStrikes === 2) {
+        const isSwinging = result === 'swing';
+        onStrikeoutCommit && onStrikeoutCommit(isSwinging);
+        onCountsReset && onCountsReset();
+      }
+      return;
+    }
+
+    if (result === 'foul') {
+      if (currentStrikes < 2) {
+        onCountsChange({ s: Math.min(2, bso.s + 1) });
+      }
+      return;
+    }
+
+    if (result === 'inplay') {
+      onInplayCommit && onInplayCommit();
+    }
   };
 
   const commitPitch = () => {
@@ -103,91 +141,112 @@ const PitchCourseInput: React.FC<PitchCourseInputProps> = ({
       order: pitches.length + 1,
       result: pendingResult as PitchData['result'],
     };
-    
-    // 親の状態を更新
-    if (onPitchesChange) {
-      onPitchesChange(prev => [...prev, newPitch]);
-    }
 
-    const currentBalls = bso.b;
-    const currentStrikes = bso.s;
+    appendPitchAndApplyResult(newPitch, pendingResult);
 
     if (pendingResult === 'deadball') {
-      // 死球の場合、カウントをリセットして打席を終了
-      onCountsReset && onCountsReset();
-      onWalkCommit && onWalkCommit(true); // 死球フラグを渡す
       setPendingPoint(null);
       setPendingResult('');
       return;
     }
-
-    if (pendingResult === 'ball') {
-      onCountsChange({ b: Math.min(3, bso.b + 1) });
-      if (currentBalls === 3) {
-        onWalkCommit && onWalkCommit();
-        setPendingPoint(null);
-        setPendingResult('');
-        return;
-      }
-    } else if (pendingResult === 'swing' || pendingResult === 'looking') {
-      onCountsChange({ s: Math.min(2, bso.s + 1) });
-      if (currentStrikes === 2) {
-        const isSwinging = pendingResult === 'swing';
-        onStrikeoutCommit && onStrikeoutCommit(isSwinging);
-        onCountsReset && onCountsReset();
-      }
-    } else if (pendingResult === 'foul') {
-      // ファウル: 2ストライク未満ならストライク+1、2ストライクなら据え置き
-      if (currentStrikes < 2) {
-        onCountsChange({ s: Math.min(2, bso.s + 1) });
-      }
-      // 三振判定は行わない
-    } else if (pendingResult === 'inplay') {
-      onInplayCommit && onInplayCommit();
+    if (pendingResult === 'ball' && bso.b === 3) {
+      setPendingPoint(null);
+      setPendingResult('');
+      return;
     }
 
     setPendingPoint(null);
     setPendingResult('');
   };
 
-  const getPitchTypeName = (type: PitchType): string => {
-    return [
-      { type: 'rise', label: 'ライズ' },
-      { type: 'drop', label: 'ドロップ' },
-      { type: 'cut', label: 'カット' },
-      { type: 'changeup', label: 'チェンジアップ' },
-      { type: 'chenrai', label: 'チェンライ' },
-      { type: 'slider', label: 'スライダー' },
-      { type: 'unknown', label: '不明' },
-    ].find(p => p.type === type)?.label || '不明';
+  const commitSimplePitch = () => {
+    if (!simplePendingResult) return;
+    const cx = ZONE_WIDTH / 2;
+    const cy = ZONE_HEIGHT / 2;
+    const newPitch: PitchData = {
+      id: Date.now(),
+      x: cx,
+      y: cy,
+      type: 'unknown',
+      order: pitches.length + 1,
+      result: simplePendingResult as PitchData['result'],
+      simpleInput: true,
+    };
+    appendPitchAndApplyResult(newPitch, simplePendingResult);
+
+    if (simplePendingResult === 'deadball') {
+      setSimplePendingResult('');
+      return;
+    }
+    if (simplePendingResult === 'ball' && bso.b === 3) {
+      setSimplePendingResult('');
+      return;
+    }
+
+    setSimplePendingResult('');
   };
+
+  const getPitchTypeName = (type: PitchType): string => {
+    return (
+      [
+        { type: 'rise', label: 'ライズ' },
+        { type: 'drop', label: 'ドロップ' },
+        { type: 'cut', label: 'カット' },
+        { type: 'changeup', label: 'チェンジアップ' },
+        { type: 'chenrai', label: 'チェンライ' },
+        { type: 'slider', label: 'スライダー' },
+        { type: 'unknown', label: '不明' },
+      ].find((p) => p.type === type)?.label || '不明'
+    );
+  };
+
+  const isSimple = pitchInputMode === 'simple';
 
   return (
     <div style={styles.container}>
       <div style={styles.mainLayout}>
-        {/* 左カラムを子化 */}
         <PitchLeftColumn bso={bso} runners={runners} />
 
-        {/* 右カラム: ストライクゾーンパネル＋球種選択 */}
         <div style={styles.rightColumn}>
-          <StrikeZonePanel
-            compact={isMobile}
-            pitches={pitches}
-            pendingPoint={pendingPoint}
-            pendingResult={pendingResult}
-            selectedPitchType={selectedPitchType}
-            pitchTypeName={getPitchTypeName(selectedPitchType)}
-            onZoneClick={handleZoneClick}
-            onSelectResult={setPendingResult}
-            onCommit={commitPitch}
-            onCancel={() => { setPendingPoint(null); setPendingResult(''); }}
-          />
-
-          <PitchTypeSelector
-            compact={isMobile}
-            selectedType={selectedPitchType}
-            onSelect={setSelectedPitchType}
-          />
+          {isSimple ? (
+            <>
+              <StrikeZoneGrid
+                compact={isMobile}
+                pitches={pitches}
+                onClickZone={() => {}}
+                interactive={false}
+              />
+              <PitchResultSelector
+                selectedPitchType="unknown"
+                pitchTypeName=""
+                selectedResult={simplePendingResult}
+                onSelectResult={(r) => setSimplePendingResult(r)}
+                onCommit={commitSimplePitch}
+                onCancel={() => setSimplePendingResult('')}
+                variant="inline"
+                hidePitchType
+              />
+            </>
+          ) : (
+            <>
+              <StrikeZonePanel
+                compact={isMobile}
+                pitches={pitches}
+                pendingPoint={pendingPoint}
+                pendingResult={pendingResult}
+                selectedPitchType={selectedPitchType}
+                pitchTypeName={getPitchTypeName(selectedPitchType)}
+                onZoneClick={handleZoneClick}
+                onSelectResult={setPendingResult}
+                onCommit={commitPitch}
+                onCancel={() => {
+                  setPendingPoint(null);
+                  setPendingResult('');
+                }}
+              />
+              <PitchTypeSelector compact={isMobile} selectedType={selectedPitchType} onSelect={setSelectedPitchType} />
+            </>
+          )}
         </div>
       </div>
     </div>

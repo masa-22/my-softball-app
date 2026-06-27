@@ -69,7 +69,7 @@ const Header: React.FC = () => {
       }}
     >
       <div>
-        <Link to="/" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold', fontSize: '20px' }}>🥎 ソフトボール成績管理</Link>
+        <Link to="/" style={{ textDecoration: 'none', color: '#333', fontWeight: 'bold', fontSize: '20px' }}>ソフトボール成績管理</Link>
       </div>
 
       <div style={{ position: 'relative' }} ref={menuRef}>
@@ -134,7 +134,7 @@ const Header: React.FC = () => {
                 </>
               ) : (
                 <>
-                  {isApproved && (
+                  {isApproved && !canUserEdit && (
                     <li style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => { setIsMenuOpen(false); navigate('/viewer'); }}>データ閲覧</li>
                   )}
                   {canUserEdit && (

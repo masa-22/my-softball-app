@@ -192,24 +192,46 @@ export const useLineupManager = ({
 
     const calculateBattingIndex = async () => {
       try {
-        const gameState = await getGameState(matchId);
-        
+        const batAtBats = allAtBats.filter((a) => a.type === 'bat');
+        const lastBatPlayId = batAtBats.length > 0 ? batAtBats[batAtBats.length - 1].playId : null;
+        const refPlayIdBefore = lastProcessedBatPlayIdRef.current;
+        // 最終打席がFirestoreから消えた（打席取り消し等）のに ref が古い playId のままだと、
+        // RTDB反映前の getGameState で「一致して更新スキップ」になり打者がずれたままになる
+        const staleRef =
+          !!refPlayIdBefore &&
+          refPlayIdBefore !== lastBatPlayId &&
+          !allAtBats.some((a) => a.playId === refPlayIdBefore);
+        if (staleRef) {
+          lastProcessedBatPlayIdRef.current = null;
+        }
+
+        let gameState = await getGameState(matchId);
+        if (staleRef) {
+          for (let i = 0; i < 6; i++) {
+            await new Promise((r) => setTimeout(r, 45));
+            gameState = await getGameState(matchId);
+            if (gameState) break;
+          }
+        }
+
         // データベースに打順インデックスが保存されている場合は、それを使用
         if (gameState?.home_bat_index !== undefined || gameState?.away_bat_index !== undefined) {
-          if (gameState.home_bat_index !== undefined && gameState.home_bat_index !== homeBatIndex) {
-            isInitializingBatIndex.current = true;
+          if (batAtBats.length > 0) {
+            lastProcessedBatPlayIdRef.current = batAtBats[batAtBats.length - 1].playId;
+          } else {
+            lastProcessedBatPlayIdRef.current = null;
+          }
+
+          isInitializingBatIndex.current = true;
+          if (gameState.home_bat_index !== undefined) {
             setHomeBatIndex(gameState.home_bat_index);
-            setTimeout(() => {
-              isInitializingBatIndex.current = false;
-            }, 100);
           }
-          if (gameState.away_bat_index !== undefined && gameState.away_bat_index !== awayBatIndex) {
-            isInitializingBatIndex.current = true;
+          if (gameState.away_bat_index !== undefined) {
             setAwayBatIndex(gameState.away_bat_index);
-            setTimeout(() => {
-              isInitializingBatIndex.current = false;
-            }, 100);
           }
+          setTimeout(() => {
+            isInitializingBatIndex.current = false;
+          }, 100);
           return;
         }
 
@@ -218,8 +240,7 @@ export const useLineupManager = ({
 
         const currentHalfFromState = gameState?.top_bottom ?? currentHalf;
 
-        // 最後の打席（type === 'bat'）を取得
-        const batAtBats = allAtBats.filter(a => a.type === 'bat');
+        // 最後の打席（type === 'bat'）を取得（batAtBats は上で定義済み）
         if (batAtBats.length > 0) {
           // 全打席の最後の打席を取得
           const lastAtBat = batAtBats[batAtBats.length - 1];
@@ -689,14 +710,14 @@ export const useLineupManager = ({
 
   // Computed Values
 
-  // 現在打者の打順（数字のみ）
+  // 現在打者の打順（1–9 は数字、10 番は FP）
   const currentBattingOrder = useMemo(() => {
     if (!currentBatter) return '';
     const battingSide = currentHalf === 'top' ? homeLineup : awayLineup;
     if (!battingSide || battingSide.length === 0) return '';
     const entry = battingSide.find((e: any) => e.playerId === currentBatter.playerId);
     if (!entry) return '';
-    return entry.battingOrder === 10 ? '' : String(entry.battingOrder);
+    return entry.battingOrder === 10 ? 'FP' : String(entry.battingOrder);
   }, [homeLineup, awayLineup, currentBatter, currentHalf]);
 
   // 現在打者の過去打席結果

@@ -27,6 +27,8 @@ import { setWinningPitcher, getWinningPitcher } from '../../services/winningPitc
 import { getGame, updateGame } from '../../services/gameService';
 import { getGameState } from '../../services/gameStateService';
 import { getLineup } from '../../services/lineupService';
+import { undoLastBatAtBat } from '../../services/atBatUndoService';
+import { getCountAfterPitches } from '../../utils/pitchCount';
 import SpecialSubstitutionModal from './substitution/SpecialSubstitutionModal';
 import { savePlayerGameStats } from '../../services/playerGameStatsService';
 import FinishGameButton from './FinishGameButton';
@@ -170,6 +172,7 @@ const PlayRegister: React.FC = () => {
   // Game Memo State
   const [showGameMemoModal, setShowGameMemoModal] = useState(false);
   const [gameMemo, setGameMemo] = useState('');
+  const [pitchInputMode, setPitchInputMode] = useState<'full' | 'simple'>('full');
   
   // テンポラリーランナーUI
   const [showTempRunnerDialog, setShowTempRunnerDialog] = useState(false);
@@ -583,6 +586,47 @@ const PlayRegister: React.FC = () => {
   }, [battingResultForMovement, playDetailsForMovement.position]);
 
   const playAreaLocked = isGameFinished;
+  const canEditPlayArea = !playAreaLocked && location.pathname.includes('/play');
+  const showPitchInputModeToggle = canEditPlayArea;
+
+  const canUndoLastPitch =
+    canEditPlayArea &&
+    pitches.length > 0 &&
+    !showPlayResult &&
+    !showRunnerMovement;
+
+  const canUndoLastAtBat =
+    canEditPlayArea &&
+    allAtBats.some((a) => a.type === 'bat');
+
+  const handleUndoLastPitch = () => {
+    if (!matchId || !canUndoLastPitch) return;
+    const sorted = [...pitches].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    sorted.pop();
+    const reindexed = sorted.map((p, i) => ({ ...p, order: i + 1 }));
+    setPitches(reindexed);
+    const { b, s } = getCountAfterPitches(reindexed);
+    handleCountsChange({ b, s });
+  };
+
+  const handleUndoLastAtBat = async () => {
+    if (!matchId || !canUndoLastAtBat) return;
+    if (
+      !window.confirm(
+        '最後の打席記録を取り消しますか？スコア・カウント・ランナー・打順がリアルタイムデータベース上で巻き戻ります。'
+      )
+    ) {
+      return;
+    }
+    try {
+      await undoLastBatAtBat(matchId);
+      resetUI();
+      setPitches([]);
+      clearRunnerEvents();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : '取り消しに失敗しました');
+    }
+  };
 
   const desktopContent = (
     <>
@@ -763,7 +807,35 @@ const PlayRegister: React.FC = () => {
                   交代処理 ({specialEntries.length})
                 </button>
               )}
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {showPitchInputModeToggle && (
+                  <>
+                    <button
+                      type="button"
+                      className="boxscore-button"
+                      onClick={() => setPitchInputMode('full')}
+                      disabled={!matchId}
+                      style={{
+                        backgroundColor: pitchInputMode === 'full' ? '#4c6ef5' : undefined,
+                        color: pitchInputMode === 'full' ? '#fff' : undefined,
+                      }}
+                    >
+                      通常入力
+                    </button>
+                    <button
+                      type="button"
+                      className="boxscore-button"
+                      onClick={() => setPitchInputMode('simple')}
+                      disabled={!matchId}
+                      style={{
+                        backgroundColor: pitchInputMode === 'simple' ? '#4c6ef5' : undefined,
+                        color: pitchInputMode === 'simple' ? '#fff' : undefined,
+                      }}
+                    >
+                      簡易入力
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="boxscore-button"
@@ -890,6 +962,17 @@ const PlayRegister: React.FC = () => {
                 onAddOutCancel={runnerManager.handleAddOutCancel}
                 canUseTemporaryRunner={canUseTemporaryRunner}
                 onTempRunnerClick={handleOpenTempRunnerDialog}
+                pitchInputMode={pitchInputMode}
+                undoControls={
+                  canEditPlayArea
+                    ? {
+                        onUndoLastPitch: handleUndoLastPitch,
+                        onUndoLastAtBat: handleUndoLastAtBat,
+                        canUndoPitch: !!matchId && canUndoLastPitch,
+                        canUndoAtBat: !!matchId && canUndoLastAtBat,
+                      }
+                    : null
+                }
               />
             </div>
             

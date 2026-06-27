@@ -2,9 +2,10 @@ import React from 'react';
 import StrikeZoneGrid from './StrikeZoneGrid';
 import PitchResultSelector from './PitchResultSelector';
 import { PitchType } from '../../../types/PitchType';
+import { PitchData } from '../../../types/PitchData';
 
 interface StrikeZonePanelProps {
-  pitches: Array<{ id: number; x: number; y: number; type: PitchType; order: number; result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'; }>;
+  pitches: PitchData[];
   pendingPoint: { x: number; y: number } | null;
   pendingResult: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul' | '';
   selectedPitchType: PitchType;

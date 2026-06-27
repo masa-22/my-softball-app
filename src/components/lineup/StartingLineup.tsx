@@ -145,7 +145,7 @@ const StartingLineup: React.FC = () => {
           </thead>
           <tbody>
             {lineup.map((entry, idx) => {
-              const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
+              const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
               return (
                 <tr key={idx}>
                   <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>{displayOrder}</td>
@@ -208,7 +208,7 @@ const StartingLineup: React.FC = () => {
             <tbody>
               {lineup.map((entry, idx) => {
                 const player = players.find(p => p.playerId === entry.playerId);
-                const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
+                const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
                 return (
                   <tr key={idx}>
                     <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{displayOrder}</td>

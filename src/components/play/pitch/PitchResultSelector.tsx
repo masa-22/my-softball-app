@@ -12,22 +12,38 @@ interface PitchResultSelectorProps {
   onSelectResult: (result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul') => void;
   onCommit: () => void;
   onCancel: () => void;
+  /** overlay: ゾーン中央オーバーレイ（既定） / inline: 簡易入力用のカード配置 */
+  variant?: 'overlay' | 'inline';
+  /** true のとき「球種: …」行を出さない（簡易入力） */
+  hidePitchType?: boolean;
 }
 
+const overlayBox: React.CSSProperties = {
+  position: 'absolute',
+  left: '50%',
+  top: '50%',
+  transform: 'translate(-50%, -50%)',
+  background: '#fff',
+  border: '2px solid #333',
+  borderRadius: 6,
+  padding: 12,
+  zIndex: 10,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  minWidth: 220,
+};
+
+const inlineBox: React.CSSProperties = {
+  position: 'relative',
+  background: '#fff',
+  border: '1px solid #dee2e6',
+  borderRadius: 8,
+  padding: 12,
+  marginTop: 8,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  minWidth: 220,
+};
+
 const styles = {
-  overlay: {
-    position: 'absolute' as const,
-    left: '50%',
-    top: '50%',
-    transform: 'translate(-50%, -50%)',
-    background: '#fff',
-    border: '2px solid #333',
-    borderRadius: 6,
-    padding: 12,
-    zIndex: 10,
-    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-    minWidth: 220,
-  },
   title: {
     fontWeight: 'bold' as const,
     marginBottom: 6,
@@ -90,22 +106,26 @@ const PitchResultSelector: React.FC<PitchResultSelectorProps> = ({
   onSelectResult,
   onCommit,
   onCancel,
+  variant = 'overlay',
+  hidePitchType = false,
 }) => {
   const results: Array<{ key: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul'; label: string }> = [
     { key: 'looking', label: '見逃し' },
-    { key: 'swing', label: 'スイング' }, 
+    { key: 'swing', label: 'スイング' },
     { key: 'foul', label: 'ファウル' },
     { key: 'ball', label: 'ボール' },
     { key: 'deadball', label: 'デッドボール' },
     { key: 'inplay', label: 'インプレイ' },
   ];
 
+  const boxStyle = variant === 'inline' ? inlineBox : overlayBox;
+
   return (
-    <div style={styles.overlay}>
-      <div style={styles.title}>球種: {pitchTypeName}</div>
-      <div style={styles.subtitle}>結果を選択</div>
+    <div style={boxStyle}>
+      {!hidePitchType && <div style={styles.title}>球種: {pitchTypeName}</div>}
+      <div style={styles.subtitle}>{hidePitchType ? '投球結果' : '結果を選択'}</div>
       <div style={styles.buttonContainer}>
-        {results.map(r => (
+        {results.map((r) => (
           <button
             key={r.key}
             type="button"

@@ -73,6 +73,14 @@ interface CenterPanelProps {
   // テンポラリーランナー（親制御）
   canUseTemporaryRunner?: boolean;
   onTempRunnerClick?: () => void;
+  pitchInputMode?: 'full' | 'simple';
+  /** 取り消し（1球／最終打席）。編集可のときのみ親から渡す */
+  undoControls?: {
+    onUndoLastPitch: () => void;
+    onUndoLastAtBat: () => void;
+    canUndoPitch: boolean;
+    canUndoAtBat: boolean;
+  } | null;
 }
 
 const CenterPanel: React.FC<CenterPanelProps> = ({
@@ -119,6 +127,8 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   playDetails,
   canUseTemporaryRunner,
   onTempRunnerClick,
+  pitchInputMode = 'full',
+  undoControls = null,
 }) => {
   return (
     <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -186,6 +196,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 onCountsReset={onCountsReset}
                 pitches={pitches}
                 onPitchesChange={onPitchesChange}
+                pitchInputMode={pitchInputMode}
               />
             ) : (
               <RunnerStatus
@@ -221,6 +232,58 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
               />
             )}
           </div>
+          {undoControls && (
+            <div
+              style={{
+                marginTop: 16,
+                paddingTop: 14,
+                borderTop: '1px solid #e9ecef',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ fontSize: 13, color: '#868e96', marginRight: 4 }}>取り消し</span>
+              <button
+                type="button"
+                onClick={undoControls.onUndoLastPitch}
+                disabled={!undoControls.canUndoPitch}
+                title="直前の1球を取り消し、カウントを戻します"
+                style={{
+                  padding: '8px 14px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  cursor: undoControls.canUndoPitch ? 'pointer' : 'not-allowed',
+                  border: '1px solid #ffc9c9',
+                  background: undoControls.canUndoPitch ? '#fff5f5' : '#f8f9fa',
+                  color: undoControls.canUndoPitch ? '#c92a2a' : '#adb5bd',
+                  opacity: undoControls.canUndoPitch ? 1 : 0.85,
+                }}
+              >
+                1球戻る
+              </button>
+              <button
+                type="button"
+                onClick={() => void undoControls.onUndoLastAtBat()}
+                disabled={!undoControls.canUndoAtBat}
+                title="Firestore の最終打席を削除し、盤面を再同期します"
+                style={{
+                  padding: '8px 14px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  cursor: undoControls.canUndoAtBat ? 'pointer' : 'not-allowed',
+                  border: '1px solid #c92a2a',
+                  background: undoControls.canUndoAtBat ? '#c92a2a' : '#dee2e6',
+                  color: undoControls.canUndoAtBat ? '#fff' : '#868e96',
+                }}
+              >
+                最後の打席を取り消し
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <PlayResultPanel
