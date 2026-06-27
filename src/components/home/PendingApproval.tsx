@@ -75,20 +75,6 @@ const PendingApproval: React.FC<PendingApprovalProps> = ({ hasApprovalRecord = t
         padding: '40px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
       }}>
-        <div style={{
-          width: '80px',
-          height: '80px',
-          margin: '0 auto 20px',
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '40px'
-        }}>
-          ⏳
-        </div>
-        
         <h1 style={{ 
           fontSize: '28px', 
           color: '#333', 
@@ -158,7 +144,7 @@ const PendingApproval: React.FC<PendingApprovalProps> = ({ hasApprovalRecord = t
               textAlign: 'left'
             }}>
               <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#856404', fontWeight: 'bold' }}>
-                ⚠️ 対処方法：
+                対処方法：
               </p>
               <ol style={{ margin: '0', paddingLeft: '20px', fontSize: '14px', color: '#856404', lineHeight: '1.8' }}>
                 <li>Firestore Consoleを開く</li>
@@ -213,7 +199,7 @@ const PendingApproval: React.FC<PendingApprovalProps> = ({ hasApprovalRecord = t
             onClick={() => navigate('/login')}
             style={{
               padding: '12px 24px',
-              background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+              backgroundColor: '#3498db',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',

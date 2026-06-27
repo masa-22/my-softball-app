@@ -50,6 +50,16 @@ export const getAtBat = async (playId: string): Promise<AtBat | undefined> => {
 /**
  * 打席記録を保存（新規または更新）
  */
+export const deleteAtBatByPlayId = async (playId: string): Promise<void> => {
+  try {
+    const atBatRef = doc(db, ATBATS_COLLECTION, playId);
+    await deleteDoc(atBatRef);
+  } catch (error) {
+    console.error('Error deleting atBat:', error, { playId });
+    throw error;
+  }
+};
+
 export const saveAtBat = async (atBat: AtBat): Promise<void> => {
   try {
     console.log('[atBatService] Attempting to save atBat to Firestore:', {

@@ -2,6 +2,7 @@ import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunn
 import { closeTemporaryRunner } from '../services/participationService';
 import { getAtBats, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
+import { calculateCountBeforePitchOrder } from '../utils/pitchCount';
 import { AtBat, RunnerEvent, FieldingAction, ScoredRunnerEntry, BaseType, RunnerEventType } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
 import { RunnerMovementResult } from '../components/play/RunnerMovementInput';
@@ -21,6 +22,17 @@ const createRunnerEventId = () => {
   }
   return `runner-event-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
+
+/** 暴投・パスボールでホームイン（runnerEvents）。RunnerMovement 保存以外の経路でも得点・スコアボードに載せる */
+function scoredRunnersFromPbWpHome(runnerEvents: RunnerEvent[]): ScoredRunnerEntry[] {
+  const byId = new Map<string, ScoredRunnerEntry>();
+  for (const e of runnerEvents) {
+    if ((e.type === 'passedball' || e.type === 'wildpitch') && e.toBase === 'home') {
+      byId.set(e.runnerId, { runnerId: e.runnerId, isRBI: false });
+    }
+  }
+  return [...byId.values()];
+}
 
 type RunnerMove = { runnerId: string; fromBase: BaseType; toBase: BaseType };
 
@@ -167,44 +179,6 @@ export const useGameProcessor = ({
     quality,
   });
 
-  // 各投球の直前のストライクカウントを計算する関数（1球目は問答無用で 0-0、2球目以降は1球前の結果を反映）
-  const calculateCountBefore = (
-    pitches: PitchData[],
-    initialBalls: number,
-    initialStrikes: number,
-    targetSeq: number
-  ): { B: number; S: number } => {
-    // 1球目は計算せず常に 0-0
-    if (targetSeq <= 1) return { B: 0, S: 0 };
-
-    let balls = initialBalls;
-    let strikes = initialStrikes;
-    const sorted = [...pitches].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const pitch of sorted) {
-      if (pitch.order >= targetSeq) break;
-
-      switch (pitch.result) {
-        case 'ball':
-          balls = Math.min(3, balls + 1);
-          break;
-        case 'swing':
-        case 'looking':
-          strikes = Math.min(2, strikes + 1);
-          break;
-        case 'foul':
-          if (strikes < 2) {
-            strikes = Math.min(2, strikes + 1);
-          }
-          break;
-        case 'inplay':
-        case 'deadball':
-          break;
-      }
-    }
-
-    return { B: balls, S: strikes };
-  };
-
   const processPlayResult = async (
     params: PlayProcessingParams,
     onComplete: () => void,
@@ -229,6 +203,7 @@ export const useGameProcessor = ({
     // 1. 三振 (RunnerMovementなし)
     if (!movementResult && pendingOutcome?.kind === 'strikeout') {
         const newO = Math.min(3, currentO + 1);
+        const pbWpScored = scoredRunnersFromPbWpHome(runnerEvents);
 
         // --- at_bats 保存処理 (三振) ---
         const pitchRecords = pitches.map(p => ({
@@ -238,7 +213,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
+          countBefore: calculateCountBeforePitchOrder(pitches, 0, 0, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -274,7 +249,7 @@ export const useGameProcessor = ({
             balls: 0,
             strikes: 0,
           },
-          scoredRunners: [],
+          scoredRunners: pbWpScored,
           pitches: pitchRecords,
           runnerEvents: runnerEvents.slice(),
           playDetails: {
@@ -301,6 +276,10 @@ export const useGameProcessor = ({
           '3b': runners['3'],
         });
 
+        if (pbWpScored.length > 0) {
+          addRunsRealtime(matchId, currentInningInfo.half, pbWpScored.length);
+        }
+
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
           const side = currentHalf === 'top' ? 'home' : 'away';
@@ -319,7 +298,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
+          countBefore: calculateCountBeforePitchOrder(pitches, 0, 0, p.order),
         }));
 
         const existingAtBats = await getAtBats(matchId);
@@ -344,11 +323,18 @@ export const useGameProcessor = ({
           afterRunners['1'] = batterId;
         }
 
-        // 満塁時の押し出し得点（打点付き）
+        // 満塁時の押し出し得点（打点付き）＋暴投・パスボールのホームイン
         const wasBasesLoaded = !!(runners['1'] && runners['2'] && runners['3']);
         const scoredRunnersFromForce: ScoredRunnerEntry[] = wasBasesLoaded && runners['3']
           ? [{ runnerId: runners['3'], isRBI: true }]
           : [];
+        const pbWpScoredWalk = scoredRunnersFromPbWpHome(runnerEvents);
+        const scoredRunnersWalk: ScoredRunnerEntry[] = [...scoredRunnersFromForce];
+        pbWpScoredWalk.forEach((e) => {
+          if (!scoredRunnersWalk.some((r) => r.runnerId === e.runnerId)) {
+            scoredRunnersWalk.push(e);
+          }
+        });
         const resultRbi = scoredRunnersFromForce.length > 0 ? scoredRunnersFromForce.length : undefined;
         const atBatResult = resultRbi != null ? { type: battingResultForMovement as any, rbi: resultRbi } : { type: battingResultForMovement as any };
 
@@ -375,7 +361,7 @@ export const useGameProcessor = ({
             balls: 0,
             strikes: 0,
           },
-          scoredRunners: scoredRunnersFromForce,
+          scoredRunners: scoredRunnersWalk,
           pitches: pitchRecords,
           runnerEvents: runnerEvents.slice(),
           playDetails: {
@@ -400,9 +386,9 @@ export const useGameProcessor = ({
           '3b': afterRunners['3'],
         });
 
-        // 押し出し得点をスコアに加算
-        if (scoredRunnersFromForce.length > 0) {
-          addRunsRealtime(matchId, currentInningInfo.half, scoredRunnersFromForce.length);
+        // 得点をスコアに加算（押し出し＋PB/WP）
+        if (scoredRunnersWalk.length > 0) {
+          addRunsRealtime(matchId, currentInningInfo.half, scoredRunnersWalk.length);
         }
 
         // カウントリセット
@@ -412,13 +398,18 @@ export const useGameProcessor = ({
     else if (movementResult) {
         const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons, advanceErrorDetail } = movementResult;
 
+        const outRunnerIdSet = new Set((outDetails ?? []).map((d) => d.runnerId));
+
         // 打席内で PB/WP によりホームインしたランナーを runnerEvents から scoredRunners にマージ（isRBI: false で追加）
         const pbWpHome = runnerEvents
           .filter((e) => (e.type === 'passedball' || e.type === 'wildpitch') && e.toBase === 'home')
           .map((e) => ({ runnerId: e.runnerId, isRBI: false } as ScoredRunnerEntry));
-        const mergedScoredRunners: ScoredRunnerEntry[] = [...scoredRunners];
+        const mergedScoredRunners: ScoredRunnerEntry[] = scoredRunners.filter((r) => !outRunnerIdSet.has(r.runnerId));
         pbWpHome.forEach((entry) => {
-          if (!mergedScoredRunners.some((r) => r.runnerId === entry.runnerId)) {
+          if (
+            !outRunnerIdSet.has(entry.runnerId) &&
+            !mergedScoredRunners.some((r) => r.runnerId === entry.runnerId)
+          ) {
             mergedScoredRunners.push(entry);
           }
         });
@@ -457,7 +448,7 @@ export const useGameProcessor = ({
           x: toPercentage(p.x, ZONE_WIDTH),
           y: toPercentage(p.y, ZONE_HEIGHT),
           result: p.result,
-          countBefore: calculateCountBefore(pitches, 0, 0, p.order),
+          countBefore: calculateCountBeforePitchOrder(pitches, 0, 0, p.order),
         }));
 
         const atBatResult: any = {
@@ -641,7 +632,7 @@ export const useGameProcessor = ({
         x: toPercentage(p.x, ZONE_WIDTH),
         y: toPercentage(p.y, ZONE_HEIGHT),
         result: p.result,
-        countBefore: calculateCountBefore(pitches, 0, 0, p.order),
+        countBefore: calculateCountBeforePitchOrder(pitches, 0, 0, p.order),
       }));
 
       const existingAtBats = await getAtBats(matchId);
@@ -652,6 +643,7 @@ export const useGameProcessor = ({
       if (!batterId) {
         console.warn('Warning: currentBatter is not set when saving atBat (quickOut)');
       }
+      const pbWpScoredQuick = scoredRunnersFromPbWpHome(runnerEvents);
       const atBat: AtBat = {
         playId: newPlayId,
         matchId,
@@ -678,7 +670,7 @@ export const useGameProcessor = ({
           balls: 0,
           strikes: 0,
         },
-        scoredRunners: [],
+        scoredRunners: pbWpScoredQuick,
         pitches: pitchRecords,
         runnerEvents: runnerEvents.slice(),
         playDetails: {
@@ -728,6 +720,9 @@ export const useGameProcessor = ({
       clearRunnerEvents();
 
       const newO = Math.min(3, currentO + 1);
+      if (pbWpScoredQuick.length > 0) {
+        addRunsRealtime(matchId, currentInningInfo.half, pbWpScoredQuick.length);
+      }
       updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
       if (newO >= 3) {
         const side = currentHalf === 'top' ? 'home' : 'away';

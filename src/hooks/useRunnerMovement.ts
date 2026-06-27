@@ -224,6 +224,17 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const filledOutDetails = outDetails.length;
   const needOutDetails = outsIncreased > filledOutDetails;
 
+  const outRunnerIds = useMemo(() => {
+    const ids = new Set<string>();
+    outDetails.forEach((d) => ids.add(d.runnerId));
+    selectedOutRunners.forEach((s) => ids.add(s.runnerId));
+    return ids;
+  }, [outDetails, selectedOutRunners]);
+
+  useEffect(() => {
+    setScoredRunners((prev) => prev.filter((e) => !outRunnerIds.has(e.runnerId)));
+  }, [outRunnerIds]);
+
   useEffect(() => {
     if (outsIncreased === 0) {
       setOutDetails([]);
@@ -244,24 +255,34 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
       (['1', '2', '3'] as const).forEach((base) => {
         const pid = beforeRunners[base];
         if (!pid) return;
-        if (!Object.values(afterRunners).includes(pid)) scored.push(pid);
+        if (!Object.values(afterRunners).includes(pid) && !outRunnerIds.has(pid)) scored.push(pid);
       });
-      if (batterId && !Object.values(afterRunners).includes(batterId)) scored.push(batterId);
+      if (batterId && !Object.values(afterRunners).includes(batterId) && !outRunnerIds.has(batterId)) {
+        scored.push(batterId);
+      }
     } else if (battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
       const runner3 = beforeRunners['3'];
-      if (runner3 && !Object.values(afterRunners).includes(runner3)) scored.push(runner3);
+      if (runner3 && !Object.values(afterRunners).includes(runner3) && !outRunnerIds.has(runner3)) {
+        scored.push(runner3);
+      }
     }
     if (scored.length > 0) {
       const merged = [...scored];
       scoredRunners.forEach((e) => {
-        if (!merged.includes(e.runnerId)) merged.push(e.runnerId);
+        if (!outRunnerIds.has(e.runnerId) && !merged.includes(e.runnerId)) merged.push(e.runnerId);
       });
-      setPendingScores(merged);
-      if (!showScoreConfirm && (scoredRunners.length === 0 || merged.some((r) => !scoredRunners.some((e) => e.runnerId === r)))) {
+      const filtered = merged.filter((id) => !outRunnerIds.has(id));
+      setPendingScores(filtered);
+      if (
+        !showScoreConfirm &&
+        (scoredRunners.length === 0 || filtered.some((r) => !scoredRunners.some((e) => e.runnerId === r)))
+      ) {
         setShowScoreConfirm(true);
       }
+    } else if (n > 0 || battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
+      setPendingScores((prev) => prev.filter((id) => !outRunnerIds.has(id)));
     }
-  }, [beforeRunners, afterRunners, battingResult, batterId, scoredRunners, showScoreConfirm]);
+  }, [beforeRunners, afterRunners, battingResult, batterId, scoredRunners, showScoreConfirm, outRunnerIds]);
 
   const positionOptions = [
     { value: '1', label: '投手（P）' },
@@ -520,9 +541,11 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
       const offBase: string[] = [];
       (['1', '2', '3'] as const).forEach((base) => {
         const pid = beforeRunners[base];
-        if (pid && !Object.values(next).includes(pid)) offBase.push(pid);
+        if (pid && !Object.values(next).includes(pid) && !outRunnerIds.has(pid)) offBase.push(pid);
       });
-      if (batterId && !Object.values(next).includes(batterId)) offBase.push(batterId);
+      if (batterId && !Object.values(next).includes(batterId) && !outRunnerIds.has(batterId)) {
+        offBase.push(batterId);
+      }
       setPendingScores((prev) => {
         const merged = [...offBase];
         prev.forEach((r) => {

@@ -69,7 +69,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
         if (!posChanged && !playerChanged) return null;
         return {
           idx,
-          orderLabel: cur.battingOrder === 10 ? 'P' : cur.battingOrder,
+          orderLabel: cur.battingOrder === 10 ? 'FP' : cur.battingOrder,
           before: { position: prev.position || '—', playerId: prev.playerId || '' },
           after: { position: cur.position || '—', playerId: cur.playerId || '' },
         };
@@ -117,7 +117,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
           </thead>
           <tbody>
             {lineup.map((entry, idx) => {
-              const displayOrder = entry.battingOrder === 10 ? 'P' : entry.battingOrder;
+              const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
 
               const isCurrentPitcher = !!currentPitcherId && entry.playerId === currentPitcherId;
               const isCurrentBatter = !!currentBatterId && entry.playerId === currentBatterId;

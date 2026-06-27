@@ -53,6 +53,11 @@ const styles = {
     textAlign: 'center' as const,
     padding: '12px 0',
   },
+  summaryLine: {
+    fontSize: 12,
+    color: '#495057',
+    lineHeight: 1.5,
+  },
 };
 
 const STRIKE_RESULTS: Array<PitchData['result']> = ['swing', 'looking', 'foul', 'inplay'];
@@ -86,11 +91,46 @@ const PitchChart: React.FC<PitchChartProps> = ({ pitches = [] }) => {
     return [...pitches].sort((a, b) => a.order - b.order);
   }, [pitches]);
 
+  const hasSimple = sortedPitches.some((p) => p.simpleInput);
+
+  const summary = useMemo(() => {
+    const n = sortedPitches.length;
+    const strikeLike = sortedPitches.filter((p) => STRIKE_RESULTS.includes(p.result)).length;
+    const ballLike = sortedPitches.filter((p) => BALL_RESULTS.includes(p.result)).length;
+    const denom = strikeLike + ballLike;
+    const ratePct = denom === 0 ? null : Math.round((strikeLike / denom) * 100);
+    return { n, strikeLike, ballLike, ratePct };
+  }, [sortedPitches]);
+
   const getVariant = (result: PitchData['result']): 'strike' | 'ball' | 'neutral' => {
     if (STRIKE_RESULTS.includes(result)) return 'strike';
     if (BALL_RESULTS.includes(result)) return 'ball';
     return 'neutral';
   };
+
+  if (hasSimple) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.title}>投球サマリー</div>
+        <div style={{ ...styles.logWrapper, overflowY: 'visible' }}>
+          {summary.n === 0 ? (
+            <div style={styles.empty}>まだ入力された投球がありません</div>
+          ) : (
+            <div style={{ padding: '8px' }}>
+              <div style={styles.summaryLine}>球数: {summary.n}</div>
+              <div style={styles.summaryLine}>
+                ストライク相当: {summary.strikeLike} / ボール: {summary.ballLike}
+              </div>
+              <div style={styles.summaryLine}>
+                ストライク率:{' '}
+                {summary.ratePct === null ? '—' : `${summary.ratePct}%（ストライク相当÷(ストライク相当+ボール)）`}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>

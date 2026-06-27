@@ -194,6 +194,71 @@ export const updateMatchupRealtime = async (
   }
 };
 
+/** scores ツリー全体を置き換え（打席取消後の再集計など） */
+export const replaceScoresRealtime = async (
+  gameId: string,
+  scores: GameState['scores']
+): Promise<GameState | null> => {
+  try {
+    const state = await getGameState(gameId) || await initGameState(gameId);
+    state.scores = scores;
+    touch(state);
+    const stateRef = getGameStateRef(gameId);
+    await update(stateRef, { scores: state.scores, last_updated: state.last_updated });
+    return state;
+  } catch (error) {
+    console.error('Error replacing scores:', error);
+    throw error;
+  }
+};
+
+export type GameStateSyncPatch = Partial<{
+  current_inning: number;
+  top_bottom: 'top' | 'bottom';
+  counts: { b: number; s: number; o: number };
+  runners: GameState['runners'];
+  scores: GameState['scores'];
+  matchup: GameState['matchup'];
+  home_bat_index: number;
+  away_bat_index: number;
+}>;
+
+/**
+ * 複数フィールドを1回の RTDB update で反映（undo 後の一括同期用）
+ */
+export const applyGameStateSync = async (
+  gameId: string,
+  patch: GameStateSyncPatch
+): Promise<GameState | null> => {
+  try {
+    const state = await getGameState(gameId) || await initGameState(gameId);
+    if (patch.current_inning !== undefined) state.current_inning = patch.current_inning;
+    if (patch.top_bottom !== undefined) state.top_bottom = patch.top_bottom;
+    if (patch.counts !== undefined) state.counts = { ...patch.counts };
+    if (patch.runners !== undefined) state.runners = patch.runners;
+    if (patch.scores !== undefined) state.scores = patch.scores;
+    if (patch.matchup !== undefined) state.matchup = { ...state.matchup, ...patch.matchup };
+    if (patch.home_bat_index !== undefined) state.home_bat_index = patch.home_bat_index;
+    if (patch.away_bat_index !== undefined) state.away_bat_index = patch.away_bat_index;
+    touch(state);
+    const stateRef = getGameStateRef(gameId);
+    const payload: Record<string, unknown> = { last_updated: state.last_updated };
+    if (patch.current_inning !== undefined) payload.current_inning = state.current_inning;
+    if (patch.top_bottom !== undefined) payload.top_bottom = state.top_bottom;
+    if (patch.counts !== undefined) payload.counts = state.counts;
+    if (patch.runners !== undefined) payload.runners = state.runners;
+    if (patch.scores !== undefined) payload.scores = state.scores;
+    if (patch.matchup !== undefined) payload.matchup = state.matchup;
+    if (patch.home_bat_index !== undefined) payload.home_bat_index = state.home_bat_index;
+    if (patch.away_bat_index !== undefined) payload.away_bat_index = state.away_bat_index;
+    await update(stateRef, payload);
+    return state;
+  } catch (error) {
+    console.error('Error applying game state sync:', error);
+    throw error;
+  }
+};
+
 export const addRunsRealtime = async (gameId: string, half: 'top' | 'bottom', runs: number): Promise<GameState | null> => {
   try {
     const state = await getGameState(gameId) || await initGameState(gameId);

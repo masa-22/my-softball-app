@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { getUserApprovalStatus, canEdit } from '../../services/userApprovalService';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 import { getPlayers } from '../../services/playerService';
 import { getGames } from '../../services/gameService';
@@ -13,6 +15,8 @@ import { GameState } from '../../types/GameState';
 
 const ViewerPage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+  const [viewerGateReady, setViewerGateReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [prefecture, setPrefecture] = useState('');
   const [affiliation, setAffiliation] = useState('');
@@ -27,6 +31,31 @@ const ViewerPage: React.FC = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [games, setGames] = useState<Array<{ game: Game; state: GameState | null }>>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!currentUser) {
+        setViewerGateReady(true);
+        return;
+      }
+      try {
+        const approval = await getUserApprovalStatus(currentUser.uid);
+        if (cancelled) return;
+        if (canEdit(approval)) {
+          navigate('/', { replace: true });
+          return;
+        }
+      } catch (e) {
+        console.error('ViewerPage role check:', e);
+      }
+      if (!cancelled) setViewerGateReady(true);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -119,6 +148,10 @@ const ViewerPage: React.FC = () => {
   const handleCloseStatsModal = () => {
     setSelectedPlayer(null);
   };
+
+  if (!viewerGateReady) {
+    return <LoadingIndicator />;
+  }
 
   if (selectedTeam) {
     return (

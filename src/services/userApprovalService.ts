@@ -134,10 +134,11 @@ export const isAdmin = (userApproval: UserApproval | null): boolean => {
 
 /**
  * ユーザーが編集者または管理者かどうかを確認する
+ * viewer のみ編集不可。editor / admin / role 未設定（移行前）は編集可。
  */
 export const canEdit = (userApproval: UserApproval | null): boolean => {
   if (!userApproval || !userApproval.approved) return false;
-  return userApproval.role === 'editor' || userApproval.role === 'admin';
+  return userApproval.role !== 'viewer';
 };
 
 /**

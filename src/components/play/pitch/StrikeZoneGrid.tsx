@@ -13,6 +13,7 @@ interface PitchData {
   type: PitchType;
   order: number;
   result: 'swing' | 'looking' | 'ball' | 'inplay' | 'deadball' | 'foul';
+  simpleInput?: boolean;
 }
 
 const GRID_WIDTH = 260;
@@ -23,6 +24,8 @@ interface StrikeZoneGridProps {
   onClickZone: (x: number, y: number) => void;
   children?: React.ReactNode;
   compact?: boolean;
+  /** false のときゾーンをクリック不可（簡易入力モード用） */
+  interactive?: boolean;
 }
 
 const getStyles = (compact: boolean) => ({
@@ -83,11 +86,12 @@ const getStyles = (compact: boolean) => ({
       boxSizing: 'border-box' as const,
     };
   },
-  clickLayer: {
-    position: 'absolute' as const,
+  clickLayer: (interactive: boolean): React.CSSProperties => ({
+    position: 'absolute',
     inset: 0,
-    cursor: 'crosshair',
-  },
+    cursor: interactive ? 'crosshair' : 'default',
+    pointerEvents: interactive ? 'auto' : 'none',
+  }),
   pitchPoint: (x: number, y: number) => ({
     // 廃止: 直接JSX内でスタイル定義
   }),
@@ -98,10 +102,18 @@ const getStyles = (compact: boolean) => ({
 const BASE_WIDTH = 260;
 const BASE_HEIGHT = 325;
 
-const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({ pitches, onClickZone, children, compact = false }) => {
+const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({
+  pitches,
+  onClickZone,
+  children,
+  compact = false,
+  interactive = true,
+}) => {
   const styles = getStyles(compact);
+  const plottedPitches = pitches.filter((p) => !p.simpleInput);
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!interactive) return;
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     // クリック位置を正規化された座標 (0-BASE_WIDTH, 0-BASE_HEIGHT) に変換
     const scaleX = BASE_WIDTH / rect.width;
@@ -122,8 +134,8 @@ const StrikeZoneGrid: React.FC<StrikeZoneGridProps> = ({ pitches, onClickZone, c
             ))
           )}
         </div>
-        <div style={styles.clickLayer} onClick={handleClick} />
-        {pitches.map(p => {
+        <div style={styles.clickLayer(interactive)} onClick={handleClick} />
+        {plottedPitches.map((p) => {
           // 座標を％変換して配置
           const leftPct = (p.x / BASE_WIDTH) * 100;
           const topPct = (p.y / BASE_HEIGHT) * 100;
