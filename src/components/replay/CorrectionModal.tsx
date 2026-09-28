@@ -55,6 +55,16 @@ const styles = {
     border: '1px solid #ccc',
     fontSize: '16px',
   },
+  textarea: {
+    width: '100%',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    fontSize: '16px',
+    boxSizing: 'border-box' as const,
+    fontFamily: 'inherit',
+    resize: 'vertical' as const,
+  },
   buttons: {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -86,8 +96,19 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
 }) => {
   const [resultType, setResultType] = useState(atBat.result?.type || '');
   const [batterId, setBatterId] = useState(atBat.batterId);
+  const [otherNote, setOtherNote] = useState(atBat.note || '');
+  const [countsAsAtBat, setCountsAsAtBat] = useState<boolean | null>(
+    typeof atBat.result?.countsAsAtBat === 'boolean' ? atBat.result.countsAsAtBat : null
+  );
+
+  const isOther = resultType === 'other';
+  const canSave =
+    !!resultType &&
+    (!isOther || (!!otherNote.trim() && countsAsAtBat !== null));
 
   const handleSave = () => {
+    if (!canSave) return;
+
     // Clone and update
     const updated = { ...atBat };
     
@@ -97,6 +118,18 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
     // Update result
     if (!updated.result) updated.result = { type: resultType as any };
     else updated.result.type = resultType as any;
+
+    if (isOther) {
+      updated.note = otherNote.trim();
+      if (updated.result) {
+        updated.result.countsAsAtBat = countsAsAtBat === true;
+      }
+    } else {
+      delete updated.note;
+      if (updated.result && 'countsAsAtBat' in updated.result) {
+        delete updated.result.countsAsAtBat;
+      }
+    }
     
     // Recalculate situationAfter based on new result
     // We use the *original* situationBefore as the starting point for this play
@@ -136,7 +169,14 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
           <select 
             style={styles.select}
             value={resultType}
-            onChange={(e) => setResultType(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setResultType(next);
+              if (next !== 'other') {
+                setOtherNote('');
+                setCountsAsAtBat(null);
+              }
+            }}
           >
             <option value="">選択してください</option>
             {Object.values(BATTING_RESULTS).map(res => (
@@ -146,6 +186,38 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
             ))}
           </select>
         </div>
+
+        {isOther && (
+          <>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>内容（何が起きたか）</label>
+              <textarea
+                style={styles.textarea}
+                rows={3}
+                value={otherNote}
+                onChange={(e) => setOtherNote(e.target.value)}
+                placeholder="例: 打撃妨害、守備妨害 など"
+              />
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>打数に含めるか</label>
+              <select
+                style={styles.select}
+                value={countsAsAtBat === null ? '' : countsAsAtBat ? 'yes' : 'no'}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === 'yes') setCountsAsAtBat(true);
+                  else if (v === 'no') setCountsAsAtBat(false);
+                  else setCountsAsAtBat(null);
+                }}
+              >
+                <option value="">選択してください</option>
+                <option value="yes">打数に含める</option>
+                <option value="no">打数に含めない</option>
+              </select>
+            </div>
+          </>
+        )}
         
         <div style={{ fontSize: '12px', color: '#666', marginTop: '12px' }}>
           ※修正を行うと、これ以降のプレイの状況（ランナー、アウトカウントなど）が自動的に再計算されます。
@@ -160,8 +232,14 @@ const CorrectionModal: React.FC<CorrectionModalProps> = ({
             キャンセル
           </button>
           <button 
-            style={{...styles.button, ...styles.saveButton}} 
+            style={{
+              ...styles.button,
+              ...styles.saveButton,
+              opacity: canSave ? 1 : 0.5,
+              cursor: canSave ? 'pointer' : 'not-allowed',
+            }} 
             onClick={handleSave}
+            disabled={!canSave}
           >
             保存して再計算
           </button>

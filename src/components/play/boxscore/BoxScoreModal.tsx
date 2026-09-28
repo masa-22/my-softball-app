@@ -38,7 +38,13 @@ const getInningCellStyle = (
   inning: number,
   colIndex: number
 ): React.CSSProperties => {
-  const baseStyle: React.CSSProperties = { ...cellStyle, textAlign: 'center', minWidth: 48 };
+  const baseStyle: React.CSSProperties = {
+    ...cellStyle,
+    textAlign: 'center',
+    minWidth: 48,
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
+  };
   const status = row.inningStyles[inning]?.[colIndex] ?? null;
   if (status === 'rbi') {
     return { ...baseStyle, backgroundColor: '#d0ebff', color: '#0b7285', fontWeight: 600 };

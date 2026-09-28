@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { collection, doc, writeBatch, getDoc, setDoc, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { BatterResultType, normalizeScoredRunners } from '../types/AtBat';
 import { PlayerGameStats, PlayerBattingStats, PlayerFieldingStats, PlayerPitchingStats } from '../types/PlayerGameStats';
+import { isWalkLikeResult } from '../data/softball/battingResults';
 import { getAtBats } from './atBatService';
 import { getGame } from './gameService';
 import { getWinningPitcher } from './winningPitcherService';
@@ -47,9 +48,13 @@ const initPitchingStats = (): PlayerPitchingStats => ({
   loss: false,
 });
 
-const isAtBat = (type: BatterResultType): boolean => {
+const isAtBat = (type: BatterResultType, countsAsAtBat?: boolean): boolean => {
+  if (type === 'other') {
+    return countsAsAtBat === true;
+  }
   return ![
     'walk',
+    'intentional_walk',
     'deadball',
     'sac_bunt',
     'sacrifice_bunt',
@@ -104,15 +109,15 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
       const offenseTeamId = isTop ? game.topTeam.id : game.bottomTeam.id;
       const defenseTeamId = isTop ? game.bottomTeam.id : game.topTeam.id;
 
-      // --- 打撃成績 ---
-      if (atBat.batterId) {
+      // --- 打撃成績（type=bat のみがプレートアピアランス） ---
+      if (atBat.type === 'bat' && atBat.batterId) {
         const stats = getOrInitStats(atBat.batterId, offenseTeamId);
         stats.batting.plateAppearances++;
 
         if (atBat.result) {
           const type = atBat.result.type;
           
-          if (isAtBat(type)) {
+          if (isAtBat(type, atBat.result.countsAsAtBat)) {
             stats.batting.atBats++;
           }
 
@@ -124,7 +129,7 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
           if (type === 'triple') stats.batting.triples++;
           if (['homerun', 'runninghomerun'].includes(type)) stats.batting.homeruns++;
           
-          if (type === 'walk') stats.batting.walks++;
+          if (isWalkLikeResult(type)) stats.batting.walks++;
           if (type === 'deadball') stats.batting.deadballs++;
           if (['strikeout_swinging', 'strikeout_looking', 'droppedthird'].includes(type)) stats.batting.strikeouts++; // 振り逃げも三振記録に含まれるのが一般的
           if (['sac_bunt', 'sacrifice_bunt'].includes(type)) stats.batting.sacrificeBunts++;
@@ -180,24 +185,27 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
         }
 
         const pStats = stats.pitching;
-        pStats.batterFaced++;
+        // 打者数は type=bat のみ。mid-play の outs 差は投球回に加算する
+        if (atBat.type === 'bat') {
+          pStats.batterFaced++;
 
-        if (atBat.result) {
-          const type = atBat.result.type;
-          if (['single', 'double', 'triple', 'homerun', 'runninghomerun'].includes(type)) {
-            pStats.hitsAllowed++;
-          }
-          if (['homerun', 'runninghomerun'].includes(type)) {
-            pStats.homersHit++;
-          }
-          if (type === 'walk') pStats.walks++;
-          if (type === 'deadball') pStats.deadballs++;
-          if (['strikeout_swinging', 'strikeout_looking', 'droppedthird'].includes(type)) {
-            pStats.strikeouts++;
+          if (atBat.result) {
+            const type = atBat.result.type;
+            if (['single', 'double', 'triple', 'homerun', 'runninghomerun'].includes(type)) {
+              pStats.hitsAllowed++;
+            }
+            if (['homerun', 'runninghomerun'].includes(type)) {
+              pStats.homersHit++;
+            }
+            if (isWalkLikeResult(type)) pStats.walks++;
+            if (type === 'deadball') pStats.deadballs++;
+            if (['strikeout_swinging', 'strikeout_looking', 'droppedthird'].includes(type)) {
+              pStats.strikeouts++;
+            }
           }
         }
         
-        // 投球回（アウト数）
+        // 投球回（アウト数）— steal/other の牽制死・盗塁死も含む
         const outs = Math.max(0, (atBat.situationAfter?.outs || 0) - (atBat.situationBefore?.outs || 0));
         // イニングチェンジ時の考慮: situationAfter.outsが3未満でチェンジした場合（サヨナラ等）もあるが、
         // 基本的にはdiffで良い。ただし3アウトチェンジでsituationBefore=2, After=0(次イニング)とならないように注意が必要。
@@ -211,9 +219,10 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
         pStats.outsPitched += outs;
 
         // 失点（簡易計算: この打席で記録された得点を、現在の投手の失点とする）
+        // 自責点: タイブレーク配置走者は除外（それ以外は簡易的に自責＝失点）
         if (scoredList.length > 0) {
           pStats.runsAllowed += scoredList.length;
-          pStats.earnedRuns += scoredList.length; // 簡易的に自責点＝失点とする
+          pStats.earnedRuns += scoredList.filter((e) => !e.isTiebreakPlaced).length;
         }
       }
     }

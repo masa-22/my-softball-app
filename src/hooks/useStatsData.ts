@@ -6,7 +6,7 @@ import { getPlayers } from '../services/playerService';
 import { getAtBats } from '../services/atBatService';
 import { useAtBats } from './useAtBats';
 import { POSITIONS } from '../data/softball/positions';
-import { BATTING_RESULTS } from '../data/softball/battingResults';
+import { BATTING_RESULTS, isWalkLikeResult } from '../data/softball/battingResults';
 import { LineupEntry } from '../types/Lineup';
 import { ParticipationEntry } from '../types/Participation';
 import { Player } from '../types/Player';
@@ -133,8 +133,12 @@ const calculatePlayerStats = (
       if (atBat.result) {
         const resultDef = BATTING_RESULTS[atBat.result.type];
         if (resultDef) {
-          // 打数
-          if (resultDef.stats.isAB) {
+          // 打数（その他は countsAsAtBat で上書き）
+          const countsAsAB =
+            atBat.result.type === 'other'
+              ? atBat.result.countsAsAtBat === true
+              : resultDef.stats.isAB;
+          if (countsAsAB) {
             stats.atBats++;
           }
 
@@ -158,8 +162,8 @@ const calculatePlayerStats = (
             stats.sacrifice++;
           }
 
-          // 四球
-          if (atBat.result.type === 'walk') {
+          // 四球・申告敬遠
+          if (isWalkLikeResult(atBat.result.type)) {
             stats.walks++;
           }
 
@@ -254,7 +258,7 @@ const roleLabelMap: Record<string, string> = {
   finished: '',
 };
 
-const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP']);
+const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP', 'OPO']);
 const isDefensivePosition = (p: string) => DEFENSIVE_POSITIONS.has(p);
 
 // 同じ選手のエントリから守備位置シーケンスを収集（PH/PRで退場したエントリの守備位置は含めない）

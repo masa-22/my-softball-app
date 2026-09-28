@@ -139,6 +139,8 @@ type BatterResultType =
   | 'runninghomerun'      // ランニングホームラン
   | 'groundout'           // ゴロアウト
   | 'flyout'              // フライアウト
+  | 'linerout'            // ライナーアウト
+  | 'foul_fly'            // ファウルフライ
   | 'bunt_out'            // バントアウト
   | 'strikeout_swinging'  // スイング三振
   | 'strikeout_looking'   // 見逃し三振
@@ -150,7 +152,8 @@ type BatterResultType =
   | 'sac_fly'             // 犠牲フライ
   | 'sacrifice_fly'       // 犠牲フライ（別表記）
   | 'interference'        // 妨害
-  | 'error';              // エラー
+  | 'error'               // エラー
+  | 'other';              // その他（自由記述。打数は countsAsAtBat）
 ```
 
 ### AtBatResult
@@ -161,6 +164,7 @@ type BatterResultType =
 - `type`: 打者結果の種類（`BatterResultType`）
 - `fieldedBy`: 守備位置（1-9のポジション番号、オプショナル）
 - `rbi`: 打点（オプショナル）
+- `countsAsAtBat`: `other` 用。打数に含めるか（オプショナル、未設定時は含めない）
 
 ### GameSnapshot
 

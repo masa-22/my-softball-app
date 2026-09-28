@@ -35,7 +35,10 @@ const calculatePlayerStats = (playerId, atBats, side) => {
             if (atBat.result) {
                 const resultDef = battingResults_1.BATTING_RESULTS[atBat.result.type];
                 if (resultDef) {
-                    if (resultDef.stats.isAB)
+                    const countsAsAB = atBat.result.type === 'other'
+                        ? atBat.result.countsAsAtBat === true
+                        : resultDef.stats.isAB;
+                    if (countsAsAB)
                         stats.atBats++;
                     if (resultDef.stats.isHit) {
                         stats.hits++;
@@ -50,7 +53,7 @@ const calculatePlayerStats = (playerId, atBats, side) => {
                     }
                     if (resultDef.stats.isSacrifice)
                         stats.sacrifice++;
-                    if (atBat.result.type === 'walk')
+                    if ((0, battingResults_1.isWalkLikeResult)(atBat.result.type))
                         stats.walks++;
                     if (atBat.result.type === 'deadball')
                         stats.hitByPitch++;

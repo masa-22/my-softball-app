@@ -58,9 +58,21 @@ interface CenterPanelProps {
   getRunnerName: (playerId: string | null) => string;
   onRunnerBaseClick: (base: '1' | '2' | '3' | 'home') => void;
   onAddOutClick: () => void;
+  onRecordAdvanceClick: () => void;
   showAdvanceDialog: boolean;
   pendingAdvancements: any[]; // RunnerAdvancement[]
   onAdvanceConfirm: (results: any[]) => void; // AdvanceReasonResult[]
+  showRecordAdvanceDialog: boolean;
+  occupiedRunnersForAdvance: Array<{
+    runnerId: string;
+    runnerName: string;
+    fromBase: '1' | '2' | '3';
+  }>;
+  onRecordAdvanceConfirm: (payload: {
+    advancements: any[];
+    results: any[];
+  }) => void;
+  defensePositionPlayerNames?: Record<string, string>;
   showOutDialog: boolean;
   pendingOuts: any[]; // RunnerOut[]
   onOutConfirm: (results: any[]) => void; // OutReasonResult[]
@@ -74,10 +86,11 @@ interface CenterPanelProps {
   canUseTemporaryRunner?: boolean;
   onTempRunnerClick?: () => void;
   pitchInputMode?: 'full' | 'simple';
-  /** 取り消し（1球／最終打席）。編集可のときのみ親から渡す */
+  /** 取り消し（1球／最終打席）と申告敬遠。編集可のときのみ親から渡す */
   undoControls?: {
     onUndoLastPitch: () => void;
     onUndoLastAtBat: () => void;
+    onIntentionalWalk: () => void;
     canUndoPitch: boolean;
     canUndoAtBat: boolean;
   } | null;
@@ -109,9 +122,14 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   getRunnerName,
   onRunnerBaseClick,
   onAddOutClick,
+  onRecordAdvanceClick,
   showAdvanceDialog,
   pendingAdvancements,
   onAdvanceConfirm,
+  showRecordAdvanceDialog,
+  occupiedRunnersForAdvance,
+  onRecordAdvanceConfirm,
+  defensePositionPlayerNames,
   showOutDialog,
   pendingOuts,
   onOutConfirm,
@@ -211,10 +229,16 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 // イベント（親へ通知）
                 onBaseClick={onRunnerBaseClick}
                 onAddOutClick={onAddOutClick}
-                // 進塁理由ダイアログ
+                onRecordAdvanceClick={onRecordAdvanceClick}
+                // 進塁理由ダイアログ（本塁ショートカット）
                 showAdvanceDialog={showAdvanceDialog}
                 pendingAdvancements={pendingAdvancements}
                 onAdvanceConfirm={onAdvanceConfirm}
+                // 進塁を記録ダイアログ
+                showRecordAdvanceDialog={showRecordAdvanceDialog}
+                occupiedRunnersForAdvance={occupiedRunnersForAdvance}
+                onRecordAdvanceConfirm={onRecordAdvanceConfirm}
+                defensePositionPlayerNames={defensePositionPlayerNames}
                 // アウト理由ダイアログ
                 showOutDialog={showOutDialog}
                 pendingOuts={pendingOuts}
@@ -281,6 +305,23 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 }}
               >
                 最後の打席を取り消し
+              </button>
+              <button
+                type="button"
+                onClick={undoControls.onIntentionalWalk}
+                title="現在の投球数のまま申告敬遠で出塁します（成績は四球と同じ）"
+                style={{
+                  padding: '8px 14px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  border: '1px solid #74c0fc',
+                  background: '#e7f5ff',
+                  color: '#1864ab',
+                }}
+              >
+                申告敬遠
               </button>
             </div>
           )}

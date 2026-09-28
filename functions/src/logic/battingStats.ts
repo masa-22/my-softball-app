@@ -1,6 +1,6 @@
 import { AtBat, normalizeScoredRunners } from "../types/AtBat";
 import { PlayerStats } from "../types/PlayerStats";
-import { BATTING_RESULTS } from "../data/softball/battingResults";
+import { BATTING_RESULTS, isWalkLikeResult } from "../data/softball/battingResults";
 
 type Side = 'home' | 'away';
 
@@ -42,7 +42,11 @@ export const calculatePlayerStats = (
       if (atBat.result) {
         const resultDef = BATTING_RESULTS[atBat.result.type];
         if (resultDef) {
-          if (resultDef.stats.isAB) stats.atBats++;
+          const countsAsAB =
+            atBat.result.type === 'other'
+              ? atBat.result.countsAsAtBat === true
+              : resultDef.stats.isAB;
+          if (countsAsAB) stats.atBats++;
           if (resultDef.stats.isHit) {
             stats.hits++;
             if (atBat.result.type === 'single') stats.singles++;
@@ -51,7 +55,7 @@ export const calculatePlayerStats = (
             else if (['homerun', 'runninghomerun'].includes(atBat.result.type)) stats.homeRuns++;
           }
           if (resultDef.stats.isSacrifice) stats.sacrifice++;
-          if (atBat.result.type === 'walk') stats.walks++;
+          if (isWalkLikeResult(atBat.result.type)) stats.walks++;
           if (atBat.result.type === 'deadball') stats.hitByPitch++;
           if (['strikeout_swinging', 'strikeout_looking', 'droppedthird'].includes(atBat.result.type)) stats.strikeouts++;
         }

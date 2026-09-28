@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
-const version = '1.0.6';
-const updatedAt = '2026-03-03';
+const version = '1.0.7';
+const updatedAt = '2026-09-28';
 
 const Footer: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -61,6 +61,16 @@ const Footer: React.FC = () => {
               </div>
               
               <div style={{ fontSize: '13px', marginBottom: '6px', fontWeight: 'bold' }}>バージョン: {version}</div>
+              <ul style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5, fontSize: '13px', marginBottom: '12px' }}>
+                <li>延長タイブレーク（8回以降・2塁走者配置）に対応</li>
+                <li>打撃結果にライナーアウト・ファウルフライ・申告敬遠・その他を追加</li>
+                <li>打席中の進塁をまとめて記録するダイアログを追加</li>
+                <li>最後のプレー記録の取り消しと成績の再保存に対応</li>
+                <li>スコアボードで延長イニングを表示</li>
+                <li>試合終了の確認を専用モーダルに変更</li>
+              </ul>
+
+              <div style={{ fontSize: '13px', marginBottom: '6px', fontWeight: 'bold' }}>バージョン: {'1.0.6'}</div>
               <ul style={{ paddingLeft: '18px', margin: 0, lineHeight: 1.5, fontSize: '13px', marginBottom: '12px' }}>
                 <li>ReplayCardのカウント表示不具合を修正</li>
                 <li>ReplayCardの修正ボタンを一時非表示に変更</li>

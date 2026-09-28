@@ -19,7 +19,7 @@ type Side = "home" | "away";
 /** 守備位置コード → 短縮ラベル */
 const POSITION_LABELS: Record<string, string> = {
   "1": "投", "2": "捕", "3": "一", "4": "二", "5": "三", "6": "遊",
-  "7": "左", "8": "中", "9": "右", "DP": "DP", "PH": "PH", "PR": "PR", "TR": "TR",
+  "7": "左", "8": "中", "9": "右", "DP": "DP", "PH": "PH", "PR": "PR", "TR": "TR", "OPO": "OPO",
 };
 
 function getPositionLabel(position?: string | null): string {

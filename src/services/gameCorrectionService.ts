@@ -1,9 +1,55 @@
 import { AtBat, GameSnapshot, Runners } from '../types/AtBat';
 import { getAtBats, saveAtBat } from './atBatService';
-import { getGameState, updateCountsRealtime, updateRunnersRealtime, addRunsRealtime, setInningAndHalf, resetCountsRealtime } from './gameStateService';
-import { BATTING_RESULTS } from '../data/softball/battingResults';
-
+import {
+  getGameState,
+  updateCountsRealtime,
+  updateRunnersRealtime,
+  setInningAndHalf,
+  updateTiebreakRunnerIdRealtime,
+} from './gameStateService';
+import { getLineup } from './lineupService';
 import { simulatePlay } from '../utils/gameSimulation';
+import {
+  isTiebreakHalf,
+  markTiebreakScoredRunners,
+  resolvePreviousBatterId,
+} from '../utils/tiebreak';
+
+/**
+ * half 切替直後のタイブレーク走者配置。
+ * 制限: 打順インデックスは GameState の現在値を使うため、過去 half の厳密な前打者復元は保証しない。
+ * 次打席の元 situationBefore に2塁がいればそちらを優先する。
+ */
+const placeTiebreakRunnersForHalf = async (
+  matchId: string,
+  inning: number,
+  half: 'top' | 'bottom',
+  nextOriginalBefore: GameSnapshot | undefined
+): Promise<{ runners: Runners; tiebreakRunnerId: string | null }> => {
+  const empty: Runners = { '1': null, '2': null, '3': null };
+  if (!isTiebreakHalf(inning)) {
+    return { runners: empty, tiebreakRunnerId: null };
+  }
+
+  const fromNext = nextOriginalBefore?.runners?.['2'] ?? null;
+  if (fromNext) {
+    return { runners: { '1': null, '2': fromNext, '3': null }, tiebreakRunnerId: fromNext };
+  }
+
+  try {
+    const [lineup, gs] = await Promise.all([getLineup(matchId), getGameState(matchId)]);
+    const battingList = half === 'top' ? (lineup.home || []) : (lineup.away || []);
+    const batIndex = half === 'top' ? (gs?.home_bat_index ?? 0) : (gs?.away_bat_index ?? 0);
+    const previousId = resolvePreviousBatterId(battingList, batIndex);
+    if (previousId) {
+      return { runners: { '1': null, '2': previousId, '3': null }, tiebreakRunnerId: previousId };
+    }
+  } catch (e) {
+    console.warn('Tiebreak placement in recalculateGame failed; leaving bases empty:', e);
+  }
+
+  return { runners: empty, tiebreakRunnerId: null };
+};
 
 /**
  * 試合の再計算を行うサービス
@@ -21,12 +67,18 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
   
   // 修正された打席を保存
   await saveAtBat(modifiedAtBat);
+
+  // 元の situationBefore を保持（タイブレーク2塁復元用）
+  const originalBeforeByPlayId = new Map(
+    allAtBats.map((a) => [a.playId, a.situationBefore ? { ...a.situationBefore, runners: { ...a.situationBefore.runners } } : undefined])
+  );
   
   // 3. 以降の打席を再シミュレーション
   // 初期状態は修正された打席の「直後」の状態
   let currentState: GameSnapshot = { ...modifiedAtBat.situationAfter };
   let currentInning = modifiedAtBat.inning;
   let currentHalf = modifiedAtBat.topOrBottom;
+  let activeTiebreakRunnerId: string | null = null;
   
   // 修正打席でチェンジになった場合
   if (currentState.outs >= 3) {
@@ -37,18 +89,20 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
           currentInning++;
       }
       currentState.outs = 0;
-      currentState.runners = { '1': null, '2': null, '3': null };
       currentState.balls = 0;
       currentState.strikes = 0;
+      const nextOriginal = allAtBats[index + 1]
+        ? originalBeforeByPlayId.get(allAtBats[index + 1].playId)
+        : undefined;
+      const placed = await placeTiebreakRunnersForHalf(
+        matchId,
+        currentInning,
+        currentHalf,
+        nextOriginal
+      );
+      currentState.runners = placed.runners;
+      activeTiebreakRunnerId = placed.tiebreakRunnerId;
   }
-  
-  // 得点集計用（イニングごと）
-  const inningScores: Record<string, { top: number, bottom: number }> = {};
-  
-  // 最初の打席までのスコアを計算しておく必要があるが、
-  // ここでは簡易的に、再計算ループ内でスコアを積み上げる方式にするか、
-  // あるいはGameStateを最後に一括更新するか。
-  // GameStateのスコアは「各イニングのスコア」を持つので、全打席から再集計するのが確実。
   
   for (let i = index + 1; i < allAtBats.length; i++) {
       const atBat = allAtBats[i];
@@ -64,9 +118,18 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
           const simResult = simulatePlay(currentState, resultType, atBat.batterId);
           
           atBat.situationAfter = simResult.snapshot;
-          atBat.scoredRunners = simResult.scoredRunners.map((runnerId) => ({ runnerId, isRBI: true }));
+          atBat.scoredRunners = markTiebreakScoredRunners(
+            simResult.scoredRunners.map((runnerId) => ({ runnerId, isRBI: true })),
+            activeTiebreakRunnerId
+          );
           if (atBat.result) {
              atBat.result.rbi = atBat.scoredRunners.filter((e) => e.isRBI).length;
+          }
+          if (
+            activeTiebreakRunnerId &&
+            !Object.values(atBat.situationAfter.runners).includes(activeTiebreakRunnerId)
+          ) {
+            activeTiebreakRunnerId = null;
           }
       } else {
           atBat.situationAfter = { ...currentState };
@@ -85,9 +148,19 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
               currentInning++;
           }
           currentState.outs = 0;
-          currentState.runners = { '1': null, '2': null, '3': null };
           currentState.balls = 0;
           currentState.strikes = 0;
+          const nextOriginal = allAtBats[i + 1]
+            ? originalBeforeByPlayId.get(allAtBats[i + 1].playId)
+            : undefined;
+          const placed = await placeTiebreakRunnersForHalf(
+            matchId,
+            currentInning,
+            currentHalf,
+            nextOriginal
+          );
+          currentState.runners = placed.runners;
+          activeTiebreakRunnerId = placed.tiebreakRunnerId;
       }
       
       // 更新された打席を保存
@@ -95,13 +168,6 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
   }
   
   // 4. GameState（リアルタイム状況）を最終状態に合わせて更新
-  // 全打席からスコアを再集計
-  const finalScores = calculateScoresFromAtBats(allAtBats);
-  
-  // FirestoreのGameStateを更新
-  // ※ここでは簡易的に、現在のイニング・カウント・ランナー・スコアを更新する
-  // 本来はgameStateServiceに「全再計算」機能があると良いが、個別のupdate関数を呼ぶ
-  
   await setInningAndHalf(matchId, currentInning, currentHalf);
   await updateCountsRealtime(matchId, { 
       b: currentState.balls, 
@@ -113,17 +179,5 @@ export const recalculateGame = async (matchId: string, modifiedAtBat: AtBat) => 
       '2b': currentState.runners['2'],
       '3b': currentState.runners['3']
   });
-  
-  // スコアの更新（addRunsではなく、setScores的なものが必要だが、現状のAPIではaddRunsしかない）
-  // gameStateServiceにsetScoresを追加するか、あるいはFirestoreを直接叩くか。
-  // ここでは一旦、現在のAPIでできる範囲（カウント・ランナー・イニング）を更新し、
-  // スコアについては別途対応が必要かもしれない（gameStateServiceの改修）。
-  // TODO: gameStateServiceに `updateScores(scores: { top: number, bottom: number, innings: ... })` を追加推奨
+  await updateTiebreakRunnerIdRealtime(matchId, activeTiebreakRunnerId);
 };
-
-// 全打席からスコア計算
-const calculateScoresFromAtBats = (atBats: AtBat[]) => {
-    // 実装省略（必要に応じて）
-    return {};
-};
-

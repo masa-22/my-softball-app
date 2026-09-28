@@ -187,7 +187,7 @@ const buildRunnerRecords = (
   }, {});
 
   atBats.forEach((atBat) => {
-    if (atBat.type !== 'bat') return;
+    // steal/other の mid-play にも盗塁・盗塁死が載る
     const inning = atBat.inning ?? 0;
     if (inning < 1 || inning > MAX_BOX_SCORE_INNINGS) return;
 
@@ -310,7 +310,7 @@ const roleLabelMap: Record<string, string> = {
   position_change: '',
 };
 
-const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP']);
+const DEFENSIVE_POSITIONS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP', 'OPO']);
 const isDefensivePosition = (p: string) => DEFENSIVE_POSITIONS.has(p);
 
 // 同じ選手のエントリから守備位置シーケンスを収集（PH/PRで退場したエントリの守備位置は含めない）

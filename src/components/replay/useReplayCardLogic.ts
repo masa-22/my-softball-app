@@ -25,7 +25,9 @@ const TIMELY_HIT_SHORT_NAMES: Record<string, string> = {
 
 const HIT_TYPES = new Set(['single', 'double', 'triple', 'homerun', 'runninghomerun']);
 const SAC_FLY_TYPES = new Set(['sac_fly', 'sacrifice_fly']);
-const FORCE_IN_TYPES = new Set(['walk', 'deadball']);
+const FORCE_IN_TYPES = new Set(['walk', 'intentional_walk', 'deadball']);
+/** フライ・ライナー系: 走者のアウトは併殺ではなく走塁死 */
+const FLY_LINER_TYPES = new Set(['flyout', 'linerout', 'foul_fly', 'sacrifice_fly', 'sac_fly']);
 
 export const useReplayCardLogic = (atBat: AtBat) => {
   const resultDef = atBat.result?.type ? BATTING_RESULTS[atBat.result.type] : null;
@@ -79,6 +81,7 @@ export const useReplayCardLogic = (atBat: AtBat) => {
     const rbiCount = scored.filter((e) => e.isRBI).length;
     const isForceIn = FORCE_IN_TYPES.has(atBat.result.type);
     const isSacFly = SAC_FLY_TYPES.has(atBat.result.type);
+    const isFlyLiner = FLY_LINER_TYPES.has(atBat.result.type);
     const isTimelyHit = HIT_TYPES.has(atBat.result.type) && rbiCount > 0;
     const timelyShortName = atBat.result.type ? TIMELY_HIT_SHORT_NAMES[atBat.result.type] : '';
 
@@ -118,7 +121,18 @@ export const useReplayCardLogic = (atBat: AtBat) => {
                 if (destBase && destBase !== `${base}塁`) {
                     movements.push(`${base}塁ランナーが${destBase}へ進塁`);
                 } else if (!destBase) {
-                    movements.push(`${base}塁ランナーがアウト`);
+                    if (isFlyLiner) {
+                        const runout = atBat.runnerEvents?.find(
+                          (e) => e.type === 'runout' && e.isOut && e.runnerId === runnerId
+                        );
+                        const chain = [runout?.outDetail?.threwPosition, runout?.outDetail?.caughtPosition]
+                          .filter((p): p is string => !!p && /^[1-9]$/.test(p))
+                          .filter((p, i, arr) => p !== arr[i - 1]);
+                        const chainText = chain.length > 0 ? `(${chain.join('-')})` : '';
+                        movements.push(`${base}塁ランナーが走塁死${chainText}`);
+                    } else {
+                        movements.push(`${base}塁ランナーがアウト`);
+                    }
                 }
             }
         }
@@ -137,7 +151,7 @@ export const useReplayCardLogic = (atBat: AtBat) => {
     // 併殺表現（アウトが2つ増えた場合、fieldingから守備位置の連鎖を取得）
     const outsBefore = atBat.situationBefore.outs ?? 0;
     const outsAfter = atBat.situationAfter.outs ?? 0;
-    const isDoublePlay = outsAfter - outsBefore >= 2;
+    const isDoublePlay = !isFlyLiner && outsAfter - outsBefore >= 2;
     let doublePlayText = '';
     if (isDoublePlay && atBat.playDetails?.fielding && atBat.playDetails.fielding.length >= 2) {
       const positions = atBat.playDetails.fielding

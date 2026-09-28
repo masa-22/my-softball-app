@@ -4,8 +4,8 @@
  */
 import React from 'react';
 
-const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','TR'];
-const MULTI_SELECTABLE_POSITIONS = ['PH', 'PR', 'TR'];
+const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','OPO'];
+const MULTI_SELECTABLE_POSITIONS = ['PH', 'PR'];
 
 interface LineupPanelProps {
   teamName: string;

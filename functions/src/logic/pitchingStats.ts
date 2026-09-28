@@ -1,6 +1,6 @@
 import { AtBat, normalizeScoredRunners } from "../types/AtBat";
 import { GameState } from "../types/GameState";
-import { BATTING_RESULTS } from "../data/softball/battingResults";
+import { BATTING_RESULTS, isWalkLikeResult } from "../data/softball/battingResults";
 
 type Side = 'home' | 'away';
 
@@ -46,7 +46,7 @@ const hasErrorOrPassedBallInScoring = (
     a.index < scoringAtBat.index &&
     a.result && 
     a.batterId === runnerId && (
-      ['error', 'walk', 'deadball'].includes(a.result.type) ||
+      ['error', 'walk', 'intentional_walk', 'deadball'].includes(a.result.type) ||
       BATTING_RESULTS[a.result.type]?.stats.isHit ||
       BATTING_RESULTS[a.result.type]?.stats.isOnBase
     )
@@ -92,12 +92,11 @@ export const calculatePitcherStats = (
     wildPitches: 0,
   };
 
-  const pitcherAtBats = atBats.filter(
-    (atBat) => atBat.type === 'bat' && atBat.pitcherId === playerId
-  );
+  const pitcherPlays = atBats.filter((atBat) => atBat.pitcherId === playerId);
+  const pitcherAtBats = pitcherPlays.filter((atBat) => atBat.type === 'bat');
 
   let totalOuts = 0;
-  pitcherAtBats.forEach((atBat) => {
+  pitcherPlays.forEach((atBat) => {
     const outsAdded = Math.max(0, atBat.situationAfter.outs - atBat.situationBefore.outs);
     totalOuts += outsAdded;
   });
@@ -120,12 +119,13 @@ export const calculatePitcherStats = (
         if (['sac_bunt', 'sacrifice_bunt'].includes(atBat.result.type)) stats.sacrificeBunts++;
         if (['sac_fly', 'sacrifice_fly'].includes(atBat.result.type)) stats.sacrificeFlies++;
         if (['strikeout_swinging', 'strikeout_looking', 'droppedthird'].includes(atBat.result.type)) stats.strikeouts++;
-        if (atBat.result.type === 'walk') stats.walks++;
+        if (isWalkLikeResult(atBat.result.type)) stats.walks++;
         if (atBat.result.type === 'deadball') stats.hitByPitch++;
       }
     }
+  });
 
-    // 暴投（同じ球目の重複は1カウント）
+  pitcherPlays.forEach((atBat) => {
     if (atBat.runnerEvents) {
       const wpPitchSeqs = new Set<number | null>();
       atBat.runnerEvents.forEach((event) => {
@@ -137,11 +137,12 @@ export const calculatePitcherStats = (
     }
   });
 
-  pitcherAtBats.forEach((atBat) => {
+  pitcherPlays.forEach((atBat) => {
     const scoredList = normalizeScoredRunners(atBat.scoredRunners);
     if (scoredList.length > 0) {
       stats.runs += scoredList.length;
       scoredList.forEach((entry) => {
+        if (entry.isTiebreakPlaced) return;
         if (!hasErrorOrPassedBallInScoring(entry.runnerId, atBat, atBats)) {
           stats.earnedRuns++;
         }

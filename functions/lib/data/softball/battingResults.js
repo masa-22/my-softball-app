@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BATTING_RESULTS = void 0;
+exports.isWalkLikeResult = isWalkLikeResult;
 exports.BATTING_RESULTS = {
     single: {
         code: 'single',
@@ -37,6 +38,16 @@ exports.BATTING_RESULTS = {
         name: 'フライアウト',
         stats: { isAB: true, isHit: false, isOnBase: false, isSacrifice: false, isFourBall: false, isOut: true }
     },
+    linerout: {
+        code: 'linerout',
+        name: 'ライナーアウト',
+        stats: { isAB: true, isHit: false, isOnBase: false, isSacrifice: false, isFourBall: false, isOut: true }
+    },
+    foul_fly: {
+        code: 'foul_fly',
+        name: 'ファウルフライ',
+        stats: { isAB: true, isHit: false, isOnBase: false, isSacrifice: false, isFourBall: false, isOut: true }
+    },
     bunt_out: {
         code: 'bunt_out',
         name: 'バント失敗',
@@ -62,6 +73,11 @@ exports.BATTING_RESULTS = {
     walk: {
         code: 'walk',
         name: 'フォアボール',
+        stats: { isAB: false, isHit: false, isOnBase: true, isSacrifice: false, isFourBall: true, isOut: false }
+    },
+    intentional_walk: {
+        code: 'intentional_walk',
+        name: '申告敬遠',
         stats: { isAB: false, isHit: false, isOnBase: true, isSacrifice: false, isFourBall: true, isOut: false }
     },
     deadball: {
@@ -99,6 +115,16 @@ exports.BATTING_RESULTS = {
         name: 'エラー',
         // エラー出塁は打数に数える（凡打扱い）。出塁率は上がらない。
         stats: { isAB: true, isHit: false, isOnBase: false, isSacrifice: false, isFourBall: false, isOut: false }
+    },
+    other: {
+        code: 'other',
+        name: 'その他',
+        // 打数は打席単位の countsAsAtBat で上書き。辞書デフォルトは打数外・安打外。
+        stats: { isAB: false, isHit: false, isOnBase: false, isSacrifice: false, isFourBall: false, isOut: false }
     }
 };
+/** 四球・申告敬遠（成績上は同じ walks に加算） */
+function isWalkLikeResult(type) {
+    return type === 'walk' || type === 'intentional_walk';
+}
 //# sourceMappingURL=battingResults.js.map

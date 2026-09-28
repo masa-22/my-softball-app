@@ -7,6 +7,8 @@ interface PlayResultConfirmDialogProps {
   outfieldDirectionLabel: string;
   needsPosition: boolean;
   needsOutfieldDirection: boolean;
+  otherNote?: string;
+  countsAsAtBatLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -18,6 +20,8 @@ const PlayResultConfirmDialog: React.FC<PlayResultConfirmDialogProps> = ({
   outfieldDirectionLabel,
   needsPosition,
   needsOutfieldDirection,
+  otherNote,
+  countsAsAtBatLabel,
   onCancel,
   onConfirm,
 }) => (
@@ -57,9 +61,21 @@ const PlayResultConfirmDialog: React.FC<PlayResultConfirmDialogProps> = ({
         </div>
       )}
       {needsOutfieldDirection && outfieldDirectionLabel && (
-        <div>
+        <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>打球方向（外野）</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>{outfieldDirectionLabel}</div>
+        </div>
+      )}
+      {otherNote && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>内容</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#212529', whiteSpace: 'pre-wrap' }}>{otherNote}</div>
+        </div>
+      )}
+      {countsAsAtBatLabel && (
+        <div>
+          <div style={{ fontSize: 13, color: '#6c757d', marginBottom: 4 }}>打数</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#212529' }}>{countsAsAtBatLabel}</div>
         </div>
       )}
     </div>
