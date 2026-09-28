@@ -1,8 +1,92 @@
-import { AtBat } from '../types/AtBat';
+import {
+  AtBat,
+  AtBatType,
+  GameSnapshot,
+  HalfInning,
+  PlayDetails,
+  RunnerEvent,
+  ScoredRunnerEntry,
+} from '../types/AtBat';
 import { db } from '../firebaseConfig';
 import { collection, doc, getDoc, setDoc, getDocs, query, where, deleteDoc, writeBatch, onSnapshot, Unsubscribe } from 'firebase/firestore';
 
 const ATBATS_COLLECTION = 'atBats';
+
+/** Firestore は undefined を拒否するため、保存前に除去する */
+function stripUndefinedDeep<T>(value: T): T {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue;
+      out[k] = stripUndefinedDeep(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+/**
+ * 試合内の次の play index / playId を採番する
+ */
+export const allocateNextPlaySlot = async (
+  matchId: string
+): Promise<{ index: number; playId: string }> => {
+  const existing = await getAtBats(matchId);
+  const maxIndex = existing.reduce((max, a) => Math.max(max, a.index || 0), 0);
+  const index = maxIndex + 1;
+  const playId = `${matchId}_${String(index).padStart(3, '0')}`;
+  return { index, playId };
+};
+
+export type MidPlayAtBatParams = {
+  matchId: string;
+  type: Extract<AtBatType, 'steal' | 'other'>;
+  /** 採番後の index から plateAppearanceId を決める（同一打席の初回 play で確定） */
+  resolvePlateAppearanceId?: (playIndex: number) => string;
+  inning: number;
+  topOrBottom: HalfInning;
+  batterId: string;
+  pitcherId: string;
+  battingOrder: number;
+  situationBefore: GameSnapshot;
+  situationAfter: GameSnapshot;
+  scoredRunners: ScoredRunnerEntry[];
+  runnerEvents: RunnerEvent[];
+  playDetails?: PlayDetails;
+};
+
+/**
+ * 打席中の走塁・アウトなど（type=steal|other）を独立した atBat として保存する
+ */
+export const saveMidPlayAtBat = async (params: MidPlayAtBatParams): Promise<AtBat> => {
+  const { index, playId } = await allocateNextPlaySlot(params.matchId);
+  const plateAppearanceId = params.resolvePlateAppearanceId?.(index);
+  const atBat: AtBat = {
+    playId,
+    matchId: params.matchId,
+    index,
+    inning: params.inning,
+    topOrBottom: params.topOrBottom,
+    type: params.type,
+    batterId: params.batterId,
+    pitcherId: params.pitcherId,
+    battingOrder: params.battingOrder,
+    situationBefore: params.situationBefore,
+    situationAfter: params.situationAfter,
+    scoredRunners: params.scoredRunners,
+    pitches: [],
+    runnerEvents: params.runnerEvents,
+    ...(params.playDetails ? { playDetails: params.playDetails } : {}),
+    timestamp: new Date().toISOString(),
+    ...(plateAppearanceId ? { plateAppearanceId } : {}),
+  };
+  await saveAtBat(atBat);
+  return atBat;
+};
 
 /**
  * 試合ごとの打席記録一覧を取得
@@ -66,16 +150,19 @@ export const saveAtBat = async (atBat: AtBat): Promise<void> => {
       playId: atBat.playId,
       matchId: atBat.matchId,
       index: atBat.index,
+      type: atBat.type,
       batterId: atBat.batterId,
-      resultType: atBat.result?.type
+      resultType: atBat.result?.type,
+      runnerEventTypes: atBat.runnerEvents?.map((e) => e.type),
     });
     const atBatRef = doc(db, ATBATS_COLLECTION, atBat.playId);
-    await setDoc(atBatRef, atBat);
+    await setDoc(atBatRef, stripUndefinedDeep(atBat) as AtBat);
     console.log('[atBatService] Successfully saved atBat to Firestore:', atBat.playId);
   } catch (error) {
     console.error('[atBatService] Error saving atBat to Firestore:', error, {
       playId: atBat.playId,
-      matchId: atBat.matchId
+      matchId: atBat.matchId,
+      type: atBat.type,
     });
     throw error;
   }

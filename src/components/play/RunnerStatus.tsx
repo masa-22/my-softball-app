@@ -5,6 +5,7 @@
 import React, { useMemo } from 'react';
 import AdvanceReasonDialog, { RunnerAdvancement, AdvanceReasonResult } from './runner/AdvanceReasonDialog';
 import OutReasonDialog, { RunnerOut, OutReasonResult } from './runner/OutReasonDialog';
+import RecordAdvanceDialog, { RecordAdvanceConfirmPayload } from './runner/RecordAdvanceDialog';
 import RunnerStatusSidebar from './runner/RunnerStatusSidebar';
 import RunnerFieldPanel from './runner/RunnerFieldPanel';
 import AddOutDialog from './runner/AddOutDialog.tsx';
@@ -26,11 +27,23 @@ interface RunnerStatusProps {
   // フィールド操作イベント（親へ通知）
   onBaseClick: (base: BaseKey) => void;
   onAddOutClick: () => void;
+  onRecordAdvanceClick: () => void;
 
-  // 進塁理由ダイアログ（親制御）
+  // 進塁理由ダイアログ（本塁ショートカット用・親制御）
   showAdvanceDialog: boolean;
   pendingAdvancements: RunnerAdvancement[];
   onAdvanceConfirm: (results: AdvanceReasonResult[]) => void;
+
+  // 進塁を記録ダイアログ（ボタン起点・親制御）
+  showRecordAdvanceDialog: boolean;
+  occupiedRunnersForAdvance: Array<{
+    runnerId: string;
+    runnerName: string;
+    fromBase: '1' | '2' | '3';
+  }>;
+  onRecordAdvanceConfirm: (payload: RecordAdvanceConfirmPayload) => void;
+  /** 守備位置の略称 → 守備者名（エラー入力時の表示用） */
+  defensePositionPlayerNames?: Record<string, string>;
 
   // アウト理由ダイアログ（親制御）
   showOutDialog: boolean;
@@ -84,9 +97,14 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
   getRunnerName,
   onBaseClick,
   onAddOutClick,
+  onRecordAdvanceClick,
   showAdvanceDialog,
   pendingAdvancements,
   onAdvanceConfirm,
+  showRecordAdvanceDialog,
+  occupiedRunnersForAdvance,
+  onRecordAdvanceConfirm,
+  defensePositionPlayerNames,
   showOutDialog,
   pendingOuts,
   onOutConfirm,
@@ -107,7 +125,18 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
 
   return (
     <div style={styles.container}>
-      {/* 進塁理由ダイアログ（親制御） */}
+      {showRecordAdvanceDialog && (
+        <RecordAdvanceDialog
+          occupiedRunners={occupiedRunnersForAdvance}
+          pitches={pitches}
+          defaultPitchOrder={latestPitchOrder}
+          positionPlayerNames={defensePositionPlayerNames}
+          onConfirm={onRecordAdvanceConfirm}
+          onCancel={onDialogCancel}
+        />
+      )}
+
+      {/* 本塁ショートカット用の進塁理由ダイアログ */}
       {showAdvanceDialog && (
         <AdvanceReasonDialog
           advancements={pendingAdvancements}
@@ -119,7 +148,6 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
         />
       )}
 
-      {/* アウト理由ダイアログ（親制御） */}
       {showOutDialog && (
         <OutReasonDialog
           outs={pendingOuts}
@@ -131,7 +159,6 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
         />
       )}
 
-      {/* アウト追加ダイアログ（親制御） */}
       {showAddOutDialog && (
         <AddOutDialog
           runners={runners}
@@ -145,15 +172,13 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
       )}
 
       <div style={styles.mainLayout}>
-        {/* 左カラム（サイドバー） */}
-        <RunnerStatusSidebar 
-          bso={bso} 
-          pitches={pitches} 
+        <RunnerStatusSidebar
+          bso={bso}
+          pitches={pitches}
           canUseTemporaryRunner={canUseTemporaryRunner}
           onTempRunnerClick={onTempRunnerClick}
         />
 
-        {/* 右カラム（フィールド＋ランナー一覧＋アウト追加ボタン） */}
         <div style={styles.rightColumn}>
           <RunnerFieldPanel
             styles={styles}
@@ -161,6 +186,7 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
             offensePlayers={offensePlayers}
             onBaseClick={onBaseClick}
             onAddOutClick={onAddOutClick}
+            onRecordAdvanceClick={onRecordAdvanceClick}
           />
         </div>
       </div>

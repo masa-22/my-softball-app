@@ -26,6 +26,8 @@ interface PlayResultPanelProps {
         putoutPosition?: string;
         assistPosition?: string;
       };
+      note?: string;
+      countsAsAtBat?: boolean;
     },
     outsAfterOverride?: number,
   ) => void;
@@ -41,6 +43,8 @@ type BattingResult =
   | 'runninghomerun'
   | 'groundout'
   | 'flyout'
+  | 'linerout'
+  | 'foul_fly'
   | 'strikeout_swinging'
   | 'strikeout_looking'
   | 'droppedthird'
@@ -48,6 +52,7 @@ type BattingResult =
   | 'sacrifice_bunt'
   | 'sacrifice_fly'
   | 'bunt_out'
+  | 'other'
   | '';
 
 type FieldPosition = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '';
@@ -73,12 +78,20 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
   const [showFirstBaseTouchDialog, setShowFirstBaseTouchDialog] = useState(false);
   const [showPutoutPlayerDialog, setShowPutoutPlayerDialog] = useState(false);
   const [pendingFieldingOptions, setPendingFieldingOptions] = useState<{ putoutPosition?: string; assistPosition?: string } | undefined>(undefined);
+  const [otherNote, setOtherNote] = useState('');
+  const [countsAsAtBat, setCountsAsAtBat] = useState<boolean | null>(null);
 
   const handleResultChange = (value: BattingResult) => {
     setResult(value);
+    if (value !== 'other') {
+      setOtherNote('');
+      setCountsAsAtBat(null);
+    }
     if (value === 'groundout') {
       setBatType('ground');
-    } else if (value === 'flyout' || value === 'sacrifice_fly') {
+    } else if (value === 'linerout') {
+      setBatType('liner');
+    } else if (value === 'flyout' || value === 'foul_fly' || value === 'sacrifice_fly') {
       setBatType('fly');
     }
   };
@@ -116,15 +129,19 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         { value: 'runninghomerun', label: 'ランニングホームラン' },
         { value: 'groundout', label: 'ゴロアウト' },
         { value: 'flyout', label: 'フライアウト' },
+        { value: 'linerout', label: 'ライナーアウト' },
+        { value: 'foul_fly', label: 'ファウルフライ' },
         { value: 'bunt_out', label: 'バント失敗' },
         { value: 'sacrifice_bunt', label: '犠打（バント）', disabled: !canSelectSacrificeBunt },
         { value: 'sacrifice_fly', label: '犠牲フライ', disabled: !canSelectSacrificeFly },
         { value: 'error', label: 'エラー' },
+        { value: 'other', label: 'その他' },
       ];
 
   const batTypeOptions = [
     { value: 'ground', label: 'ゴロ' },
-    { value: 'fly', label: 'フライ/ライナー' },
+    { value: 'fly', label: 'フライ' },
+    { value: 'liner', label: 'ライナー' },
     { value: 'bunt', label: 'バント' },
   ];
 
@@ -148,7 +165,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     { value: 'right', label: 'ライト' },
   ];
 
-  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
+  const needsPosition = ['single', 'double', 'triple', 'groundout', 'flyout', 'linerout', 'foul_fly', 'droppedthird', 'error', 'sacrifice_bunt', 'sacrifice_fly', 'bunt_out'].includes(result);
   const needsOutfieldDirection = ['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(result);
   const needsBatType = ['single', 'double', 'triple', 'error', 'sacrifice_bunt', 'bunt_out'].includes(result);
 
@@ -161,6 +178,12 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         batType,
         outfieldDirection,
         fieldingOptions: fieldingOptionsOverride || pendingFieldingOptions,
+        ...(result === 'other'
+          ? {
+              note: otherNote.trim(),
+              countsAsAtBat: countsAsAtBat === true,
+            }
+          : {}),
       },
       outsOverride,
     );
@@ -171,6 +194,9 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     if (needsPosition && !position) return;
     if (needsOutfieldDirection && !outfieldDirection) return;
     if (needsBatType && !batType) return;
+    if (result === 'other') {
+      if (!otherNote.trim() || countsAsAtBat === null) return;
+    }
 
     if (result === 'single' && ['1', '2', '3', '5'].includes(position)) {
       setShowSafetyBuntDialog(true);
@@ -188,7 +214,7 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
 
   // ランナーチェック以降の処理を共通化
   const proceedWithRunnerCheck = (fieldingOptions?: { putoutPosition?: string; assistPosition?: string }) => {
-    const isOutResult = result === 'groundout' || result === 'flyout' || result === 'bunt_out';
+    const isOutResult = result === 'groundout' || result === 'flyout' || result === 'linerout' || result === 'foul_fly' || result === 'bunt_out';
     const hasRunners = !!(currentRunners['1'] || currentRunners['2'] || currentRunners['3']);
 
     if (isOutResult && !hasRunners) {
@@ -263,11 +289,17 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
   const getResultLabel = () => {
     const option = resultOptions.find(opt => opt.value === result);
     let label = option ? option.label : '';
+    if (result === 'other' && otherNote.trim()) {
+      label = `その他（${otherNote.trim()}）`;
+    }
     if (result === 'single' && isSafetyBunt) label += '（セーフティバント）';
-    if (['groundout', 'flyout'].includes(result) && position) {
+    if (['groundout', 'flyout', 'linerout', 'foul_fly'].includes(result) && position) {
       const short = POSITIONS[position]?.shortName || getPositionLabel();
       if (short) {
-        label = `${short}${result === 'groundout' ? 'ゴロ' : '飛'}`;
+        if (result === 'groundout') label = `${short}ゴロ`;
+        else if (result === 'linerout') label = `${short}直`;
+        else if (result === 'foul_fly') label = `${short}邪飛`;
+        else label = `${short}飛`;
       }
     }
     return label;
@@ -285,7 +317,12 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
     return option ? option.label : '';
   };
 
-  const isFormValid = result && (!needsPosition || position) && (!needsOutfieldDirection || outfieldDirection) && (!needsBatType || batType);
+  const isFormValid =
+    !!result &&
+    (!needsPosition || !!position) &&
+    (!needsOutfieldDirection || !!outfieldDirection) &&
+    (!needsBatType || !!batType) &&
+    (result !== 'other' || (!!otherNote.trim() && countsAsAtBat !== null));
 
   // セーフティバント確認ダイアログ
   if (showSafetyBuntDialog) {
@@ -338,6 +375,16 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
         outfieldDirectionLabel={getOutfieldDirectionLabel()}
         needsPosition={needsPosition}
         needsOutfieldDirection={needsOutfieldDirection}
+        otherNote={result === 'other' ? otherNote.trim() : undefined}
+        countsAsAtBatLabel={
+          result === 'other'
+            ? countsAsAtBat === true
+              ? '打数に含める'
+              : countsAsAtBat === false
+                ? '打数に含めない'
+                : undefined
+            : undefined
+        }
         onCancel={handleCancelConfirm}
         onConfirm={handleConfirm}
       />
@@ -362,6 +409,10 @@ const PlayResultPanel: React.FC<PlayResultPanelProps> = ({
       needsPosition={needsPosition}
       needsOutfieldDirection={needsOutfieldDirection}
       needsBatType={needsBatType}
+      otherNote={otherNote}
+      setOtherNote={setOtherNote}
+      countsAsAtBat={countsAsAtBat}
+      setCountsAsAtBat={setCountsAsAtBat}
       isFormValid={!!isFormValid}
       onSubmit={handleSubmit}
       onCancel={onComplete}

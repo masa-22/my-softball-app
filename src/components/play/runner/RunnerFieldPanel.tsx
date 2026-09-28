@@ -7,6 +7,7 @@ interface RunnerFieldPanelProps {
   offensePlayers: any[];
   onBaseClick: (base: '1' | '2' | '3' | 'home') => void;
   onAddOutClick: () => void;
+  onRecordAdvanceClick: () => void;
 }
 
 const RunnerFieldPanel: React.FC<RunnerFieldPanelProps> = ({
@@ -15,7 +16,10 @@ const RunnerFieldPanel: React.FC<RunnerFieldPanelProps> = ({
   offensePlayers,
   onBaseClick,
   onAddOutClick,
+  onRecordAdvanceClick,
 }) => {
+  const hasRunners = !!(runners['1'] || runners['2'] || runners['3']);
+
   return (
     <div style={styles.fieldPanel}>
       <div style={{ marginBottom: 0 }}>
@@ -26,7 +30,25 @@ const RunnerFieldPanel: React.FC<RunnerFieldPanelProps> = ({
         />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onRecordAdvanceClick}
+          disabled={!hasRunners}
+          style={{
+            padding: '10px 20px',
+            background: hasRunners ? '#4c6ef5' : '#adb5bd',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 6,
+            cursor: hasRunners ? 'pointer' : 'not-allowed',
+            fontWeight: 'bold',
+            fontSize: 14,
+            opacity: hasRunners ? 1 : 0.7,
+          }}
+        >
+          進塁を記録
+        </button>
         <button
           type="button"
           onClick={onAddOutClick}

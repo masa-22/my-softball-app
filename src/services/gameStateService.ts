@@ -10,6 +10,7 @@ import {
 } from '../types/GameState';
 import { rtdb } from '../firebaseConfig';
 import { ref, get, set, update, onValue, off, Unsubscribe } from 'firebase/database';
+import { isTiebreakHalf, resolvePreviousBatterId } from '../utils/tiebreak';
 
 export type { GameRealtimeStatus, GameState };
 
@@ -39,6 +40,7 @@ export const initGameState = async (gameId: string): Promise<GameState> => {
       runners: { '1b': null, '2b': null, '3b': null },
       matchup: { pitcher_id: null, batter_id: null },
       scores: { top_total: 0, bottom_total: 0, innings: { '1': { top: 0, bottom: null } } },
+      tiebreak_runner_id: null,
       last_updated: now,
     };
     const stateRef = getGameStateRef(gameId);
@@ -327,6 +329,27 @@ export const closeHalfInningRealtime = async (gameId: string): Promise<GameState
     }
     state.counts = { b: 0, s: 0, o: 0 };
     state.runners = { '1b': null, '2b': null, '3b': null };
+    state.tiebreak_runner_id = null;
+
+    // 延長タイブレーク: 8回以降は試合終了まで現打者の1つ前を2塁に配置
+    if (isTiebreakHalf(state.current_inning)) {
+      try {
+        // lineupService との循環参照を避けるため動的 import
+        const { getLineup } = await import('./lineupService');
+        const lineup = await getLineup(gameId);
+        const isTop = state.top_bottom === 'top';
+        const battingList = isTop ? (lineup.home || []) : (lineup.away || []);
+        const batIndex = isTop ? (state.home_bat_index ?? 0) : (state.away_bat_index ?? 0);
+        const previousId = resolvePreviousBatterId(battingList, batIndex);
+        if (previousId) {
+          state.runners = { '1b': null, '2b': previousId, '3b': null };
+          state.tiebreak_runner_id = previousId;
+        }
+      } catch (e) {
+        console.warn('Tiebreak runner placement failed:', e);
+      }
+    }
+
     touch(state);
     const stateRef = getGameStateRef(gameId);
     await update(stateRef, {
@@ -335,11 +358,33 @@ export const closeHalfInningRealtime = async (gameId: string): Promise<GameState
       counts: state.counts,
       runners: state.runners,
       scores: state.scores,
+      tiebreak_runner_id: state.tiebreak_runner_id ?? null,
       last_updated: state.last_updated
     });
     return state;
   } catch (error) {
     console.error('Error closing half inning:', error);
+    throw error;
+  }
+};
+
+/** 延長タイブレーク配置走者IDの更新（代走差し替え・得点/アウトでクリア） */
+export const updateTiebreakRunnerIdRealtime = async (
+  gameId: string,
+  tiebreakRunnerId: string | null
+): Promise<GameState | null> => {
+  try {
+    const state = await getGameState(gameId) || await initGameState(gameId);
+    state.tiebreak_runner_id = tiebreakRunnerId;
+    touch(state);
+    const stateRef = getGameStateRef(gameId);
+    await update(stateRef, {
+      tiebreak_runner_id: state.tiebreak_runner_id,
+      last_updated: state.last_updated,
+    });
+    return state;
+  } catch (error) {
+    console.error('Error updating tiebreak runner id:', error);
     throw error;
   }
 };

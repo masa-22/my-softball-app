@@ -36,7 +36,7 @@ export const calculateFieldingActions = (
   }
 
   // 四死球は守備記録なし
-  if (['walk', 'deadball'].includes(result)) {
+  if (['walk', 'intentional_walk', 'deadball'].includes(result)) {
     return [];
   }
 
@@ -55,11 +55,11 @@ export const calculateFieldingActions = (
   // 3. バッターアウトの処理
   // resultがアウト系の場合
   const isBatterOut = [
-    'groundout', 'flyout', 'bunt_out', 'sac_bunt', 'sac_fly', 'interference'
+    'groundout', 'flyout', 'linerout', 'foul_fly', 'bunt_out', 'sac_bunt', 'sac_fly', 'interference'
   ].includes(result);
 
   if (isBatterOut && fieldedBy) {
-    if (batType === 'fly') {
+    if (batType === 'fly' || batType === 'liner') {
       // フライ/ライナー: 捕球した選手に刺殺
       actions.push({
         playerId: '',

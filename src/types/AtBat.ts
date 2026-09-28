@@ -19,23 +19,29 @@ export type BatterResultType =
   | 'runninghomerun'
   | 'groundout'
   | 'flyout'
+  | 'linerout'
+  | 'foul_fly'
   | 'bunt_out'
   | 'strikeout_swinging'
   | 'strikeout_looking'
   | 'droppedthird'
   | 'walk'
+  | 'intentional_walk'
   | 'deadball'
   | 'sac_bunt'
   | 'sacrifice_bunt'
   | 'sac_fly'
   | 'sacrifice_fly'
   | 'interference'
-  | 'error';
+  | 'error'
+  | 'other';
 
 export interface AtBatResult {
   type: BatterResultType;
   fieldedBy?: string; // 守備位置 (1-9)
   rbi?: number;
+  /** `other` 用。打数に含めるか（未設定時は含めない） */
+  countsAsAtBat?: boolean;
 }
 
 export interface GameSnapshot {
@@ -80,6 +86,8 @@ export type BaseType = '1' | '2' | '3' | 'home';
 export interface ScoredRunnerEntry {
   runnerId: string;
   isRBI: boolean;
+  /** 延長タイブレーク配置走者の得点（自責点に含めない） */
+  isTiebreakPlaced?: boolean;
 }
 
 /** 旧形式 string[] を含む scoredRunners を ScoredRunnerEntry[] に正規化する */
@@ -164,6 +172,9 @@ export interface AtBat {
   // --- メタデータ ---
   timestamp: string;
   note?: string;
+
+  /** 同一プレートアピアランス内の mid-play / bat を束ねる ID（任意） */
+  plateAppearanceId?: string;
 }
 
 

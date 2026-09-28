@@ -19,6 +19,11 @@ interface PlayResultFormProps {
   needsPosition: boolean;
   needsOutfieldDirection: boolean;
   needsBatType: boolean;
+  /** その他結果用 */
+  otherNote?: string;
+  setOtherNote?: (v: string) => void;
+  countsAsAtBat?: boolean | null;
+  setCountsAsAtBat?: (v: boolean | null) => void;
   isFormValid: boolean;
   onSubmit: () => void;
   onCancel?: () => void;
@@ -43,10 +48,16 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
   needsPosition,
   needsOutfieldDirection,
   needsBatType,
+  otherNote = '',
+  setOtherNote,
+  countsAsAtBat = null,
+  setCountsAsAtBat,
   isFormValid,
   onSubmit,
   onCancel,
-}) => (
+}) => {
+  const isOther = result === 'other';
+  return (
   <div style={{
     padding: 20,
     background: '#fff',
@@ -93,6 +104,10 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
               if (!['triple', 'homerun', 'runninghomerun', 'sacrifice_fly'].includes(option.value)) {
                 setOutfieldDirection('');
               }
+              if (option.value !== 'other') {
+                setOtherNote?.('');
+                setCountsAsAtBat?.(null);
+              }
             }}
             disabled={option.disabled}
             style={{
@@ -114,6 +129,88 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
       </div>
     </div>
     
+    {/* その他: 自由記述 + 打数可否 */}
+    {isOther && (
+      <>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{
+            display: 'block',
+            marginBottom: 8,
+            fontWeight: 600,
+            fontSize: 14,
+            color: '#495057',
+          }}>
+            内容（何が起きたか） <span style={{ color: '#e74c3c' }}>*</span>
+          </label>
+          <textarea
+            value={otherNote}
+            onChange={(e) => setOtherNote?.(e.target.value)}
+            placeholder="例: 打撃妨害、守備妨害 など"
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              border: '1px solid #dee2e6',
+              borderRadius: 6,
+              fontSize: 14,
+              resize: 'vertical',
+              boxSizing: 'border-box',
+              fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{
+            display: 'block',
+            marginBottom: 8,
+            fontWeight: 600,
+            fontSize: 14,
+            color: '#495057',
+          }}>
+            打数に含めるか <span style={{ color: '#e74c3c' }}>*</span>
+          </label>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 8,
+          }}>
+            <button
+              type="button"
+              onClick={() => setCountsAsAtBat?.(true)}
+              style={{
+                padding: '12px 16px',
+                background: countsAsAtBat === true ? '#4c6ef5' : '#f8f9fa',
+                color: countsAsAtBat === true ? '#fff' : '#495057',
+                border: countsAsAtBat === true ? '2px solid #4c6ef5' : '1px solid #dee2e6',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: countsAsAtBat === true ? 600 : 400,
+                fontSize: 14,
+              }}
+            >
+              打数に含める
+            </button>
+            <button
+              type="button"
+              onClick={() => setCountsAsAtBat?.(false)}
+              style={{
+                padding: '12px 16px',
+                background: countsAsAtBat === false ? '#4c6ef5' : '#f8f9fa',
+                color: countsAsAtBat === false ? '#fff' : '#495057',
+                border: countsAsAtBat === false ? '2px solid #4c6ef5' : '1px solid #dee2e6',
+                borderRadius: 6,
+                cursor: 'pointer',
+                fontWeight: countsAsAtBat === false ? 600 : 400,
+                fontSize: 14,
+              }}
+            >
+              打数に含めない
+            </button>
+          </div>
+        </div>
+      </>
+    )}
+
     {/* 打球タイプ選択（追加） */}
     {needsBatType && (
       <div style={{ marginBottom: 20 }}>
@@ -128,7 +225,7 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
         </label>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
+          gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 8,
         }}>
           {batTypeOptions.map(option => (
@@ -277,6 +374,7 @@ const PlayResultForm: React.FC<PlayResultFormProps> = ({
       </button>
     </div>
   </div>
-);
+  );
+};
 
 export default PlayResultForm;

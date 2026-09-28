@@ -8,9 +8,9 @@ import { getTeams } from '../../services/teamService';
 import { subscribeGameState, GameState } from '../../services/gameStateService';
 import { getGame } from '../../services/gameService';
 import { useAtBats } from '../../hooks/useAtBats';
-import { AtBat } from '../../types/AtBat';
+import { TIEBREAK_START_INNING } from '../../utils/tiebreak';
 
-const MAX_INNINGS = 7;
+const BASE_INNINGS = 7;
 
 const ScoreBoard: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
@@ -19,11 +19,20 @@ const ScoreBoard: React.FC = () => {
   const [state, setState] = useState<GameState | null>(null);
   const atBats = useAtBats(matchId);
 
+  const displayInnings = useMemo(() => {
+    const fromAtBats = atBats.reduce((max, bat) => Math.max(max, bat.inning ?? 0), 0);
+    const fromState = state?.current_inning ?? 0;
+    const fromScoreKeys = state?.scores?.innings
+      ? Object.keys(state.scores.innings).reduce((max, k) => Math.max(max, Number(k) || 0), 0)
+      : 0;
+    return Math.max(BASE_INNINGS, fromAtBats, fromState, fromScoreKeys, TIEBREAK_START_INNING - 1);
+  }, [atBats, state]);
+
   const inningActivity = useMemo(() => {
     const map: Record<number, { top: boolean; bottom: boolean }> = {};
     atBats.forEach((bat) => {
-      const inning = Math.min(MAX_INNINGS, bat.inning ?? 0);
-      if (!inning) return;
+      const inning = bat.inning ?? 0;
+      if (!inning || inning > displayInnings) return;
       const entry = map[inning] || { top: false, bottom: false };
       if (bat.topOrBottom === 'top') {
         entry.top = true;
@@ -33,11 +42,10 @@ const ScoreBoard: React.FC = () => {
       map[inning] = entry;
     });
     return map;
-  }, [atBats]);
+  }, [atBats, displayInnings]);
 
   const recordedMaxInning = useMemo(() => {
-    const maxInning = atBats.reduce((max, bat) => Math.max(max, bat.inning ?? 0), 0);
-    return Math.min(MAX_INNINGS, maxInning);
+    return atBats.reduce((max, bat) => Math.max(max, bat.inning ?? 0), 0);
   }, [atBats]);
 
   useEffect(() => {
@@ -80,7 +88,7 @@ const ScoreBoard: React.FC = () => {
   const totals = state ? { home: state.scores.top_total, away: state.scores.bottom_total } : { home: 0, away: 0 };
   const isFinished = state ? state.status === 'finished' : false;
 
-  const inningCols = Array.from({ length: MAX_INNINGS }, (_, i) => i + 1);
+  const inningCols = Array.from({ length: displayInnings }, (_, i) => i + 1);
   const getHalfDisplay = (half: 'top' | 'bottom', inning: number): string | number => {
     const rec = state?.scores.innings[String(inning)];
     const activity = inningActivity[inning] || { top: false, bottom: false };

@@ -49,13 +49,25 @@ export const formatAtBatSummary = (atBat: AtBat): string => {
   const fielderLabel = getFielderLabel(fieldedBy);
   const labelForHit = fielderLabel || directionLabel;
 
+  /** 安打等に付随する進塁失策（送球・捕球）の略記 */
+  const appendAdvanceError = (base: string): string => {
+    const advanceErrors = (atBat.playDetails?.fielding ?? []).filter(
+      (f) => (f.action === 'throw' || f.action === 'catch') && f.quality === 'error'
+    );
+    if (advanceErrors.length === 0) return base;
+    const errLabel = getFielderLabel(advanceErrors[0].position);
+    return errLabel ? `${base}+${errLabel}失` : `${base}+失`;
+  };
+
   switch (type) {
     case 'single':
-      return labelForHit ? `${labelForHit}安` : '安';
+      return appendAdvanceError(labelForHit ? `${labelForHit}安` : '安');
     case 'double':
-      return labelForHit ? `${labelForHit}2` : '2';
+      return appendAdvanceError(labelForHit ? `${labelForHit}2` : '2');
     case 'triple':
-      return (directionLabel || fielderLabel || '') ? `${directionLabel || fielderLabel}3` : '3';
+      return appendAdvanceError(
+        (directionLabel || fielderLabel || '') ? `${directionLabel || fielderLabel}3` : '3'
+      );
     case 'homerun':
       return `${directionLabel || fielderLabel || '中'}本`;
     case 'runninghomerun':
@@ -67,6 +79,10 @@ export const formatAtBatSummary = (atBat: AtBat): string => {
       return fielderLabel ? `${fielderLabel}ゴロ` : 'ゴロ';
     case 'flyout':
       return fielderLabel ? `${fielderLabel}飛` : '飛';
+    case 'linerout':
+      return fielderLabel ? `${fielderLabel}直` : '直';
+    case 'foul_fly':
+      return fielderLabel ? `${fielderLabel}邪飛` : '邪飛';
     case 'bunt_out':
       return fielderLabel ? `${fielderLabel}バ失` : 'バ失';
     case 'strikeout_swinging':
@@ -74,11 +90,13 @@ export const formatAtBatSummary = (atBat: AtBat): string => {
     case 'strikeout_looking':
       return '見三振';
     case 'droppedthird':
-      return '振逃';
+      return appendAdvanceError('振逃');
     case 'walk':
-      return '四球';
+      return appendAdvanceError('四球');
+    case 'intentional_walk':
+      return appendAdvanceError('敬遠');
     case 'deadball':
-      return '死球';
+      return appendAdvanceError('死球');
     case 'sac_bunt':
     case 'sacrifice_bunt':
       return '犠打';
@@ -89,6 +107,8 @@ export const formatAtBatSummary = (atBat: AtBat): string => {
       return fielderLabel ? `${fielderLabel}失` : '失';
     case 'interference':
       return '干渉';
+    case 'other':
+      return atBat.note?.trim() || 'その他';
     default:
       return '他';
   }

@@ -249,7 +249,8 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
       }
 
       if (requiresPitchOrder(result.reason)) {
-        if (pitchOrderOptions.length > 0 && (result.pitchOrder === null || result.pitchOrder === undefined)) {
+        // null は「投球なし」。未選択（undefined）のみ不可
+        if (result.pitchOrder === undefined) {
           return false;
         }
       }

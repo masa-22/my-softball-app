@@ -21,7 +21,14 @@ export const POSITIONS: Record<string, PositionDef> = {
   'PH': { code: 'PH', name: '代打', shortName: 'PH', abbr: 'PH', type: 'not_onfield' },
   'PR': { code: 'PR', name: '代走', shortName: 'PR', abbr: 'PR', type: 'not_onfield' },
   'TR': { code: 'TR', name: 'テンポラリーランナー', shortName: 'TR', abbr: 'TR', type: 'not_onfield' },
+  'OPO': { code: 'OPO', name: '追加外野手', shortName: 'OPO', abbr: 'OPO', type: 'not_onfield' },
 } as const;
 
 export const POSITION_LIST = Object.values(POSITIONS);
+
+/** 略称 (P, C, 1B 等) を lineup 用コード (1, 2, 3 等) に変換 */
+export function positionAbbrToCode(abbr: string): string {
+  const entry = Object.entries(POSITIONS).find(([, p]) => p.abbr === abbr);
+  return entry ? entry[0] : abbr;
+}
 

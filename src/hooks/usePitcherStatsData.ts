@@ -6,7 +6,7 @@ import { getAtBats } from '../services/atBatService';
 import { useAtBats } from './useAtBats';
 import { getLineup } from '../services/lineupService';
 import { getWinningPitcher } from '../services/winningPitcherService';
-import { BATTING_RESULTS } from '../data/softball/battingResults';
+import { BATTING_RESULTS, isWalkLikeResult } from '../data/softball/battingResults';
 import { Player } from '../types/Player';
 import { AtBat, RunnerEvent, normalizeScoredRunners } from '../types/AtBat';
 
@@ -90,8 +90,8 @@ const hasErrorOrPassedBallInScoring = (
     a.result && 
     a.batterId === runnerId && (
       a.result.type === 'error' ||
-      a.result.type === 'walk' || 
-      a.result.type === 'deadball' || 
+      isWalkLikeResult(a.result.type) ||
+      a.result.type === 'deadball' ||
       BATTING_RESULTS[a.result.type]?.stats.isHit ||
       BATTING_RESULTS[a.result.type]?.stats.isOnBase
     )
@@ -167,14 +167,13 @@ const calculatePitcherStats = (
     wildPitches: 0,
   };
 
-  // その投手が投げた打席をフィルタ
-  const pitcherAtBats = atBats.filter(
-    (atBat) => atBat.type === 'bat' && atBat.pitcherId === playerId
-  );
+  // その投手が関与した play（mid-play 含む）と、打席のみ
+  const pitcherPlays = atBats.filter((atBat) => atBat.pitcherId === playerId);
+  const pitcherAtBats = pitcherPlays.filter((atBat) => atBat.type === 'bat');
 
-  // 投球回数の計算
+  // 投球回数の計算（steal/other のアウトも含む）
   let totalOuts = 0;
-  pitcherAtBats.forEach((atBat) => {
+  pitcherPlays.forEach((atBat) => {
     const outsAdded = Math.max(0, atBat.situationAfter.outs - atBat.situationBefore.outs);
     totalOuts += outsAdded;
   });
@@ -223,8 +222,8 @@ const calculatePitcherStats = (
           stats.strikeouts++;
         }
 
-        // 四球
-        if (atBat.result.type === 'walk') {
+        // 四球・申告敬遠
+        if (isWalkLikeResult(atBat.result.type)) {
           stats.walks++;
         }
 
@@ -234,8 +233,10 @@ const calculatePitcherStats = (
         }
       }
     }
+  });
 
-    // 暴投（同じ球目の重複は1カウント）
+  // 暴投（mid-play ドキュメント含む。同じ球目の重複は1カウント）
+  pitcherPlays.forEach((atBat) => {
     if (atBat.runnerEvents) {
       const wpPitchSeqs = new Set<number | null>();
       atBat.runnerEvents.forEach((event) => {
@@ -247,13 +248,13 @@ const calculatePitcherStats = (
     }
   });
 
-  // 失点と自責点の計算
-  // その投手が投げた打席で得点したランナーをカウント
-  pitcherAtBats.forEach((atBat) => {
+  // 失点と自責点の計算（mid-play の得点も含む）
+  pitcherPlays.forEach((atBat) => {
     const scoredList = normalizeScoredRunners(atBat.scoredRunners);
     if (scoredList.length > 0) {
       stats.runs += scoredList.length;
       scoredList.forEach((entry) => {
+        if (entry.isTiebreakPlaced) return;
         if (!hasErrorOrPassedBallInScoring(entry.runnerId, atBat, atBats)) {
           stats.earnedRuns++;
         }
@@ -547,11 +548,11 @@ const buildPitcherRowsForSide = async ({
 }): Promise<PitcherStatsRowData[]> => {
   const rows: PitcherStatsRowData[] = [];
 
-  // 守備側の打席を時系列で取得
+  // 守備側の play を時系列で取得（bat + mid-play の steal/other。投球回・暴投・失点に含める）
   const defensiveAtBats = atBats
     .filter(
       (atBat) =>
-        atBat.type === 'bat' &&
+        (atBat.type === 'bat' || atBat.type === 'steal' || atBat.type === 'other') &&
         atBat.pitcherId &&
         ((side === 'home' && atBat.topOrBottom === 'bottom') ||
           (side === 'away' && atBat.topOrBottom === 'top'))

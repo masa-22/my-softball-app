@@ -19,6 +19,8 @@ export interface GameState {
   };
   home_bat_index?: number; // 先攻チームの現在の打順インデックス
   away_bat_index?: number; // 後攻チームの現在の打順インデックス
+  /** 延長タイブレークで配置された2塁走者（代走時は差し替え後のID） */
+  tiebreak_runner_id?: string | null;
   last_updated: string;
 }
 

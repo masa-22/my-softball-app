@@ -7,6 +7,7 @@ export const getAdvanceDistance = (result: string): number => {
       case 'droppedthird':
       case 'error':
       case 'walk':
+      case 'intentional_walk':
       case 'deadball':
       case 'interference':
         return 1;
@@ -88,7 +89,7 @@ export const simulatePlay = (before: GameSnapshot, resultType: string, batterId:
     };
     let scored: string[] = [];
     
-    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(resultType);
+    const isOut = ['groundout', 'flyout', 'linerout', 'foul_fly', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(resultType);
     
     if (isOut) {
         next.outs = Math.min(3, before.outs + 1);
@@ -99,7 +100,7 @@ export const simulatePlay = (before: GameSnapshot, resultType: string, batterId:
     } else {
         const n = getAdvanceDistance(resultType);
         
-        if (resultType === 'walk' || resultType === 'deadball' || resultType === 'interference') {
+        if (resultType === 'walk' || resultType === 'intentional_walk' || resultType === 'deadball' || resultType === 'interference') {
             const { after, scored: s } = advanceRunnersForce(before.runners, batterId);
             next.runners = after;
             scored = s;

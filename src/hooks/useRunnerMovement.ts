@@ -15,6 +15,7 @@ function getAdvanceDistance(result: string): number {
     case 'droppedthird':
     case 'error':
     case 'walk':
+    case 'intentional_walk':
     case 'deadball':
       return 1;
     case 'double':
@@ -84,7 +85,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
       if (after['3']) after['3'] = null;
       return after;
     }
-    if (battingResult === 'error' || battingResult === 'walk' || battingResult === 'deadball') {
+    if (battingResult === 'error' || battingResult === 'walk' || battingResult === 'intentional_walk' || battingResult === 'deadball') {
       if (!batterId) return { ...initialRunners };
       const after = { ...initialRunners };
       if (initialRunners['1']) {
@@ -107,7 +108,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const [showScoreConfirm, setShowScoreConfirm] = useState(false);
   const [pendingScores, setPendingScores] = useState<string[]>([]);
   const [scoredRunnerReasons, setScoredRunnerReasons] = useState<Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'>>({});
-  const [advanceErrorDetail, setAdvanceErrorDetail] = useState<AdvanceErrorDetail | null>(null);
+  const [advanceErrorDetails, setAdvanceErrorDetails] = useState<AdvanceErrorDetail[]>([]);
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [showOutDialog, setShowOutDialog] = useState(false);
   const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
@@ -120,12 +121,12 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const [showOutRunnerDialog, setShowOutRunnerDialog] = useState(false);
   const [outDetailsLocked, setOutDetailsLocked] = useState(() => {
     return (
-      ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && !!batterId && !!playDetails?.position) ||
+      ((battingResult === 'flyout' || battingResult === 'linerout' || battingResult === 'foul_fly' || battingResult === 'sacrifice_fly') && !!batterId && !!playDetails?.position) ||
       ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && !!batterId)
     );
   });
   const [selectedOutRunners, setSelectedOutRunners] = useState<Array<{ runnerId: string; fromBase: BaseKey; outAtBase: BaseKey }>>(() => {
-    if ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
+    if ((battingResult === 'flyout' || battingResult === 'linerout' || battingResult === 'foul_fly' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
       return [{ runnerId: batterId, fromBase: 'home', outAtBase: '1' }];
     }
     if ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && batterId) {
@@ -139,12 +140,12 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     if (presetOutsAfter != null) {
       return Math.max(initialOuts, Math.min(3, presetOutsAfter));
     }
-    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
+    const isOut = ['groundout', 'flyout', 'linerout', 'foul_fly', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
     if (isOut) return Math.min(3, initialOuts + 1);
     return initialOuts;
   });
   const [outDetails, setOutDetails] = useState<Array<{ runnerId: string; base: string; threwPosition: string; caughtPosition: string }>>(() => {
-    if ((battingResult === 'flyout' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
+    if ((battingResult === 'flyout' || battingResult === 'linerout' || battingResult === 'foul_fly' || battingResult === 'sacrifice_fly') && batterId && playDetails?.position) {
       return [{ runnerId: batterId, base: '1', threwPosition: '', caughtPosition: playDetails.position }];
     }
     if ((battingResult === 'strikeout_swinging' || battingResult === 'strikeout_looking') && batterId) {
@@ -204,6 +205,8 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     runninghomerun: 'ランニングホームラン',
     groundout: 'ゴロアウト',
     flyout: 'フライアウト',
+    linerout: 'ライナーアウト',
+    foul_fly: 'ファウルフライ',
     bunt_out: 'バント失敗',
     sacrifice_bunt: '犠打（バント）',
     sacrifice_fly: '犠牲フライ',
@@ -412,7 +415,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
         scoredRunners,
         outDetails,
         scoredRunnerReasons: Object.keys(scoredRunnerReasons).length > 0 ? scoredRunnerReasons : undefined,
-        advanceErrorDetail: advanceErrorDetail ?? undefined,
+        advanceErrorDetails: advanceErrorDetails.length > 0 ? advanceErrorDetails : undefined,
       };
       onComplete(result);
     }
@@ -424,18 +427,21 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     const newReasons = { ...scoredRunnerReasons };
     results.forEach((result) => {
-      const adv = pendingAdvancements.find((a) => a.runnerId === result.runnerId);
-      if (adv && adv.toBase === 'home' && ['hit', 'error', 'steal', 'wildpitch', 'passball'].includes(result.reason)) {
+      if (['hit', 'error', 'steal', 'wildpitch', 'passball'].includes(result.reason)) {
         newReasons[result.runnerId] = result.reason as 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball';
       }
     });
     setScoredRunnerReasons(newReasons);
-    const errResult = results.find((r) => r.reason === 'error' && r.errorDetail?.errorBy && r.errorDetail?.errorType);
-    if (errResult?.errorDetail?.errorBy && errResult.errorDetail?.errorType) {
-      setAdvanceErrorDetail({ position: errResult.errorDetail.errorBy, errorType: errResult.errorDetail.errorType as 'throw' | 'catch' });
-    } else {
-      setAdvanceErrorDetail(null);
-    }
+    const newErrorDetails = [...advanceErrorDetails];
+    results.forEach((r) => {
+      if (r.reason === 'error' && r.errorDetail?.errorBy && r.errorDetail?.errorType) {
+        newErrorDetails.push({
+          position: r.errorDetail.errorBy,
+          errorType: r.errorDetail.errorType as 'throw' | 'catch',
+        });
+      }
+    });
+    setAdvanceErrorDetails(newErrorDetails);
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
   };

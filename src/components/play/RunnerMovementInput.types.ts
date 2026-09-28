@@ -21,8 +21,10 @@ export interface RunnerMovementResult {
     threwPosition: string;
     caughtPosition: string;
   }>;
+  /** 走者ごとの追加進塁理由（本塁以外も含む） */
   scoredRunnerReasons?: Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'>;
-  advanceErrorDetail?: AdvanceErrorDetail;
+  /** 進塁理由で選択した失策（複数可） */
+  advanceErrorDetails?: AdvanceErrorDetail[];
 }
 
 export interface RunnerMovementInputProps {

@@ -49,6 +49,8 @@ type MovementDetails = {
     putoutPosition?: string;
     assistPosition?: string;
   };
+  note?: string;
+  countsAsAtBat?: boolean;
 };
 
 const PlayRegister: React.FC = () => {
@@ -73,9 +75,9 @@ const PlayRegister: React.FC = () => {
     currentHalf,
     pitches,
     setPitches,
-    runnerEvents,
-    addRunnerEvent,
     clearRunnerEvents,
+    ensurePlateAppearanceId,
+    clearPlateAppearanceId,
     handleCountsChange,
     handleCountsReset
   } = useGameInput(matchId);
@@ -100,6 +102,9 @@ const PlayRegister: React.FC = () => {
     handlePlayerChange,
     handleSidebarSave,
     advanceBattingOrder,
+    beginBatIndexUndo,
+    applyRestoredBatIndices,
+    endBatIndexUndo,
     currentBattingOrder,
     recentBatterResults,
     offensePlayers,
@@ -116,13 +121,37 @@ const PlayRegister: React.FC = () => {
   });
 
   // 3. Runner Operations
+  const defensiveLineup = useMemo(
+    () => (currentHalf === 'top' ? awayLineup : homeLineup),
+    [currentHalf, homeLineup, awayLineup]
+  );
+
+  const defensePositionPlayerNames = useMemo(() => {
+    const defensePlayers: any[] = (currentHalf === 'top' ? awayPlayers : homePlayers) || [];
+    const names: Record<string, string> = {};
+    defensiveLineup.forEach((entry) => {
+      const pos = POSITIONS[entry.position];
+      if (!pos || pos.type === 'not_onfield') return;
+      const player = defensePlayers.find((p) => p.playerId === entry.playerId);
+      if (player) names[pos.abbr] = `${player.familyName ?? ''} ${player.givenName ?? ''}`.trim();
+    });
+    return names;
+  }, [currentHalf, defensiveLineup, homePlayers, awayPlayers]);
+
   const runnerManager = useRunnerManager({
     matchId,
     runners,
     setRunners,
     offensePlayers,
     currentBSO,
-    recordRunnerEvent: addRunnerEvent,
+    currentInning: currentInningVal,
+    currentHalf,
+    currentBatter,
+    currentPitcher,
+    battingOrder: currentHalf === 'top' ? (homeBatIndex ?? 0) + 1 : (awayBatIndex ?? 0) + 1,
+    ensurePlateAppearanceId,
+    clearPlateAppearanceId,
+    defensiveLineup,
   });
 
   // 4. Game Processing (Play Result)
@@ -138,8 +167,8 @@ const PlayRegister: React.FC = () => {
     runners,
     setRunners,
     pitches,
-    runnerEvents,
     clearRunnerEvents,
+    ensurePlateAppearanceId,
     currentBatter,
     currentPitcher,
     homeBatIndex: homeBatIndex ?? 0,
@@ -369,6 +398,16 @@ const PlayRegister: React.FC = () => {
     setShowRunnerMovement(true);
   };
 
+  const handleIntentionalWalkCommit = () => {
+    setStrikeoutType(null);
+    setPendingOutcome({ kind: 'walk' });
+    setShowPlayResult(false);
+    // pitches は触らない（投げた分だけ球数に加算）
+    setBattingResultForMovement('intentional_walk');
+    setPlayDetailsForMovement({ position: '', batType: 'walk', outfieldDirection: '' });
+    setShowRunnerMovement(true);
+  };
+
   const handleOpenBoxScore = () => {
     refreshBoxScore();
     setShowBoxScore(true);
@@ -438,14 +477,14 @@ const PlayRegister: React.FC = () => {
 
   const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
-    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
+    const isOut = ['groundout', 'flyout', 'linerout', 'foul_fly', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
     const nextO = currentBSO.o + (isOut ? 1 : 0);
     setRunnerMovementOutsAfterOverride(
       typeof outsAfterOverride === 'number' ? outsAfterOverride : null
     );
 
-    // 2アウトでのフライアウトはRunnerMovementに移らず、自動的にアウトを加算しランナーを動かさずに保存
-    if (currentBSO.o === 2 && battingResult === 'flyout') {
+    // 2アウトでのフライアウト／ライナーアウト／ファウルフライはRunnerMovementに移らず、自動的にアウトを加算しランナーを動かさずに保存
+    if (currentBSO.o === 2 && (battingResult === 'flyout' || battingResult === 'linerout' || battingResult === 'foul_fly')) {
       // ランナーを動かさずに現在の位置を保持
       const movementResult: RunnerMovementResult = {
         afterRunners: { '1': runners['1'], '2': runners['2'], '3': runners['3'] },
@@ -566,7 +605,7 @@ const PlayRegister: React.FC = () => {
   }, [matchId, winningPitcherModalSide]);
 
   const baseMovementOutsAfter = useMemo(() => {
-    const isOut = ['groundout', 'flyout', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResultForMovement);
+    const isOut = ['groundout', 'flyout', 'linerout', 'foul_fly', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResultForMovement);
     return Math.min(3, currentBSO.o + (isOut ? 1 : 0));
   }, [battingResultForMovement, currentBSO.o]);
 
@@ -577,13 +616,34 @@ const PlayRegister: React.FC = () => {
     if (!battingResultForMovement) return '';
     const definition = BATTING_RESULTS[battingResultForMovement as keyof typeof BATTING_RESULTS];
     const defaultLabel = definition?.name ?? battingResultForMovement;
-    if (['groundout', 'flyout'].includes(battingResultForMovement) && playDetailsForMovement.position) {
+    if (['groundout', 'flyout', 'linerout', 'foul_fly'].includes(battingResultForMovement) && playDetailsForMovement.position) {
       const short = POSITIONS[playDetailsForMovement.position]?.shortName || '';
       if (!short) return defaultLabel;
-      return `${short}${battingResultForMovement === 'groundout' ? 'ゴロ' : '飛'}`;
+      if (battingResultForMovement === 'groundout') return `${short}ゴロ`;
+      if (battingResultForMovement === 'linerout') return `${short}直`;
+      if (battingResultForMovement === 'foul_fly') return `${short}邪飛`;
+      return `${short}飛`;
     }
     return defaultLabel;
   }, [battingResultForMovement, playDetailsForMovement.position]);
+
+  const [resavingStats, setResavingStats] = useState(false);
+  const [resaveMessage, setResaveMessage] = useState<string | null>(null);
+
+  const handleResavePlayerGameStats = async () => {
+    if (!matchId) return;
+    setResavingStats(true);
+    setResaveMessage(null);
+    try {
+      await savePlayerGameStats(matchId);
+      setResaveMessage('成績を保存しました');
+    } catch (err) {
+      console.error('Error resaving player game stats:', err);
+      setResaveMessage('成績の保存に失敗しました');
+    } finally {
+      setResavingStats(false);
+    }
+  };
 
   const playAreaLocked = isGameFinished;
   const canEditPlayArea = !playAreaLocked && location.pathname.includes('/play');
@@ -597,7 +657,7 @@ const PlayRegister: React.FC = () => {
 
   const canUndoLastAtBat =
     canEditPlayArea &&
-    allAtBats.some((a) => a.type === 'bat');
+    allAtBats.length > 0;
 
   const handleUndoLastPitch = () => {
     if (!matchId || !canUndoLastPitch) return;
@@ -613,18 +673,22 @@ const PlayRegister: React.FC = () => {
     if (!matchId || !canUndoLastAtBat) return;
     if (
       !window.confirm(
-        '最後の打席記録を取り消しますか？スコア・カウント・ランナー・打順がリアルタイムデータベース上で巻き戻ります。'
+        '最後のプレー記録を取り消しますか？スコア・カウント・ランナー・打順がリアルタイムデータベース上で巻き戻ります。'
       )
     ) {
       return;
     }
+    beginBatIndexUndo();
     try {
-      await undoLastBatAtBat(matchId);
+      const restored = await undoLastBatAtBat(matchId);
+      applyRestoredBatIndices(restored);
       resetUI();
       setPitches([]);
       clearRunnerEvents();
     } catch (e) {
       alert(e instanceof Error ? e.message : '取り消しに失敗しました');
+    } finally {
+      endBatIndexUndo();
     }
   };
 
@@ -850,9 +914,9 @@ const PlayRegister: React.FC = () => {
                   onFinish={async () => {
                     if (!matchId) return;
                     const game = await getGame(matchId);
-                    if (!game) return;
+                    if (!game) throw new Error(`Game not found: ${matchId}`);
                     const gameState = await getGameState(matchId);
-                    if (!gameState) return;
+                    if (!gameState) throw new Error(`Game state not found: ${matchId}`);
 
                     // 試合終了前に勝利投手の選択が必要かチェック
                     const atBats = await getAtBats(matchId);
@@ -900,17 +964,29 @@ const PlayRegister: React.FC = () => {
 
                     // 試合終了
                     const finished = await finishGame();
-                    if (finished) {
-                      try {
-                        await savePlayerGameStats(matchId);
-                      } catch (err) {
-                        console.error('Error saving player game stats:', err);
-                      }
+                    if (!finished) throw new Error('finishGame failed');
+                    try {
+                      await savePlayerGameStats(matchId);
+                    } catch (err) {
+                      console.error('Error saving player game stats:', err);
                     }
                   }}
                   busy={statusTransitioning}
                   disabled={!matchId}
                 />
+                {isGameFinished && (
+                  <button
+                    type="button"
+                    className="boxscore-button"
+                    onClick={handleResavePlayerGameStats}
+                    disabled={!matchId || resavingStats}
+                  >
+                    {resavingStats ? '保存中...' : '成績を再保存'}
+                  </button>
+                )}
+                {isGameFinished && resaveMessage && (
+                  <span style={{ fontSize: 12, color: '#495057' }}>{resaveMessage}</span>
+                )}
               </div>
             </div>
           </div>
@@ -948,9 +1024,14 @@ const PlayRegister: React.FC = () => {
                 getRunnerName={runnerManager.getRunnerName}
                 onRunnerBaseClick={runnerManager.handleRunnerBaseClick}
                 onAddOutClick={runnerManager.handleAddOutClick}
+                onRecordAdvanceClick={runnerManager.handleRecordAdvanceClick}
                 showAdvanceDialog={runnerManager.showAdvanceDialog}
                 pendingAdvancements={runnerManager.pendingAdvancements}
                 onAdvanceConfirm={runnerManager.handleRunnerAdvanceConfirm}
+                showRecordAdvanceDialog={runnerManager.showRecordAdvanceDialog}
+                occupiedRunnersForAdvance={runnerManager.occupiedRunnersForAdvance}
+                onRecordAdvanceConfirm={runnerManager.handleRecordAdvanceConfirm}
+                defensePositionPlayerNames={defensePositionPlayerNames}
                 showOutDialog={runnerManager.showOutDialog}
                 pendingOuts={runnerManager.pendingOuts}
                 onOutConfirm={runnerManager.handleRunnerOutConfirm}
@@ -968,6 +1049,7 @@ const PlayRegister: React.FC = () => {
                     ? {
                         onUndoLastPitch: handleUndoLastPitch,
                         onUndoLastAtBat: handleUndoLastAtBat,
+                        onIntentionalWalk: handleIntentionalWalkCommit,
                         canUndoPitch: !!matchId && canUndoLastPitch,
                         canUndoAtBat: !!matchId && canUndoLastAtBat,
                       }

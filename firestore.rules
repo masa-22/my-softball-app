@@ -80,5 +80,12 @@ service cloud.firestore {
       allow create, update: if isAuthenticated();
       allow delete: if false;
     }
+
+    // 選手別試合成績コレクション
+    match /playerGameStats/{statsId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
   }
 }

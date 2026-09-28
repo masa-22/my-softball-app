@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { subscribeGameState, updateCountsRealtime, resetCountsRealtime } from '../services/gameStateService';
 import { RunnerEvent } from '../types/AtBat';
 import { PitchData } from '../types/PitchData';
@@ -18,7 +18,12 @@ export const useGameInput = (matchId: string | undefined) => {
   const [pitches, setPitches] = useState<PitchData[]>([]);
 
   // ランナーイベント（打席内で発生した走塁イベントを一時保持）
+  // mid-play は即 Firestore 保存するため、バッファには載せない想定
   const [runnerEvents, setRunnerEvents] = useState<RunnerEvent[]>([]);
+
+  // 同一プレートアピアランスを束ねる ID
+  const [plateAppearanceId, setPlateAppearanceId] = useState<string | null>(null);
+  const plateAppearanceIdRef = useRef<string | null>(null);
 
   // gameState の購読（リアルタイムリスナー）
   useEffect(() => {
@@ -69,9 +74,24 @@ export const useGameInput = (matchId: string | undefined) => {
     setRunnerEvents(prev => [...prev, event]);
   };
 
-  const clearRunnerEvents = () => {
+  const clearPlateAppearanceId = useCallback(() => {
+    plateAppearanceIdRef.current = null;
+    setPlateAppearanceId(null);
+  }, []);
+
+  const clearRunnerEvents = useCallback(() => {
     setRunnerEvents([]);
-  };
+    clearPlateAppearanceId();
+  }, [clearPlateAppearanceId]);
+
+  /** 打席内の最初の play 保存時に plateAppearanceId を確定する */
+  const ensurePlateAppearanceId = useCallback((matchIdForPa: string, playIndex: number): string => {
+    if (plateAppearanceIdRef.current) return plateAppearanceIdRef.current;
+    const id = `${matchIdForPa}_pa_${String(playIndex).padStart(3, '0')}`;
+    plateAppearanceIdRef.current = id;
+    setPlateAppearanceId(id);
+    return id;
+  }, []);
 
   return {
     runners,
@@ -87,8 +107,10 @@ export const useGameInput = (matchId: string | undefined) => {
     runnerEvents,
     addRunnerEvent,
     clearRunnerEvents,
+    plateAppearanceId,
+    ensurePlateAppearanceId,
+    clearPlateAppearanceId,
     handleCountsChange,
     handleCountsReset
   };
 };
-
