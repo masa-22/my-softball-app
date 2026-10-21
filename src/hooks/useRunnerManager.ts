@@ -25,6 +25,7 @@ import {
   localRunnersFromGameState,
   markTiebreakScoredRunners,
 } from '../utils/tiebreak';
+import { evaluateAfterHalf, evaluateAfterRuns, type GameEndDecision } from '../utils/gameEnd';
 
 type RunnersState = { '1': string | null; '2': string | null; '3': string | null };
 
@@ -43,6 +44,7 @@ interface UseRunnerManagerProps {
   clearPlateAppearanceId: () => void;
   /** 現在の守備側ラインナップ（失策の選手特定に使用） */
   defensiveLineup?: LineupEntry[];
+  onGameEndCandidate?: (decision: Exclude<GameEndDecision, { action: 'none' }>) => Promise<'finished' | 'continue'>;
 }
 
 const createRunnerEventId = () => {
@@ -121,6 +123,7 @@ export const useRunnerManager = ({
   ensurePlateAppearanceId,
   clearPlateAppearanceId,
   defensiveLineup = [],
+  onGameEndCandidate,
 }: UseRunnerManagerProps) => {
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [showRecordAdvanceDialog, setShowRecordAdvanceDialog] = useState(false);
@@ -132,6 +135,41 @@ export const useRunnerManager = ({
   const [previousRunners, setPreviousRunners] = useState<RunnersState>({ '1': null, '2': null, '3': null });
 
   const baseLabel = (b: '1' | '2' | '3' | 'home') => (b === 'home' ? 'ホーム' : b === '1' ? '一塁' : b === '2' ? '二塁' : '三塁');
+
+  const endIfRunsDecide = async (): Promise<boolean> => {
+    if (!matchId || !onGameEndCandidate) return false;
+    const gs = await getGameState(matchId);
+    if (!gs) return false;
+    const decision = evaluateAfterRuns({
+      inning: gs.current_inning,
+      half: gs.top_bottom,
+      topScore: gs.scores.top_total,
+      bottomScore: gs.scores.bottom_total,
+    });
+    if (decision.action === 'none') return false;
+    return (await onGameEndCandidate(decision)) === 'finished';
+  };
+
+  const closeHalfOrEnd = async (): Promise<boolean> => {
+    if (!matchId) return false;
+    if (onGameEndCandidate) {
+      const gs = await getGameState(matchId);
+      if (gs) {
+        const decision = evaluateAfterHalf({
+          inning: gs.current_inning,
+          half: gs.top_bottom,
+          topScore: gs.scores.top_total,
+          bottomScore: gs.scores.bottom_total,
+        });
+        if (decision.action !== 'none' && (await onGameEndCandidate(decision)) === 'finished') {
+          return true;
+        }
+      }
+    }
+    const closed = await closeHalfInningRealtime(matchId);
+    setRunners(localRunnersFromGameState(closed?.runners));
+    return false;
+  };
 
   const getRunnerName = (playerId: string | null) => {
     if (!playerId) return '';
@@ -295,6 +333,9 @@ export const useRunnerManager = ({
     setShowAdvanceDialog(false);
     setShowRecordAdvanceDialog(false);
     setPendingAdvancements([]);
+    if (scoredRunners.length > 0) {
+      await endIfRunsDecide();
+    }
   };
 
   const handleRunnerAdvanceConfirm = async (results: AdvanceReasonResult[]) => {
@@ -386,8 +427,7 @@ export const useRunnerManager = ({
     }
 
     if (newO >= 3) {
-      const closed = await closeHalfInningRealtime(matchId);
-      setRunners(localRunnersFromGameState(closed?.runners));
+      await closeHalfOrEnd();
       clearPlateAppearanceId();
     } else {
       setRunners(next);
