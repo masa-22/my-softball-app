@@ -5,6 +5,7 @@ import { AtBat, PitchRecord } from '../../../types/AtBat';
 import { PitchData } from '../../../types/PitchData';
 import PitchChartView from './PitchChartView';
 import { Player } from '../../../types/Player';
+import { displayPlayerName } from '../../../utils/anonymousPlayer';
 
 interface PitchChartModalProps {
   open: boolean;
@@ -189,9 +190,7 @@ const PitchChartModal: React.FC<PitchChartModalProps> = ({ open, onClose, matchI
                 }}
               >
                 {pitchers.map((pitcher) => {
-                  const name = pitcher.player
-                    ? `${pitcher.player.familyName || ''} ${pitcher.player.givenName || ''}`.trim()
-                    : '未登録';
+                  const name = displayPlayerName(pitcher.player, pitcher.playerId) || '未登録';
                   return (
                     <option key={pitcher.playerId} value={pitcher.playerId}>
                       {name}

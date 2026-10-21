@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Player } from '../../../types/Player';
+import { displayPlayerName } from '../../../utils/anonymousPlayer';
 
 type WinningPitcherModalProps = {
   open: boolean;
@@ -8,12 +9,8 @@ type WinningPitcherModalProps = {
   onCancel: () => void;
 };
 
-const formatPlayerName = (player: Player | undefined) => {
-  if (!player) return '未登録';
-  const family = player.familyName ?? '';
-  const given = player.givenName ?? '';
-  return `${family} ${given}`.trim() || '未登録';
-};
+const formatPlayerName = (player: Player | undefined, playerId?: string) =>
+  displayPlayerName(player, playerId) || '未登録';
 
 const WinningPitcherModal: React.FC<WinningPitcherModalProps> = ({
   open,
@@ -85,7 +82,7 @@ const WinningPitcherModal: React.FC<WinningPitcherModalProps> = ({
                 onChange={(e) => setSelectedPitcherId(e.target.value)}
                 style={{ marginRight: 8 }}
               />
-              {formatPlayerName(pitcher.player)}
+              {formatPlayerName(pitcher.player, pitcher.playerId)}
             </label>
           ))}
         </div>

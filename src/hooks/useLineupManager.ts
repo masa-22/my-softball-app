@@ -16,6 +16,7 @@ import { PitchData } from '../types/PitchData';
 import { useAtBats } from './useAtBats';
 import { formatAtBatSummary } from '../utils/scoreKeeping';
 import { Player } from '../types/Player';
+import { displayPlayerName, mergeAnonymousPlayers } from '../utils/anonymousPlayer';
 import { ParticipationEntry } from '../types/Participation';
 import { PositionDef, POSITION_LIST, POSITIONS } from '../data/softball/positions';
 import type { UndoBatIndexResult } from '../services/atBatUndoService';
@@ -144,8 +145,12 @@ export const useLineupManager = ({
         const l = await getLineup(matchId);
         setLineup(l);
 
-        const homePs = await getPlayers(g.topTeam.id);
-        const awayPs = await getPlayers(g.bottomTeam.id);
+        const [homeRegistered, awayRegistered] = await Promise.all([
+          getPlayers(g.topTeam.id),
+          getPlayers(g.bottomTeam.id),
+        ]);
+        const homePs = mergeAnonymousPlayers(homeRegistered, l.home, g.topTeam.id);
+        const awayPs = mergeAnonymousPlayers(awayRegistered, l.away, g.bottomTeam.id);
         setHomePlayers(homePs);
         setAwayPlayers(awayPs);
 
@@ -477,16 +482,14 @@ export const useLineupManager = ({
   }, []);
 
   const buildPlayerLabel = (player?: Player | null) => {
-    if (!player) return '';
-    const full = `${player.familyName || ''} ${player.givenName || ''}`.trim();
-    return full || player.playerId || '';
+    return displayPlayerName(player) || player?.playerId || '';
   };
 
   const resolvePlayerLabel = (side: 'home' | 'away', playerId?: string | null) => {
     if (!playerId) return '—';
     const players = side === 'home' ? homePlayers : awayPlayers;
     const player = players.find(p => p.playerId === playerId);
-    return buildPlayerLabel(player) || playerId;
+    return displayPlayerName(player, playerId) || '—';
   };
 
   const buildCandidateOptions = (side: 'home' | 'away'): PlayerOption[] => {

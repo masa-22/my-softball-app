@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 import { getGames } from '../../services/gameService';
+import { getTournaments } from '../../services/tournamentService';
 import { getGameState } from '../../services/gameStateService';
 import { Game } from '../../types/Game';
 import { GameState } from '../../types/GameState';
@@ -28,6 +29,7 @@ const HomePage: React.FC = () => {
   const [playerListOpen, setPlayerListOpen] = useState(false);
   const [games, setGames] = useState<Array<{ game: Game; state: GameState | null }>>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
+  const [skipPlayerTournamentIds, setSkipPlayerTournamentIds] = useState<Set<string>>(new Set());
 
   const [approvalStatus, setApprovalStatus] = useState<'loading' | 'none' | 'pending' | 'approved' | null>(null);
   const [checkingApproval, setCheckingApproval] = useState(false);
@@ -57,7 +59,10 @@ const HomePage: React.FC = () => {
       if (!currentUser) return;
       try {
         setGamesLoading(true);
-        const allGames = await getGames();
+        const [allGames, tournaments] = await Promise.all([getGames(), getTournaments()]);
+        setSkipPlayerTournamentIds(new Set(
+          tournaments.filter((tournament) => tournament.skipPlayerRegistration).map((tournament) => tournament.id)
+        ));
         const gamesWithState = await Promise.all(
           allGames.map(async (game) => {
             try {
@@ -267,7 +272,9 @@ const HomePage: React.FC = () => {
     );
   }
 
-  const finishedGames = games.filter(({ state }) => state?.status === 'finished');
+  const finishedGames = games.filter(({ game, state }) =>
+    state?.status === 'finished' && !skipPlayerTournamentIds.has(String(game.tournament?.id ?? ''))
+  );
 
   const renderFinishedGameCards = (onNavigate: (gameId: string) => void) =>
     finishedGames

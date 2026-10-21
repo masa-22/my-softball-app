@@ -65,12 +65,48 @@ export const registerTournament = async (data: TournamentRegisterData) : Promise
     const next = maxNum + 1;
     const id = `t${String(next).padStart(2, '0')}`;
 
-    const newT: Tournament = { id, year, name, type, createdAt: new Date().toISOString() };
+    const newT: Tournament = {
+      id,
+      year,
+      name,
+      type,
+      skipPlayerRegistration: !!data.skipPlayerRegistration,
+      createdAt: new Date().toISOString(),
+    };
     const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, newT.id);
     await setDoc(tournamentRef, newT);
     return newT;
   } catch (error) {
     console.error('Error registering tournament:', error);
+    throw error;
+  }
+};
+
+export const getTournament = async (id: string): Promise<Tournament | null> => {
+  try {
+    const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, id);
+    const snap = await getDoc(tournamentRef);
+    if (!snap.exists()) return null;
+    return snap.data() as Tournament;
+  } catch (error) {
+    console.error('Error getting tournament:', error);
+    throw error;
+  }
+};
+
+export const updateTournamentSkipPlayerRegistration = async (
+  id: string,
+  skipPlayerRegistration: boolean
+): Promise<void> => {
+  try {
+    const tournamentRef = doc(db, TOURNAMENTS_COLLECTION, id);
+    const snap = await getDoc(tournamentRef);
+    if (!snap.exists()) {
+      throw new Error('大会が見つかりません。');
+    }
+    await setDoc(tournamentRef, { skipPlayerRegistration }, { merge: true });
+  } catch (error) {
+    console.error('Error updating tournament:', error);
     throw error;
   }
 };

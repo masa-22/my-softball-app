@@ -223,6 +223,7 @@ export type GameStateSyncPatch = Partial<{
   matchup: GameState['matchup'];
   home_bat_index: number;
   away_bat_index: number;
+  tiebreak_runner_id: string | null;
 }>;
 
 /**
@@ -242,6 +243,7 @@ export const applyGameStateSync = async (
     if (patch.matchup !== undefined) state.matchup = { ...state.matchup, ...patch.matchup };
     if (patch.home_bat_index !== undefined) state.home_bat_index = patch.home_bat_index;
     if (patch.away_bat_index !== undefined) state.away_bat_index = patch.away_bat_index;
+    if (patch.tiebreak_runner_id !== undefined) state.tiebreak_runner_id = patch.tiebreak_runner_id;
     touch(state);
     const stateRef = getGameStateRef(gameId);
     const payload: Record<string, unknown> = { last_updated: state.last_updated };
@@ -253,6 +255,7 @@ export const applyGameStateSync = async (
     if (patch.matchup !== undefined) payload.matchup = state.matchup;
     if (patch.home_bat_index !== undefined) payload.home_bat_index = state.home_bat_index;
     if (patch.away_bat_index !== undefined) payload.away_bat_index = state.away_bat_index;
+    if (patch.tiebreak_runner_id !== undefined) payload.tiebreak_runner_id = state.tiebreak_runner_id;
     await update(stateRef, payload);
     return state;
   } catch (error) {

@@ -5,6 +5,7 @@ import { getUserApprovalStatus, canEdit } from '../../services/userApprovalServi
 import { searchTeams, getPrefectures, getAffiliations } from '../../services/teamService';
 import { getPlayers } from '../../services/playerService';
 import { getGames } from '../../services/gameService';
+import { getTournaments } from '../../services/tournamentService';
 import { getGameState } from '../../services/gameStateService';
 import LoadingIndicator from '../common/LoadingIndicator';
 import PlayerListItem from '../player/PlayerListItem';
@@ -31,6 +32,7 @@ const ViewerPage: React.FC = () => {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [games, setGames] = useState<Array<{ game: Game; state: GameState | null }>>([]);
   const [gamesLoading, setGamesLoading] = useState(false);
+  const [skipPlayerTournamentIds, setSkipPlayerTournamentIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +79,10 @@ const ViewerPage: React.FC = () => {
     const loadGames = async () => {
       try {
         setGamesLoading(true);
-        const allGames = await getGames();
+        const [allGames, tournaments] = await Promise.all([getGames(), getTournaments()]);
+        setSkipPlayerTournamentIds(new Set(
+          tournaments.filter((tournament) => tournament.skipPlayerRegistration).map((tournament) => tournament.id)
+        ));
         const gamesWithState = await Promise.all(
           allGames.map(async (game) => {
             try {
@@ -203,7 +208,9 @@ const ViewerPage: React.FC = () => {
     );
   }
 
-  const finishedGames = games.filter(({ state }) => state?.status === 'finished');
+  const finishedGames = games.filter(({ game, state }) =>
+    state?.status === 'finished' && !skipPlayerTournamentIds.has(String(game.tournament?.id ?? ''))
+  );
 
   return (
     <div style={{ width: '95%', maxWidth: '800px', margin: '0 auto', padding: '20px' }}>

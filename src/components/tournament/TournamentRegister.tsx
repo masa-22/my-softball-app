@@ -6,13 +6,14 @@ const TournamentRegister: React.FC = () => {
   const [year, setYear] = useState('');
   const [name, setName] = useState('');
   const [type, setType] = useState<'トーナメント' | 'リーグ' | ''>('');
+  const [skipPlayerRegistration, setSkipPlayerRegistration] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   // 追加: 確認モーダル
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pending, setPending] = useState<{ year: string; name: string; type: string } | null>(null);
+  const [pending, setPending] = useState<{ year: string; name: string; type: string; skipPlayerRegistration: boolean } | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +21,7 @@ const TournamentRegister: React.FC = () => {
       setError('すべてのフィールドを入力してください。');
       return;
     }
-    setPending({ year, name, type });
+    setPending({ year, name, type, skipPlayerRegistration });
     setConfirmOpen(true);
   };
 
@@ -36,6 +37,7 @@ const TournamentRegister: React.FC = () => {
       setYear('');
       setName('');
       setType('');
+      setSkipPlayerRegistration(false);
     } catch (err: any) {
       console.error(err);
       if (err.code === 'DUPLICATE') setError('同じ年と大会名の組合せは既に登録されています。');
@@ -72,6 +74,17 @@ const TournamentRegister: React.FC = () => {
           </select>
         </div>
 
+        <div style={{ marginBottom:12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={skipPlayerRegistration}
+              onChange={(e) => setSkipPlayerRegistration(e.target.checked)}
+            />
+            選手登録なしで試合を進める（打順枠のみ。個人成績は保存しない）
+          </label>
+        </div>
+
         <button type="submit" disabled={loading} style={{ width: '100%', padding:'12px', background:'#27ae60', color:'#fff', border:'none', borderRadius:'4px', fontWeight:'bold', cursor:'pointer' }}>
           {loading ? '登録中...' : '大会を登録'}
         </button>
@@ -84,6 +97,7 @@ const TournamentRegister: React.FC = () => {
             <p><strong>開催年:</strong> {pending.year}</p>
             <p><strong>大会名:</strong> {pending.name}</p>
             <p><strong>種別:</strong> {pending.type}</p>
+            <p><strong>選手登録:</strong> {pending.skipPlayerRegistration ? '不要（打順枠のみ）' : '必要'}</p>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setConfirmOpen(false)} style={{ padding: '8px 12px' }}>キャンセル</button>

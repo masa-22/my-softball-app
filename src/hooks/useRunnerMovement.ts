@@ -8,6 +8,7 @@ import type { ScoredRunnerEntry } from '../types/AtBat';
 import type { RunnerMovementInputProps, RunnerMovementResult, AdvanceErrorDetail, BaseKey } from '../components/play/RunnerMovementInput.types';
 import type { RunnerAdvancement, AdvanceReasonResult } from '../components/play/runner/AdvanceReasonDialog';
 import type { RunnerOut, OutReasonResult } from '../components/play/runner/OutReasonDialog';
+import { displayPlayerName, isAnonymousPlayerId, virtualPlayerFromAnonymousId } from '../utils/anonymousPlayer';
 
 function getAdvanceDistance(result: string): number {
   switch (result) {
@@ -177,22 +178,26 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     });
   }, [presetOutsAfter, initialOuts]);
 
+  const findOffensePlayer = (playerId: string | null | undefined) => {
+    if (!playerId) return null;
+    return offensePlayers.find((p) => p.playerId === playerId)
+      || (isAnonymousPlayerId(playerId) ? virtualPlayerFromAnonymousId(playerId, offenseTeamId ?? '') : null);
+  };
+
   const currentBatter = useMemo(() => {
     if (!batterId || offenseTeamId == null) return null;
-    return offensePlayers.find((p) => p.playerId === batterId) || null;
+    return findOffensePlayer(batterId);
   }, [batterId, offensePlayers, offenseTeamId]);
 
   const getPlayerName = (playerId: string | null) => {
     if (!playerId) return '';
-    const player = offensePlayers.find((p) => p.playerId === playerId);
-    if (!player) return '';
-    return `${player.familyName} ${player.givenName}`.trim();
+    return displayPlayerName(findOffensePlayer(playerId), playerId);
   };
 
   const getRunnerDisplayName = (playerId: string | null) => {
     if (!playerId) return '';
     if (playerId === batterId && currentBatter) {
-      return `${currentBatter.familyName} ${currentBatter.givenName}`.trim();
+      return displayPlayerName(currentBatter, playerId);
     }
     return getPlayerName(playerId);
   };
@@ -311,7 +316,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     if (batterId && currentBatter) {
       runners.push({
         id: batterId,
-        name: `${currentBatter.familyName} ${currentBatter.givenName}`.trim(),
+        name: displayPlayerName(currentBatter, batterId),
         label: '打者',
         fromBase: 'home',
       });
@@ -361,8 +366,8 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     if (base === 'home') {
       const candidates: Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }> = [];
       if (afterRunners['3']) {
-        const player = offensePlayers.find((p) => p.playerId === afterRunners['3']);
-        if (player) candidates.push({ id: afterRunners['3']!, name: `${player.familyName} ${player.givenName}`.trim(), fromBase: '3' });
+        const player = findOffensePlayer(afterRunners['3']);
+        if (player) candidates.push({ id: afterRunners['3']!, name: displayPlayerName(player, afterRunners['3']), fromBase: '3' });
       }
       if (candidates.length > 0) {
         setCandidateRunners(candidates);
@@ -377,13 +382,13 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     const fromBase = fromBaseNum === 0 ? null : (String(fromBaseNum) as '1' | '2' | '3');
     const candidates: Array<{ id: string; name: string; fromBase: '1' | '2' | '3' }> = [];
     if (fromBase && afterRunners[fromBase]) {
-      const player = offensePlayers.find((p) => p.playerId === afterRunners[fromBase]);
-      if (player) candidates.push({ id: afterRunners[fromBase]!, name: `${player.familyName} ${player.givenName}`.trim(), fromBase });
+      const player = findOffensePlayer(afterRunners[fromBase]);
+      if (player) candidates.push({ id: afterRunners[fromBase]!, name: displayPlayerName(player, afterRunners[fromBase]), fromBase });
     }
     if (base === '1' && batterId) {
-      const player = offensePlayers.find((p) => p.playerId === batterId);
+      const player = findOffensePlayer(batterId);
       if (player && !candidates.find((c) => c.id === batterId)) {
-        candidates.push({ id: batterId, name: `${player.familyName} ${player.givenName}`.trim(), fromBase: '1' });
+        candidates.push({ id: batterId, name: displayPlayerName(player, batterId), fromBase: '1' });
       }
     }
     if (candidates.length === 0) {
@@ -530,13 +535,13 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     if (selectedTargetBase !== 'home') next[selectedTargetBase] = selectedRunnerId;
     setAfterRunners(next);
     setShowRunnerSelectDialog(false);
-    const player = offensePlayers.find((p) => p.playerId === selectedRunnerId);
+    const player = findOffensePlayer(selectedRunnerId);
     const fromBase = candidateRunners.find((r) => r.id === selectedRunnerId)?.fromBase;
     if (player && fromBase) {
       setPendingAdvancements([
         {
           runnerId: selectedRunnerId,
-          runnerName: `${player.familyName} ${player.givenName}`.trim(),
+          runnerName: displayPlayerName(player, selectedRunnerId),
           fromBase,
           toBase: selectedTargetBase,
         },

@@ -9,6 +9,7 @@ import { getWinningPitcher } from '../services/winningPitcherService';
 import { BATTING_RESULTS, isWalkLikeResult } from '../data/softball/battingResults';
 import { Player } from '../types/Player';
 import { AtBat, RunnerEvent, normalizeScoredRunners } from '../types/AtBat';
+import { displayPlayerName, mergeAnonymousPlayers } from '../utils/anonymousPlayer';
 
 type Side = 'home' | 'away';
 
@@ -47,12 +48,8 @@ export interface PitcherStatsData {
   away: PitcherStatsTeamData;
 }
 
-const formatPlayerName = (player: Player | undefined) => {
-  if (!player) return '';
-  const family = player.familyName ?? '';
-  const given = player.givenName ?? '';
-  return `${family} ${given}`.trim();
-};
+const formatPlayerName = (player: Player | undefined, playerId?: string | null) =>
+  displayPlayerName(player, playerId ?? player?.playerId);
 
 // ランナーが出塁した時点から得点するまでの過程でエラーやパスボールがあったかチェック
 const hasErrorOrPassedBallInScoring = (
@@ -586,7 +583,7 @@ const buildPitcherRowsForSide = async ({
   const flushStint = () => {
     if (!currentPitcherId || currentStint.length === 0) return;
     const player = players.find((p) => p.playerId === currentPitcherId);
-    const displayName = formatPlayerName(player) || '未登録';
+    const displayName = formatPlayerName(player, currentPitcherId) || '未登録';
     const stats = calculatePitcherStats(currentPitcherId, currentStint, side, gameState);
 
     if (gameState?.status === 'finished') {
@@ -663,8 +660,8 @@ const buildPitcherStatsData = async (matchId: string, atBats: AtBat[]): Promise<
   }
 
   const lineup = await getLineup(matchId);
-  const homePlayers = await getPlayers(game.topTeam.id);
-  const awayPlayers = await getPlayers(game.bottomTeam.id);
+  const homePlayers = mergeAnonymousPlayers(await getPlayers(game.topTeam.id), lineup?.home ?? [], game.topTeam.id);
+  const awayPlayers = mergeAnonymousPlayers(await getPlayers(game.bottomTeam.id), lineup?.away ?? [], game.bottomTeam.id);
 
   const homeTeam: PitcherStatsTeamData = {
     teamName: game.topTeam.name,
@@ -747,7 +744,11 @@ export const getPitchersForSelection = async (matchId: string, side: Side): Prom
   if (!game || !game.topTeam || !game.bottomTeam) return [];
 
   const atBats = await getAtBats(matchId);
-  const players = side === 'home' ? await getPlayers(game.topTeam.id) : await getPlayers(game.bottomTeam.id);
+  const lineup = await getLineup(matchId);
+  const registered = side === 'home' ? await getPlayers(game.topTeam.id) : await getPlayers(game.bottomTeam.id);
+  const lineupSide = side === 'home' ? lineup?.home ?? [] : lineup?.away ?? [];
+  const teamId = side === 'home' ? game.topTeam.id : game.bottomTeam.id;
+  const players = mergeAnonymousPlayers(registered, lineupSide, teamId);
   const pitchersSet = new Set<string>();
 
   atBats.forEach((atBat) => {

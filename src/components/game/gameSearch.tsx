@@ -4,6 +4,7 @@ import { getTournaments } from '../../services/tournamentService';
 import { getTeams } from '../../services/teamService';
 import { getGames } from '../../services/gameService';
 import { getLineup } from '../../services/lineupService';
+import { anonymousBattingSlotsReady, lineupUsesAnonymousPlayers } from '../../utils/anonymousPlayer';
 
 const MatchSearch: React.FC = () => {
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -75,8 +76,13 @@ const MatchSearch: React.FC = () => {
   const handleMatchClick = async (gameId: string) => {
     try {
       const lineup = await getLineup(gameId);
-      const isHomeComplete = lineup.home.every(e => e.position && e.playerId);
-      const isAwayComplete = lineup.away.every(e => e.position && e.playerId);
+      const anonymous = lineupUsesAnonymousPlayers([...lineup.home, ...lineup.away]);
+      const isHomeComplete = anonymous
+        ? anonymousBattingSlotsReady(lineup.home)
+        : lineup.home.every(e => e.position && e.playerId);
+      const isAwayComplete = anonymous
+        ? anonymousBattingSlotsReady(lineup.away)
+        : lineup.away.every(e => e.position && e.playerId);
       if (isHomeComplete && isAwayComplete) {
         navigate(`/game/${gameId}/play`);
       } else {

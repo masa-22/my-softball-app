@@ -6,6 +6,8 @@ import { getPlayers } from '../../services/playerService';
 import { getLineup, saveLineup, recordStartersFromLineup } from '../../services/lineupService';
 import Modal from '../common/Modal';
 import { getGame } from '../../services/gameService';
+import { getTournament } from '../../services/tournamentService';
+import { anonymousSlotLabel, assignAnonymousPlayerIds } from '../../utils/anonymousPlayer';
 
 const POSITIONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'DP'];
 
@@ -25,6 +27,7 @@ const StartingLineup: React.FC = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [skipPlayerRegistration, setSkipPlayerRegistration] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -41,6 +44,9 @@ const StartingLineup: React.FC = () => {
           return;
         }
         setGame(g);
+
+        const tournament = g.tournament?.id ? await getTournament(g.tournament.id) : null;
+        setSkipPlayerRegistration(!!tournament?.skipPlayerRegistration);
 
         const teamsData = await getTeams();
         // 先攻 = top, 後攻 = bottom
@@ -113,7 +119,17 @@ const StartingLineup: React.FC = () => {
 
   const confirmSave = async () => {
     if (!matchId) return;
-    saveLineup(matchId, { matchId, home: homeLineup, away: awayLineup });
+    const home = skipPlayerRegistration
+      ? assignAnonymousPlayerIds(homeLineup, homeTeam?.id ?? game?.topTeam?.id ?? 'home')
+      : homeLineup;
+    const away = skipPlayerRegistration
+      ? assignAnonymousPlayerIds(awayLineup, awayTeam?.id ?? game?.bottomTeam?.id ?? 'away')
+      : awayLineup;
+    if (skipPlayerRegistration) {
+      setHomeLineup(home);
+      setAwayLineup(away);
+    }
+    await saveLineup(matchId, { matchId, home, away });
     // ▼ 追加: participationへスタメン記録
     await recordStartersFromLineup(matchId);
     setMessage('スタメンを保存しました。');
@@ -139,16 +155,18 @@ const StartingLineup: React.FC = () => {
           <thead>
             <tr style={{ background: '#f0f0f0' }}>
               <th style={{ border: '1px solid #ccc', padding: 8 }}>打順</th>
-              <th style={{ border: '1px solid #ccc', padding: 8 }}>守備</th>
+              {!skipPlayerRegistration && <th style={{ border: '1px solid #ccc', padding: 8 }}>守備</th>}
               <th style={{ border: '1px solid #ccc', padding: 8 }}>選手名</th>
             </tr>
           </thead>
           <tbody>
-            {lineup.map((entry, idx) => {
+            {lineup.filter((entry) => !skipPlayerRegistration || entry.battingOrder !== 10).map((entry) => {
+              const idx = lineup.indexOf(entry);
               const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
               return (
-                <tr key={idx}>
+                <tr key={entry.battingOrder}>
                   <td style={{ border: '1px solid #ccc', padding: 8, textAlign: 'center' }}>{displayOrder}</td>
+                  {!skipPlayerRegistration && (
                   <td style={{ border: '1px solid #ccc', padding: 8 }}>
                     <select
                       value={entry.position}
@@ -166,22 +184,27 @@ const StartingLineup: React.FC = () => {
                       })}
                     </select>
                   </td>
+                  )}
                   <td style={{ border: '1px solid #ccc', padding: 8 }}>
-                    <select
-                      value={entry.playerId}
-                      onChange={(e) => handlePlayerChange(side, idx, e.target.value)}
-                      style={{ width: '100%', padding: 4, boxSizing: 'border-box' }}
-                    >
-                      <option value="">選択</option>
-                      {players.map(p => {
-                        const isUsed = usedPlayers.has(p.playerId) && p.playerId !== entry.playerId;
-                        return (
-                          <option key={p.playerId} value={p.playerId} disabled={isUsed}>
-                            {p.familyName} {p.givenName}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    {skipPlayerRegistration ? (
+                      <span>{anonymousSlotLabel(entry.battingOrder)}</span>
+                    ) : (
+                      <select
+                        value={entry.playerId}
+                        onChange={(e) => handlePlayerChange(side, idx, e.target.value)}
+                        style={{ width: '100%', padding: 4, boxSizing: 'border-box' }}
+                      >
+                        <option value="">選択</option>
+                        {players.map(p => {
+                          const isUsed = usedPlayers.has(p.playerId) && p.playerId !== entry.playerId;
+                          return (
+                            <option key={p.playerId} value={p.playerId} disabled={isUsed}>
+                              {p.familyName} {p.givenName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
                   </td>
                 </tr>
               );
@@ -201,19 +224,24 @@ const StartingLineup: React.FC = () => {
             <thead>
               <tr style={{ background: '#f0f0f0' }}>
                 <th style={{ border: '1px solid #ccc', padding: 4 }}>打順</th>
-                <th style={{ border: '1px solid #ccc', padding: 4 }}>守備</th>
+                {!skipPlayerRegistration && <th style={{ border: '1px solid #ccc', padding: 4 }}>守備</th>}
                 <th style={{ border: '1px solid #ccc', padding: 4 }}>選手</th>
               </tr>
             </thead>
             <tbody>
-              {lineup.map((entry, idx) => {
+              {lineup.filter((entry) => !skipPlayerRegistration || entry.battingOrder !== 10).map((entry, idx) => {
                 const player = players.find(p => p.playerId === entry.playerId);
                 const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
+                const playerLabel = skipPlayerRegistration
+                  ? anonymousSlotLabel(entry.battingOrder)
+                  : (player ? `${player.familyName} ${player.givenName}` : '—');
                 return (
                   <tr key={idx}>
                     <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{displayOrder}</td>
-                    <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{entry.position || '—'}</td>
-                    <td style={{ border: '1px solid #ccc', padding: 4 }}>{player ? `${player.familyName} ${player.givenName}` : '—'}</td>
+                    {!skipPlayerRegistration && (
+                      <td style={{ border: '1px solid #ccc', padding: 4, textAlign: 'center' }}>{entry.position || '—'}</td>
+                    )}
+                    <td style={{ border: '1px solid #ccc', padding: 4 }}>{playerLabel}</td>
                   </tr>
                 );
               })}
@@ -246,6 +274,9 @@ const StartingLineup: React.FC = () => {
   return (
     <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto', padding: 20, boxSizing: 'border-box' }}>
       <h1>スタメン登録</h1>
+      {skipPlayerRegistration && (
+        <p>この大会は選手登録なしです。打順1番〜9番だけで試合を始めます。守備位置は使いません。</p>
+      )}
       <p>
         <strong>試合ID:</strong> {game.gameId} / <strong>開催日:</strong> {game.date}
       </p>

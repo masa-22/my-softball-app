@@ -1,5 +1,6 @@
 import React from 'react';
 import DiamondField from './DiamondField';
+import { displayPlayerName } from '../../../utils/anonymousPlayer';
 
 interface RunnerFieldPanelProps {
   styles: any;
@@ -73,7 +74,7 @@ const RunnerFieldPanel: React.FC<RunnerFieldPanelProps> = ({
           {(['1', '2', '3'] as const).map(b => {
             const pid = runners[b];
             const player = offensePlayers.find(p => p.playerId === pid);
-            const name = player ? `${player.familyName || ''} ${player.givenName || ''}`.trim() : '-';
+            const name = pid ? (displayPlayerName(player, pid) || '-') : '-';
             return (
               <div
                 key={b}

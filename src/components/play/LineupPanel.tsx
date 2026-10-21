@@ -3,6 +3,7 @@
  * プレー登録画面の両脇に表示されるラインナップ編集パネル
  */
 import React from 'react';
+import { anonymousSlotLabel, displayPlayerName } from '../../utils/anonymousPlayer';
 
 const POSITIONS = ['1','2','3','4','5','6','7','8','9','DP','PH','PR','OPO'];
 const MULTI_SELECTABLE_POSITIONS = ['PH', 'PR'];
@@ -18,6 +19,7 @@ interface LineupPanelProps {
   onPlayerChange: (index: number, value: string) => void;
   onSave: () => void | Promise<void>;
   matchId?: string;
+  playerLocked?: boolean;
 }
 
 const LineupPanel: React.FC<LineupPanelProps> = ({
@@ -31,6 +33,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
   onPlayerChange,
   onSave,
   matchId,
+  playerLocked = false,
 }) => {
   const getUsedPositions = (): Set<string> => {
     const used = new Set<string>();
@@ -85,7 +88,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
   const getPlayerNameById = (pid: string) => {
     if (!pid) return '—';
     const p = players.find((x:any) => x.playerId === pid);
-    return p ? `${p.familyName} ${p.givenName}` : pid;
+    return displayPlayerName(p, pid) || '—';
   };
 
   const handleClickSave = () => setShowConfirm(true);
@@ -111,12 +114,12 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
           <thead>
             <tr style={{ background:'#f5f5f5' }}>
               <th style={{ border:'1px solid #ccc', padding:6, width:36, minWidth:36 }}>打順</th>
-              <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>守備</th>
+              {!playerLocked && <th style={{ border:'1px solid #ccc', padding:6, width:50 }}>守備</th>}
               <th style={{ border:'1px solid #ccc', padding:6 }}>選手</th>
             </tr>
           </thead>
           <tbody>
-            {lineup.map((entry, idx) => {
+            {lineup.filter((entry) => !playerLocked || entry.battingOrder !== 10).map((entry, idx) => {
               const displayOrder = entry.battingOrder === 10 ? 'FP' : entry.battingOrder;
 
               const isCurrentPitcher = !!currentPitcherId && entry.playerId === currentPitcherId;
@@ -137,6 +140,7 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
                   <td style={{ border:'1px solid #ccc', padding:6, textAlign:'center', width:36, minWidth:36 }}>
                     {displayOrder}
                   </td>
+                  {!playerLocked && (
                   <td style={{ border:'1px solid #ccc', padding:6, width:50 }}>
                     <select
                       value={entry.position || ''}
@@ -151,41 +155,48 @@ const LineupPanel: React.FC<LineupPanelProps> = ({
                       })}
                     </select>
                   </td>
+                  )}
                   <td style={{ border:'1px solid #ccc', padding:6 }}>
-                    <select
-                      value={entry.playerId || ''}
-                      onChange={(e) => onPlayerChange(idx, e.target.value)}
-                      style={{ width:'100%' }}
-                    >
-                      <option value="">選択</option>
-                      {players.map((p:any) => (
-                        <option key={p.playerId} value={p.playerId}>
-                          {p.familyName} {p.givenName}
-                        </option>
-                      ))}
-                    </select>
+                    {playerLocked ? (
+                      <span>{anonymousSlotLabel(entry.battingOrder)}</span>
+                    ) : (
+                      <select
+                        value={entry.playerId || ''}
+                        onChange={(e) => onPlayerChange(idx, e.target.value)}
+                        style={{ width:'100%' }}
+                      >
+                        <option value="">選択</option>
+                        {players.map((p:any) => (
+                          <option key={p.playerId} value={p.playerId}>
+                            {displayPlayerName(p)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        <div style={{ textAlign:'right', marginTop:8 }}>
-          <button 
-            onClick={handleClickSave} 
-            style={{ 
-              padding:'6px 10px', 
-              background:'#27ae60', 
-              color:'#fff', 
-              border:'none', 
-              borderRadius:4,
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            ラインナップを保存
-          </button>
-        </div>
+        {!playerLocked && (
+          <div style={{ textAlign:'right', marginTop:8 }}>
+            <button 
+              onClick={handleClickSave} 
+              style={{ 
+                padding:'6px 10px', 
+                background:'#27ae60', 
+                color:'#fff', 
+                border:'none', 
+                borderRadius:4,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              ラインナップを保存
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 追加: 確認ダイアログ（ラインナップボードの一部をそのまま使用し、変更箇所のみ前後並列） */}

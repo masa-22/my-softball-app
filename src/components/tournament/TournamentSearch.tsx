@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { searchTournaments } from '../../services/tournamentService';
+import { searchTournaments, updateTournamentSkipPlayerRegistration } from '../../services/tournamentService';
 
 const TournamentSearch: React.FC = () => {
   const [year, setYear] = useState('');
@@ -21,6 +21,17 @@ const TournamentSearch: React.FC = () => {
       setError('検索に失敗しました。');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleSkip = async (id: string, next: boolean) => {
+    try {
+      setError('');
+      await updateTournamentSkipPlayerRegistration(id, next);
+      setResults((prev) => prev.map((t) => (t.id === id ? { ...t, skipPlayerRegistration: next } : t)));
+    } catch (err) {
+      console.error(err);
+      setError('大会設定の更新に失敗しました。');
     }
   };
 
@@ -55,6 +66,14 @@ const TournamentSearch: React.FC = () => {
             <h3 style={{ margin:0 }}>{t.name} <small style={{ color:'#666' }}>[{t.id}]</small></h3>
             <p style={{ margin:4 }}><strong>開催年:</strong> {t.year} / <strong>種別:</strong> {t.type}</p>
             <p style={{ margin:4, fontSize:12, color:'#666' }}><strong>登録日時:</strong> {t.createdAt || '—'}</p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!t.skipPlayerRegistration}
+                onChange={(e) => handleToggleSkip(t.id, e.target.checked)}
+              />
+              選手登録なしで試合を進める
+            </label>
           </div>
         ))}
       </div>

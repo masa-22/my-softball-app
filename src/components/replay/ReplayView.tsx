@@ -9,6 +9,8 @@ import { recalculateGame } from '../../services/gameCorrectionService';
 import { Game } from '../../types/Game';
 import { AtBat, normalizeScoredRunners } from '../../types/AtBat';
 import { Player } from '../../types/Player';
+import { displayPlayerName, mergeAnonymousPlayers } from '../../utils/anonymousPlayer';
+import { getLineup } from '../../services/lineupService';
 
 const ReplayView: React.FC = () => {
   const { matchId } = useParams<{ matchId: string }>();
@@ -42,13 +44,18 @@ const ReplayView: React.FC = () => {
 
       if (gameData) {
         setGame(gameData);
-        const [topPlayers, bottomPlayers] = await Promise.all([
+        const [topPlayers, bottomPlayers, lineup] = await Promise.all([
           getPlayers(gameData.topTeam.id),
-          getPlayers(gameData.bottomTeam.id)
+          getPlayers(gameData.bottomTeam.id),
+          getLineup(matchId),
         ]);
+        const mergedPlayers = [
+          ...mergeAnonymousPlayers(topPlayers, lineup.home, gameData.topTeam.id),
+          ...mergeAnonymousPlayers(bottomPlayers, lineup.away, gameData.bottomTeam.id),
+        ];
         
         const playerMap: Record<string, Player> = {};
-        [...topPlayers, ...bottomPlayers].forEach(p => {
+        mergedPlayers.forEach(p => {
           playerMap[p.playerId] = p;
         });
         setPlayers(playerMap);
@@ -87,9 +94,7 @@ const ReplayView: React.FC = () => {
   }, [loadData]);
 
   const getPlayerName = (id: string) => {
-    const p = players[id];
-    if (p) return `${p.familyName} ${p.givenName}`;
-    return '不明';
+    return displayPlayerName(players[id], id) || '不明';
   };
 
   const handleNext = () => {

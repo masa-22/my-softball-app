@@ -7,6 +7,7 @@ import { isWalkLikeResult } from '../data/softball/battingResults';
 import { getAtBats } from './atBatService';
 import { getGame } from './gameService';
 import { getWinningPitcher } from './winningPitcherService';
+import { isAnonymousPlayerId } from '../utils/anonymousPlayer';
 
 const PLAYER_GAME_STATS_COLLECTION = 'playerGameStats';
 
@@ -74,6 +75,10 @@ export const savePlayerGameStats = async (gameId: string): Promise<void> => {
 
     if (!game) {
       throw new Error(`Game not found: ${gameId}`);
+    }
+
+    if (atBats.some((atBat) => isAnonymousPlayerId(atBat.batterId) || isAnonymousPlayerId(atBat.pitcherId))) {
+      return;
     }
 
     // 勝利投手情報の取得

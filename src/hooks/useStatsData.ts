@@ -11,6 +11,7 @@ import { LineupEntry } from '../types/Lineup';
 import { ParticipationEntry } from '../types/Participation';
 import { Player } from '../types/Player';
 import { AtBat, normalizeScoredRunners } from '../types/AtBat';
+import { displayPlayerName, mergeAnonymousPlayers } from '../utils/anonymousPlayer';
 
 type Side = 'home' | 'away';
 
@@ -88,12 +89,8 @@ const buildPositionHistoryLabel = (positions: string[], fallback?: string) => {
   return collapsed.map(getPositionLabel).join('/');
 };
 
-const formatPlayerName = (player: Player | undefined) => {
-  if (!player) return '';
-  const family = player.familyName ?? '';
-  const given = player.givenName ?? '';
-  return `${family} ${given}`.trim();
-};
+const formatPlayerName = (player: Player | undefined, playerId?: string | null) =>
+  displayPlayerName(player, playerId ?? player?.playerId);
 
 const calculatePlayerStats = (
   playerId: string,
@@ -434,7 +431,7 @@ const buildRowsForSide = ({
         processedPlayerIds.add(playerId);
         
         const player = playersById[playerId];
-        const displayName = formatPlayerName(player) || '未登録';
+        const displayName = formatPlayerName(player, playerId) || '未登録';
         const roleLabel = roleLabelMap[participant.status] || '';
         
         // 同じ選手の全エントリから守備位置を収集
@@ -474,7 +471,7 @@ const buildRowsForSide = ({
       processedPlayerIds.add(playerId);
 
       const player = playersById[playerId];
-      const displayName = formatPlayerName(player) || '未登録';
+      const displayName = formatPlayerName(player, playerId) || '未登録';
       const roleLabel = roleLabelMap[participant.status] || '';
       
       // 同じ選手の全エントリから守備位置を収集
@@ -531,7 +528,7 @@ const buildRowsForSide = ({
       if (!playerId) return;
 
       const player = playersById[playerId];
-      const displayName = formatPlayerName(player) || '未登録';
+      const displayName = formatPlayerName(player, playerId) || '未登録';
       const roleLabel = roleLabelMap[participant.status] || '';
       const fallbackLineup = lineupEntries.find((entry) => entry.playerId === playerId);
       
@@ -592,8 +589,8 @@ const buildStatsData = async (matchId: string, atBats: AtBat[]): Promise<StatsDa
 
   const lineup = await getLineup(matchId);
   const participations = await getParticipations(matchId);
-  const homePlayers = await getPlayers(game.topTeam.id);
-  const awayPlayers = await getPlayers(game.bottomTeam.id);
+  const homePlayers = mergeAnonymousPlayers(await getPlayers(game.topTeam.id), lineup?.home ?? [], game.topTeam.id);
+  const awayPlayers = mergeAnonymousPlayers(await getPlayers(game.bottomTeam.id), lineup?.away ?? [], game.bottomTeam.id);
 
   const homeTeam: StatsTeamData = {
     teamName: game.topTeam.name,

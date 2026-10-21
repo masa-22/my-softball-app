@@ -13,7 +13,6 @@ import { useGameInput } from '../../hooks/useGameInput';
 import { useLineupManager, SpecialEntryResolution } from '../../hooks/useLineupManager';
 import { useRunnerManager } from '../../hooks/useRunnerManager';
 import { useGameProcessor } from '../../hooks/useGameProcessor';
-import { getAtBats } from '../../services/atBatService';
 import { POSITIONS } from '../../data/softball/positions';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { useBoxScoreData } from '../../hooks/useBoxScoreData';
@@ -25,7 +24,7 @@ import PitcherStatsModal from './pitcherStats/PitcherStatsModal';
 import WinningPitcherModal from './pitcherStats/WinningPitcherModal';
 import { setWinningPitcher, getWinningPitcher } from '../../services/winningPitcherService';
 import { getGame, updateGame } from '../../services/gameService';
-import { getGameState } from '../../services/gameStateService';
+import { getGameState, applyGameStateSync } from '../../services/gameStateService';
 import { getLineup } from '../../services/lineupService';
 import { undoLastBatAtBat } from '../../services/atBatUndoService';
 import { getCountAfterPitches } from '../../utils/pitchCount';
@@ -34,7 +33,12 @@ import { savePlayerGameStats } from '../../services/playerGameStatsService';
 import FinishGameButton from './FinishGameButton';
 import { useGameStatus } from '../../hooks/useGameStatus';
 import MemoModal from '../common/MemoModal';
+import Modal from '../common/Modal';
 import TempRunnerDialog from './runner/TempRunnerDialog';
+import MidGameStartModal from './MidGameStartModal';
+import { displayPlayerName, isAnonymousPlayerId, lineupUsesAnonymousPlayers } from '../../utils/anonymousPlayer';
+import type { GameEndDecision } from '../../utils/gameEnd';
+import type { MidGameSlot, MidGameStartPatch } from '../../utils/midGameStart';
 
 // 座標計算用定数
 const PLAY_LAYOUT_WIDTH = 1200;
@@ -64,6 +68,11 @@ const PlayRegister: React.FC = () => {
     finishGame,
     transitioning: statusTransitioning,
   } = useGameStatus(matchId);
+
+  const gameEndCandidateRef = useRef<
+    (decision: Exclude<GameEndDecision, { action: 'none' }>) => Promise<'finished' | 'continue'>
+  >(async () => 'continue');
+  const coldAskResolveRef = useRef<((result: 'finished' | 'continue') => void) | null>(null);
 
   // 1. Game State (Realtime)
   const {
@@ -133,7 +142,9 @@ const PlayRegister: React.FC = () => {
       const pos = POSITIONS[entry.position];
       if (!pos || pos.type === 'not_onfield') return;
       const player = defensePlayers.find((p) => p.playerId === entry.playerId);
-      if (player) names[pos.abbr] = `${player.familyName ?? ''} ${player.givenName ?? ''}`.trim();
+      if (player || isAnonymousPlayerId(entry.playerId)) {
+        names[pos.abbr] = displayPlayerName(player, entry.playerId);
+      }
     });
     return names;
   }, [currentHalf, defensiveLineup, homePlayers, awayPlayers]);
@@ -152,6 +163,7 @@ const PlayRegister: React.FC = () => {
     ensurePlateAppearanceId,
     clearPlateAppearanceId,
     defensiveLineup,
+    onGameEndCandidate: (decision) => gameEndCandidateRef.current(decision),
   });
 
   // 4. Game Processing (Play Result)
@@ -177,6 +189,7 @@ const PlayRegister: React.FC = () => {
     advanceBattingOrder,
     homeLineup,
     awayLineup,
+    onGameEndCandidate: (decision) => gameEndCandidateRef.current(decision),
   });
 
   // UI State
@@ -198,6 +211,9 @@ const PlayRegister: React.FC = () => {
   const [showSpecialModal, setShowSpecialModal] = useState(false);
   const [specialModalDismissed, setSpecialModalDismissed] = useState(false);
   const specialEntriesKeyRef = useRef<string>('');
+  const [coldAsk, setColdAsk] = useState<{ message: string } | null>(null);
+  const [coldSubmitting, setColdSubmitting] = useState(false);
+  const [gameEndNotice, setGameEndNotice] = useState<string | null>(null);
   // Game Memo State
   const [showGameMemoModal, setShowGameMemoModal] = useState(false);
   const [gameMemo, setGameMemo] = useState('');
@@ -205,6 +221,7 @@ const PlayRegister: React.FC = () => {
   
   // テンポラリーランナーUI
   const [showTempRunnerDialog, setShowTempRunnerDialog] = useState(false);
+  const [showMidGameStart, setShowMidGameStart] = useState(false);
   
   // TR候補の計算
   const currentLineupForTR = useMemo(() => {
@@ -228,9 +245,51 @@ const PlayRegister: React.FC = () => {
     return targets.length > 0 ? targets : null;
   }, [currentBSO.o, runners, currentLineupForTR]);
 
+  const anonymousRoster = useMemo(
+    () => lineupUsesAnonymousPlayers([...(homeLineup || []), ...(awayLineup || [])]),
+    [homeLineup, awayLineup]
+  );
+
+  const toMidGameSlots = (lineup: { battingOrder: number; playerId: string }[] | undefined): MidGameSlot[] =>
+    (lineup || [])
+      .map((entry, index) => ({ index, battingOrder: entry.battingOrder, playerId: entry.playerId }))
+      .filter((slot) => !!slot.playerId && slot.battingOrder !== 10);
+
+  const homeMidGameSlots = useMemo(() => toMidGameSlots(homeLineup), [homeLineup]);
+  const awayMidGameSlots = useMemo(() => toMidGameSlots(awayLineup), [awayLineup]);
+
+  const labelsFor = (slots: MidGameSlot[], players: { playerId?: string; familyName?: string; givenName?: string }[]) => {
+    const labels: Record<string, string> = {};
+    slots.forEach((slot) => {
+      const player = players.find((item) => item.playerId === slot.playerId);
+      labels[slot.playerId] = displayPlayerName(player, slot.playerId) || slot.playerId;
+    });
+    return labels;
+  };
+
+  const homeMidGameLabels = useMemo(
+    () => labelsFor(homeMidGameSlots, homePlayers || []),
+    [homeMidGameSlots, homePlayers]
+  );
+  const awayMidGameLabels = useMemo(
+    () => labelsFor(awayMidGameSlots, awayPlayers || []),
+    [awayMidGameSlots, awayPlayers]
+  );
+
+  const canStartMidGame = !isGameFinished && allAtBats.length === 0;
+
+  const handleApplyMidGameStart = async (patch: MidGameStartPatch) => {
+    if (!matchId) return;
+    await applyGameStateSync(matchId, patch);
+    setPitches([]);
+    clearPlateAppearanceId();
+    setShowMidGameStart(false);
+  };
+
   const canUseTemporaryRunner = useMemo(() => {
+    if (anonymousRoster) return false;
     return !!tempRunnerTarget;
-  }, [tempRunnerTarget]);
+  }, [anonymousRoster, tempRunnerTarget]);
 
   const tempRunnerCandidates = useMemo(() => {
     if (!tempRunnerTarget) return [];
@@ -251,7 +310,7 @@ const PlayRegister: React.FC = () => {
         // 名前解決
         const players = currentHalf === 'top' ? homePlayers : awayPlayers;
         const p = players.find(pl => pl.playerId === e.playerId);
-        const name = p ? `${p.familyName} ${p.givenName}`.trim() : e.playerId;
+        const name = displayPlayerName(p, e.playerId) || e.playerId;
         return {
           playerId: e.playerId,
           name,
@@ -311,7 +370,7 @@ const PlayRegister: React.FC = () => {
       specialEntriesKeyRef.current = key;
       setSpecialModalDismissed(false);
     }
-    if (specialEntries.length === 0) {
+    if (anonymousRoster || specialEntries.length === 0) {
       setShowSpecialModal(false);
       setSpecialModalDismissed(false);
       return;
@@ -319,7 +378,7 @@ const PlayRegister: React.FC = () => {
     if (!specialModalDismissed) {
       setShowSpecialModal(true);
     }
-  }, [specialEntries, specialModalDismissed]);
+  }, [specialEntries, specialModalDismissed, anonymousRoster]);
 
   // 投手成績（表示用）
   const pitcherStats = useMemo(() => {
@@ -475,7 +534,7 @@ const PlayRegister: React.FC = () => {
     }
   };
 
-  const handleRunnerMovement = (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
+  const handleRunnerMovement = async (battingResult: string, details: MovementDetails, outsAfterOverride?: number) => {
     const hasRunners = runners['1'] || runners['2'] || runners['3'];
     const isOut = ['groundout', 'flyout', 'linerout', 'foul_fly', 'strikeout_swinging', 'strikeout_looking', 'bunt_out', 'sacrifice_fly', 'sacrifice_bunt'].includes(battingResult);
     const nextO = currentBSO.o + (isOut ? 1 : 0);
@@ -540,7 +599,7 @@ const PlayRegister: React.FC = () => {
     }
     
     if (!hasRunners && isOut && !isStrikeout) {
-        processQuickOut(battingResult, details);
+        await processQuickOut(battingResult, details);
         resetUI();
         return;
     }
@@ -551,7 +610,7 @@ const PlayRegister: React.FC = () => {
     setShowRunnerMovement(true);
   };
 
-  const handlePlayResultComplete = (movementResult?: RunnerMovementResult) => {
+  const handlePlayResultComplete = async (movementResult?: RunnerMovementResult) => {
     processPlayResult({
       movementResult,
       pendingOutcome,
@@ -692,6 +751,120 @@ const PlayRegister: React.FC = () => {
     }
   };
 
+  const commitFinish = async (): Promise<boolean> => {
+    if (!matchId) return false;
+    const finished = await finishGame();
+    if (!finished) return false;
+    if (!anonymousRoster) {
+      try {
+        await savePlayerGameStats(matchId);
+      } catch (err) {
+        console.error('Error saving player game stats:', err);
+      }
+    }
+    return true;
+  };
+
+  const completeGameFinish = async (): Promise<'finished' | 'needs-pitcher' | 'failed'> => {
+    if (!matchId) return 'failed';
+    const game = await getGame(matchId);
+    if (!game) return 'failed';
+    const gameState = await getGameState(matchId);
+    if (!gameState) return 'failed';
+
+    const lineup = await getLineup(matchId);
+    const finalHomeScore = gameState.scores.top_total;
+    const finalAwayScore = gameState.scores.bottom_total;
+    const winningTeam = finalHomeScore > finalAwayScore ? 'home' : finalAwayScore > finalHomeScore ? 'away' : null;
+
+    if (winningTeam && lineup) {
+      const winningSide = winningTeam === 'home' ? 'home' : 'away';
+      const pitchers = await getPitchersForSelection(matchId, winningSide);
+      const startingPitcher = pitchers.find((p) => {
+        const lineupSide = winningSide === 'home' ? lineup.away : lineup.home;
+        const pitcherEntry = lineupSide?.find((e) => e.position === '1');
+        return pitcherEntry?.playerId === p.playerId;
+      }) || pitchers[0];
+      const reliefPitchers = pitchers.filter((p) => p.playerId !== startingPitcher?.playerId);
+
+      if (reliefPitchers.length >= 2) {
+        try {
+          const savedWinningPitcher = await getWinningPitcher(matchId, winningSide);
+          if (!savedWinningPitcher) {
+            setWinningPitcherModalSide(winningSide);
+            setWinningPitcherModalPitchers(pitchers);
+            setShowWinningPitcherModal(true);
+            return 'needs-pitcher';
+          }
+        } catch (error) {
+          console.error('Error getting winning pitcher:', error);
+          setWinningPitcherModalSide(winningSide);
+          setWinningPitcherModalPitchers(pitchers);
+          setShowWinningPitcherModal(true);
+          return 'needs-pitcher';
+        }
+      }
+    }
+
+    return (await commitFinish()) ? 'finished' : 'failed';
+  };
+
+  const settleColdAsk = (result: 'finished' | 'continue') => {
+    const resolve = coldAskResolveRef.current;
+    coldAskResolveRef.current = null;
+    setColdAsk(null);
+    resolve?.(result);
+  };
+
+  const requestGameEnd = async (
+    decision: Exclude<GameEndDecision, { action: 'none' }>
+  ): Promise<'finished' | 'continue'> => {
+    try {
+      if (decision.action === 'finish') {
+        const result = await completeGameFinish();
+        if (result === 'failed') return 'continue';
+        if (result === 'finished') setGameEndNotice(decision.message);
+        return 'finished';
+      }
+      return await new Promise<'finished' | 'continue'>((resolve) => {
+        coldAskResolveRef.current = resolve;
+        setColdAsk({ message: decision.message });
+      });
+    } catch (error) {
+      console.error('Error evaluating game end:', error);
+      return 'continue';
+    }
+  };
+
+  gameEndCandidateRef.current = requestGameEnd;
+
+  const handleColdContinue = () => {
+    if (coldSubmitting) return;
+    settleColdAsk('continue');
+  };
+
+  const handleColdEnd = async () => {
+    if (coldSubmitting) return;
+    setColdSubmitting(true);
+    const message = coldAsk?.message ?? '';
+    try {
+      const result = await completeGameFinish();
+      if (result === 'failed') {
+        settleColdAsk('continue');
+        return;
+      }
+      if (result === 'finished') {
+        setGameEndNotice(message.replace(/終了しますか？$/, '終了しました'));
+      }
+      settleColdAsk('finished');
+    } catch (error) {
+      console.error('Error finishing cold game:', error);
+      settleColdAsk('continue');
+    } finally {
+      setColdSubmitting(false);
+    }
+  };
+
   const desktopContent = (
     <>
       <style>{`
@@ -828,6 +1001,11 @@ const PlayRegister: React.FC = () => {
         <div className="area-scoreboard">
           <div className="scoreboard-inner" style={{ minWidth: 320 }}>
             <ScoreBoard />
+            {gameEndNotice && (
+              <div style={{ marginTop: 8, padding: '8px 12px', background: '#fff3bf', borderRadius: 6, fontSize: 14, fontWeight: 600 }}>
+                {gameEndNotice}
+              </div>
+            )}
             <div className="boxscore-trigger">
               <button
                 type="button"
@@ -861,7 +1039,7 @@ const PlayRegister: React.FC = () => {
               >
                 リプレイ
               </button>
-              {specialEntries.length > 0 && (
+              {specialEntries.length > 0 && !anonymousRoster && (
                 <button
                   type="button"
                   className="special-button"
@@ -909,72 +1087,27 @@ const PlayRegister: React.FC = () => {
                 >
                   試合メモ
                 </button>
+                {canStartMidGame && (
+                  <button
+                    type="button"
+                    className="boxscore-button"
+                    onClick={() => setShowMidGameStart(true)}
+                    disabled={!matchId}
+                    style={{ backgroundColor: '#0ca678' }}
+                  >
+                    途中から入力
+                  </button>
+                )}
                 <FinishGameButton
                   status={gameStatus}
                   onFinish={async () => {
-                    if (!matchId) return;
-                    const game = await getGame(matchId);
-                    if (!game) throw new Error(`Game not found: ${matchId}`);
-                    const gameState = await getGameState(matchId);
-                    if (!gameState) throw new Error(`Game state not found: ${matchId}`);
-
-                    // 試合終了前に勝利投手の選択が必要かチェック
-                    const atBats = await getAtBats(matchId);
-                    const lineup = await getLineup(matchId);
-                    
-                    // 勝ちチームを判定
-                    const finalHomeScore = gameState.scores.top_total;
-                    const finalAwayScore = gameState.scores.bottom_total;
-                    const winningTeam = finalHomeScore > finalAwayScore ? 'home' : finalAwayScore > finalHomeScore ? 'away' : null;
-
-                    if (winningTeam) {
-                      // 条件3かどうかをチェック
-                      const winningSide = winningTeam === 'home' ? 'home' : 'away';
-                      const pitchers = await getPitchersForSelection(matchId, winningSide);
-                      
-                      // 先発投手を特定
-                      const startingPitcher = pitchers.find((p) => {
-                        const lineupSide = winningSide === 'home' ? lineup.away : lineup.home;
-                        const pitcherEntry = lineupSide.find((e) => e.position === '1');
-                        return pitcherEntry?.playerId === p.playerId;
-                      }) || pitchers[0];
-
-                      const reliefPitchers = pitchers.filter((p) => p.playerId !== startingPitcher?.playerId);
-                      
-                      // 条件3の場合（2人以上の救援投手が出場した場合）
-                      if (reliefPitchers.length >= 2) {
-                        // 既に選択されているかチェック
-                        try {
-                          const savedWinningPitcher = await getWinningPitcher(matchId, winningSide);
-                          if (!savedWinningPitcher) {
-                            // モーダルを表示
-                            setWinningPitcherModalSide(winningSide);
-                            setShowWinningPitcherModal(true);
-                            return; // 試合終了はモーダルで選択後に実行
-                          }
-                        } catch (error) {
-                          console.error('Error getting winning pitcher:', error);
-                          // エラーが発生した場合もモーダルを表示
-                          setWinningPitcherModalSide(winningSide);
-                          setShowWinningPitcherModal(true);
-                          return;
-                        }
-                      }
-                    }
-
-                    // 試合終了
-                    const finished = await finishGame();
-                    if (!finished) throw new Error('finishGame failed');
-                    try {
-                      await savePlayerGameStats(matchId);
-                    } catch (err) {
-                      console.error('Error saving player game stats:', err);
-                    }
+                    const result = await completeGameFinish();
+                    if (result === 'failed') throw new Error('finishGame failed');
                   }}
                   busy={statusTransitioning}
                   disabled={!matchId}
                 />
-                {isGameFinished && (
+                {isGameFinished && !anonymousRoster && (
                   <button
                     type="button"
                     className="boxscore-button"
@@ -1071,6 +1204,7 @@ const PlayRegister: React.FC = () => {
                 onSave={() => handleSidebarSave('away')}
                 currentBatterId={currentBatter?.playerId}
                 matchId={matchId || ''}
+                playerLocked={anonymousRoster}
               />
             </div>
 
@@ -1088,6 +1222,7 @@ const PlayRegister: React.FC = () => {
                 currentBattingOrder={currentBattingOrder}
                 currentPitcherId={currentPitcher?.playerId}
                 matchId={matchId || ''}
+                playerLocked={anonymousRoster}
               />
             </div>
           </div>
@@ -1106,7 +1241,7 @@ const PlayRegister: React.FC = () => {
   return (
     <>
       <SpecialSubstitutionModal
-        open={showSpecialModal && specialEntries.length > 0}
+        open={showSpecialModal && specialEntries.length > 0 && !anonymousRoster}
         entries={specialEntries}
         onSubmit={handleSpecialModalSubmit}
         onCancel={handleSpecialModalCancel}
@@ -1145,6 +1280,26 @@ const PlayRegister: React.FC = () => {
         onConfirm={handleConfirmTempRunner}
         onCancel={() => setShowTempRunnerDialog(false)}
       />
+      <MidGameStartModal
+        open={showMidGameStart}
+        homeSlots={homeMidGameSlots}
+        awaySlots={awayMidGameSlots}
+        homeLabels={homeMidGameLabels}
+        awayLabels={awayMidGameLabels}
+        onClose={() => setShowMidGameStart(false)}
+        onApply={handleApplyMidGameStart}
+      />
+      <Modal isOpen={!!coldAsk} onClose={handleColdContinue} zIndex={2100}>
+        <p style={{ margin: '8px 28px 16px 0', lineHeight: 1.6 }}>{coldAsk?.message}</p>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" onClick={handleColdContinue} disabled={coldSubmitting}>
+            続ける
+          </button>
+          <button type="button" onClick={handleColdEnd} disabled={coldSubmitting}>
+            {coldSubmitting ? '終了処理中...' : '終了する'}
+          </button>
+        </div>
+      </Modal>
       {winningPitcherModalSide && (
         <WinningPitcherModal
           open={showWinningPitcherModal}
@@ -1158,15 +1313,7 @@ const PlayRegister: React.FC = () => {
               }
               setShowWinningPitcherModal(false);
               setWinningPitcherModalSide(null);
-              // 試合終了を実行
-              const finished = await finishGame();
-              if (finished) {
-                try {
-                  await savePlayerGameStats(matchId);
-                } catch (err) {
-                  console.error('Error saving player game stats:', err);
-                }
-              }
+              await commitFinish();
             }
           }}
           onCancel={() => {

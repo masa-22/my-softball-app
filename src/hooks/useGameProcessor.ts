@@ -1,4 +1,5 @@
 import { getGameState, updateCountsRealtime, closeHalfInningRealtime, updateRunnersRealtime, addRunsRealtime, updateTiebreakRunnerIdRealtime } from '../services/gameStateService';
+import { evaluateAfterHalf, evaluateAfterRuns, type GameEndDecision, type InningScore } from '../utils/gameEnd';
 import { closeTemporaryRunner } from '../services/participationService';
 import { allocateNextPlaySlot, saveAtBat } from '../services/atBatService';
 import { calculateCourse, toPercentage, ZONE_WIDTH, ZONE_HEIGHT } from '../utils/scoreKeeping';
@@ -222,6 +223,7 @@ interface UseGameProcessorProps {
   advanceBattingOrder: () => void;
   homeLineup: LineupEntry[];
   awayLineup: LineupEntry[];
+  onGameEndCandidate?: (decision: Exclude<GameEndDecision, { action: 'none' }>) => Promise<'finished' | 'continue'>;
 }
 
 export const useGameProcessor = ({
@@ -241,7 +243,42 @@ export const useGameProcessor = ({
   advanceBattingOrder,
   homeLineup = [],
   awayLineup = [],
+  onGameEndCandidate,
 }: UseGameProcessorProps) => {
+  const scoreSnapshot = (gs: { current_inning: number; top_bottom: 'top' | 'bottom'; scores: { top_total: number; bottom_total: number } }): InningScore => ({
+    inning: gs.current_inning,
+    half: gs.top_bottom,
+    topScore: gs.scores.top_total,
+    bottomScore: gs.scores.bottom_total,
+  });
+
+  const endIfRunsDecide = async (): Promise<boolean> => {
+    if (!matchId || !onGameEndCandidate) return false;
+    const gs = await getGameState(matchId);
+    if (!gs) return false;
+    const decision = evaluateAfterRuns(scoreSnapshot(gs));
+    if (decision.action === 'none') return false;
+    return (await onGameEndCandidate(decision)) === 'finished';
+  };
+
+  const closeHalfOrEnd = async (): Promise<boolean> => {
+    if (!matchId) return false;
+    if (onGameEndCandidate) {
+      const gs = await getGameState(matchId);
+      if (gs) {
+        const decision = evaluateAfterHalf(scoreSnapshot(gs));
+        if (decision.action !== 'none' && (await onGameEndCandidate(decision)) === 'finished') {
+          return true;
+        }
+      }
+    }
+    const side = currentHalf === 'top' ? 'home' : 'away';
+    await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
+    const closed = await closeHalfInningRealtime(matchId);
+    setRunners(localRunnersFromGameState(closed?.runners));
+    return false;
+  };
+
   const getDefensiveLineup = () => (currentHalf === 'top' ? awayLineup : homeLineup);
 
   const getDefensivePlayerId = (position?: string) => {
@@ -282,6 +319,7 @@ export const useGameProcessor = ({
     }
     const gs = await getGameState(matchId);
     const currentO = gs?.counts.o ?? 0;
+    let endedByRule = false;
 
     // 1. 三振 (RunnerMovementなし)
     if (!movementResult && pendingOutcome?.kind === 'strikeout') {
@@ -360,10 +398,7 @@ export const useGameProcessor = ({
 
         updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
         if (newO >= 3) {
-          const side = currentHalf === 'top' ? 'home' : 'away';
-          await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
-          const closed = await closeHalfInningRealtime(matchId);
-          setRunners(localRunnersFromGameState(closed?.runners));
+          endedByRule = await closeHalfOrEnd();
         }
     } 
     // 1-2. 四死球 (RunnerMovementなしの場合のフォールバック)
@@ -463,6 +498,7 @@ export const useGameProcessor = ({
         // 得点をスコアに加算（押し出しのみ）
         if (scoredRunnersWalk.length > 0) {
           await addRunsRealtime(matchId, currentInningInfo.half, scoredRunnersWalk.length);
+          if (await endIfRunsDecide()) endedByRule = true;
         }
 
         if (tiebreakIdWalk && !isTiebreakRunnerOnBase(tiebreakIdWalk, afterRunners)) {
@@ -664,6 +700,7 @@ export const useGameProcessor = ({
           const half = gsForHalf?.top_bottom || 'top';
           // closeHalf 前に得点を反映し、同点判定がずれないようにする
           await addRunsRealtime(matchId, half, mergedScoredRunners.length);
+          if (await endIfRunsDecide()) endedByRule = true;
         }
 
         if (tiebreakId && !isTiebreakRunnerOnBase(tiebreakId, afterRunners)) {
@@ -676,12 +713,9 @@ export const useGameProcessor = ({
         updateCountsRealtime(matchId, { o: finalOutsAfter, b: 0, s: 0 }); // カウントもリセット
 
         // チェンジ判定
-        if (finalOutsAfter >= 3) {
+        if (!endedByRule && finalOutsAfter >= 3) {
           console.log('[atBat] Closing half inning due to 3 outs');
-          const side = currentHalf === 'top' ? 'home' : 'away';
-          await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
-          const closed = await closeHalfInningRealtime(matchId);
-          setRunners(localRunnersFromGameState(closed?.runners));
+          endedByRule = await closeHalfOrEnd();
         }
     } else {
          // キャンセルなどで何もしない場合
@@ -694,8 +728,10 @@ export const useGameProcessor = ({
 
     // 打順前進（確定タイミング）
     // movementResultがある、または三振確定の場合、または四死球確定の場合、または打席結果がある場合は進める
-    if (movementResult || (!movementResult && pendingOutcome?.kind === 'strikeout') || (!movementResult && pendingOutcome?.kind === 'walk') || battingResultForMovement) {
+    if (!endedByRule && (movementResult || (!movementResult && pendingOutcome?.kind === 'strikeout') || (!movementResult && pendingOutcome?.kind === 'walk') || battingResultForMovement)) {
         advanceBattingOrder();
+        onComplete();
+    } else if (endedByRule) {
         onComplete();
     } else {
         onCancel();
@@ -820,14 +856,8 @@ export const useGameProcessor = ({
 
       const newO = Math.min(3, currentO + 1);
       updateCountsRealtime(matchId, { o: newO, b: 0, s: 0 });
-      if (newO >= 3) {
-        const side = currentHalf === 'top' ? 'home' : 'away';
-        await closeTemporaryRunner(matchId, side, currentInningInfo.inning);
-        const closed = await closeHalfInningRealtime(matchId);
-        setRunners(localRunnersFromGameState(closed?.runners));
-      }
-      
-      advanceBattingOrder();
+      const endedByRule = newO >= 3 ? await closeHalfOrEnd() : false;
+      if (!endedByRule) advanceBattingOrder();
   };
 
   return {

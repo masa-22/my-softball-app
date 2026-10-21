@@ -1,5 +1,6 @@
 import React from 'react';
 import LineupPanel from '../LineupPanel';
+import { displayPlayerName, isAnonymousPlayerId } from '../../../utils/anonymousPlayer';
 
 interface RightSidebarProps {
   teamName: string;
@@ -14,6 +15,7 @@ interface RightSidebarProps {
   currentBattingOrder: string;
   currentPitcherId?: string | null;
   matchId?: string;
+  playerLocked?: boolean;
 }
 
 const RightSidebar: React.FC<RightSidebarProps> = ({
@@ -29,6 +31,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
   currentBattingOrder,
   currentPitcherId,
   matchId,
+  playerLocked = false,
 }) => {
   return (
     <div>
@@ -43,6 +46,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
         onSave={onSave}
         currentPitcherId={currentPitcherId}
         matchId={matchId}
+        playerLocked={playerLocked}
       />
       <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #dee2e6' }}>
         <div style={{ fontWeight: 600, marginBottom: 6, color: '#495057', fontSize: 14 }}>現在の打者</div>
@@ -53,12 +57,14 @@ const RightSidebar: React.FC<RightSidebarProps> = ({
           </span>
           {/* 名前（太字） */}
           <span style={{ fontSize: 16, fontWeight: 700 }}>
-            {currentBatter ? `${currentBatter.familyName} ${currentBatter.givenName}` : '—'}
+            {currentBatter ? displayPlayerName(currentBatter) : '—'}
           </span>
           {/* 打ち方（細字） */}
-          <span style={{ fontSize: 13, fontWeight: 400, color: '#6c757d' }}>
-            {currentBatter ? currentBatter.batting : '—'}
-          </span>
+          {!isAnonymousPlayerId(currentBatter?.playerId) && (
+            <span style={{ fontSize: 13, fontWeight: 400, color: '#6c757d' }}>
+              {currentBatter ? currentBatter.batting : '—'}
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 12, color: '#6c757d' }}>
           {recentBatterResults.length > 0 ? (
