@@ -61,7 +61,7 @@ function buildFlyLinerRunoutEvents(
   return events;
 }
 
-type AdvanceReason = 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball';
+type AdvanceReason = 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball' | 'onthrow' | 'tagup' | 'illegalpitch';
 
 function getAdvanceDistance(result: string): number {
   switch (result) {
@@ -98,7 +98,16 @@ function mapAdvanceReasonToEventType(reason: AdvanceReason | undefined): RunnerE
   if (reason === 'passball') return 'passedball';
   if (reason === 'steal') return 'steal';
   if (reason === 'error') return 'error';
+  if (reason === 'onthrow') return 'onthrow';
+  if (reason === 'tagup') return 'tagup';
+  if (reason === 'illegalpitch') return 'illegalpitch';
+  if (reason === 'hit') return 'hit';
   return 'hit';
+}
+
+function naturalSteps(battingResult: string, isBatter: boolean): number {
+  if (battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt') return isBatter ? 0 : 1;
+  return getAdvanceDistance(battingResult);
 }
 
 /** 打撃結果に対応する自然進塁分の RunnerEventType */
@@ -107,6 +116,7 @@ function naturalAdvanceEventType(battingResult: string): RunnerEventType {
   if (battingResult === 'walk' || battingResult === 'intentional_walk' || battingResult === 'deadball' || battingResult === 'droppedthird') {
     return 'advance';
   }
+  if (battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt') return 'advance';
   return 'hit';
 }
 
@@ -141,17 +151,34 @@ function computeRunnerMoves(
   return moves;
 }
 
+function errorRefFromDetail(detail: { id: string; position: string; errorType?: 'throw' | 'catch'; sameAsResult?: boolean } | undefined) {
+  if (!detail?.id) return undefined;
+  return {
+    errorId: detail.id,
+    position: positionAbbrToCode(detail.position),
+    errorType: detail.errorType,
+    sameAsResult: detail.sameAsResult,
+  };
+}
+
 /** 打撃プレー由来の進塁のみ RunnerEvent 化（mid-play は別ドキュメント済みのためマージしない） */
 function buildBatRunnerEvents(
   moves: RunnerMove[],
   scoredRunnerReasons: Record<string, AdvanceReason> | undefined,
   battingResult: string,
-  batterId: string
+  batterId: string,
+  extraAdvances: RunnerMovementResult['extraAdvances']
 ): RunnerEvent[] {
   const result: RunnerEvent[] = [];
-  const naturalDist = getAdvanceDistance(battingResult);
 
-  const pushEvent = (runnerId: string, fromBase: BaseType, toBase: BaseType, type: RunnerEventType) => {
+  const pushEvent = (
+    runnerId: string,
+    fromBase: BaseType,
+    toBase: BaseType,
+    type: RunnerEventType,
+    errorRef?: RunnerEvent['errorRef']
+  ) => {
+    if (fromBase === toBase && fromBase !== 'home') return;
     result.push({
       id: createRunnerEventId(),
       pitchSeq: null,
@@ -161,29 +188,53 @@ function buildBatRunnerEvents(
       fromBase,
       toBase,
       isOut: false,
+      ...(errorRef ? { errorRef } : {}),
     });
   };
 
   for (const m of moves) {
-    const reason = scoredRunnerReasons?.[m.runnerId];
+    const extras = (extraAdvances ?? [])
+      .filter((e) => e.runnerId === m.runnerId)
+      .slice()
+      .sort((a, b) => toBaseToNum(a.fromBase) - toBaseToNum(b.fromBase));
     const isBatter = m.runnerId === batterId && m.fromBase === 'home';
-    const finalNum = toBaseToNum(m.toBase);
+    const reason = scoredRunnerReasons?.[m.runnerId];
 
-    // 打者が自然進塁を超えてエラー進塁した場合は自然進塁分とエラー分に分割
-    if (
-      isBatter &&
-      reason === 'error' &&
-      naturalDist > 0 &&
-      naturalDist < 4 &&
-      finalNum > naturalDist
-    ) {
-      const naturalBase = numToBase(naturalDist);
-      pushEvent(m.runnerId, 'home', naturalBase, naturalAdvanceEventType(battingResult));
-      pushEvent(m.runnerId, naturalBase, m.toBase, 'error');
+    if (extras.length > 0) {
+      const startNum = isBatter ? 0 : toBaseToNum(m.fromBase);
+      const firstFrom = toBaseToNum(extras[0].fromBase);
+      if (firstFrom > startNum) {
+        pushEvent(m.runnerId, m.fromBase, numToBase(firstFrom), naturalAdvanceEventType(battingResult));
+      }
+      extras.forEach((extra) => {
+        pushEvent(
+          m.runnerId,
+          extra.fromBase,
+          extra.toBase,
+          mapAdvanceReasonToEventType(extra.reason),
+          extra.reason === 'error' ? errorRefFromDetail(extra.errorDetail) : undefined
+        );
+      });
       continue;
     }
 
-    pushEvent(m.runnerId, m.fromBase, m.toBase, mapAdvanceReasonToEventType(reason));
+    const natural = naturalSteps(battingResult, isBatter);
+    const startNum = isBatter ? 0 : toBaseToNum(m.fromBase);
+    const finalNum = toBaseToNum(m.toBase);
+    if (reason && reason !== 'hit' && natural > 0 && finalNum > startNum + natural && startNum + natural < 4) {
+      const mid = numToBase(startNum + natural);
+      pushEvent(m.runnerId, isBatter ? 'home' : m.fromBase, mid, naturalAdvanceEventType(battingResult));
+      pushEvent(m.runnerId, mid, m.toBase, mapAdvanceReasonToEventType(reason));
+      continue;
+    }
+
+    const isSacBunt = battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt';
+    const type = reason
+      ? mapAdvanceReasonToEventType(reason)
+      : isSacBunt
+        ? 'advance'
+        : naturalAdvanceEventType(battingResult);
+    pushEvent(m.runnerId, m.fromBase, m.toBase, type);
   }
   return result;
 }
@@ -510,7 +561,7 @@ export const useGameProcessor = ({
     }
     // 2. RunnerMovementあり (インプレイ、四死球など)
     else if (movementResult) {
-        const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons, advanceErrorDetails } = movementResult;
+        const { afterRunners, outsAfter, scoredRunners, outDetails, scoredRunnerReasons, advanceErrorDetails, extraAdvances } = movementResult;
 
         const outRunnerIdSet = new Set((outDetails ?? []).map((d) => d.runnerId));
 
@@ -525,20 +576,27 @@ export const useGameProcessor = ({
         const isWalk = battingResultForMovement === 'walk' || battingResultForMovement === 'intentional_walk';
         const isDeadball = battingResultForMovement === 'deadball';
         const wasBasesLoaded = !!(runners['1'] && runners['2'] && runners['3']);
+        const isSacBunt = battingResultForMovement === 'sacrifice_bunt' || battingResultForMovement === 'sac_bunt';
         mergedScoredRunners.forEach((entry) => {
           const reason = scoredRunnerReasons?.[entry.runnerId];
-          // 四死球かつ満塁の押し出し得点は打点
           if ((isWalk || isDeadball) && wasBasesLoaded) {
             entry.isRBI = true;
             return;
           }
-          if (reason !== 'hit') {
+          if (isWalk && !wasBasesLoaded && entry.runnerId !== batterIdForRbi) {
             entry.isRBI = false;
             return;
           }
-          if (isWalk && !wasBasesLoaded && entry.runnerId !== batterIdForRbi) {
+          const nonRbi = reason === 'wildpitch' || reason === 'passball' || reason === 'error' || reason === 'steal';
+          if (nonRbi) {
             entry.isRBI = false;
+            return;
           }
+          if (reason === 'hit' || reason === 'onthrow' || reason === 'tagup' || isSacBunt) {
+            entry.isRBI = true;
+            return;
+          }
+          entry.isRBI = false;
         });
 
         // 打撃プレー由来の進塁のみ（mid-play runnerEvents はマージしない）
@@ -548,7 +606,8 @@ export const useGameProcessor = ({
           moves,
           scoredRunnerReasons,
           battingResultForMovement,
-          batterIdForMoves
+          batterIdForMoves,
+          extraAdvances
         );
         builtRunnerEvents.push(
           ...buildFlyLinerRunoutEvents(battingResultForMovement, outDetails, runners, batterIdForMoves)
@@ -630,11 +689,12 @@ export const useGameProcessor = ({
 
                // 進塁理由でエラーを選択した場合: advanceErrorDetails の全件を失策として記録
                if (advanceErrorDetails && advanceErrorDetails.length > 0) {
+                 const seenErrorIds = new Set<string>();
                  advanceErrorDetails.forEach((detail) => {
-                   if (detail.position && detail.errorType) {
-                     const errorPosition = positionAbbrToCode(detail.position);
-                     list.push(buildFieldingAction(errorPosition, detail.errorType, 'error'));
-                   }
+                   if (!detail.countsAsNew || !detail.errorType || !detail.position) return;
+                   if (detail.id && seenErrorIds.has(detail.id)) return;
+                   if (detail.id) seenErrorIds.add(detail.id);
+                   list.push(buildFieldingAction(positionAbbrToCode(detail.position), detail.errorType, 'error'));
                  });
                }
 

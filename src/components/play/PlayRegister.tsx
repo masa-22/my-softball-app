@@ -14,6 +14,8 @@ import { useLineupManager, SpecialEntryResolution } from '../../hooks/useLineupM
 import { useRunnerManager } from '../../hooks/useRunnerManager';
 import { useGameProcessor } from '../../hooks/useGameProcessor';
 import { POSITIONS } from '../../data/softball/positions';
+import { toPriorError, type AdvanceErrorOption } from '../../utils/advanceErrors';
+import type { AdvanceReasonResult } from './runner/AdvanceReasonDialog';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { useBoxScoreData } from '../../hooks/useBoxScoreData';
 import BoxScoreModal from './boxscore/BoxScoreModal';
@@ -84,6 +86,7 @@ const PlayRegister: React.FC = () => {
     clearRunnerEvents,
     ensurePlateAppearanceId,
     clearPlateAppearanceId,
+    plateAppearanceId,
     handleCountsChange,
     handleCountsReset
   } = useGameInput(matchId);
@@ -131,6 +134,23 @@ const PlayRegister: React.FC = () => {
     () => (currentHalf === 'top' ? awayLineup : homeLineup),
     [currentHalf, homeLineup, awayLineup]
   );
+
+  const [plateAdvanceErrors, setPlateAdvanceErrors] = useState<AdvanceErrorOption[]>([]);
+
+  useEffect(() => {
+    if (!plateAppearanceId) setPlateAdvanceErrors([]);
+  }, [plateAppearanceId]);
+
+  const rememberAdvanceErrors = (results: AdvanceReasonResult[]) => {
+    setPlateAdvanceErrors((prev) => {
+      const next = [...prev];
+      results.forEach((result) => {
+        const prior = result.errorDetail ? toPriorError(result.errorDetail) : null;
+        if (prior && !next.some((item) => item.id === prior.id)) next.push(prior);
+      });
+      return next;
+    });
+  };
 
   const defensePositionPlayerNames = useMemo(() => {
     const defensePlayers: any[] = (currentHalf === 'top' ? awayPlayers : homePlayers) || [];
@@ -1099,11 +1119,18 @@ const PlayRegister: React.FC = () => {
                 onRecordAdvanceClick={runnerManager.handleRecordAdvanceClick}
                 showAdvanceDialog={runnerManager.showAdvanceDialog}
                 pendingAdvancements={runnerManager.pendingAdvancements}
-                onAdvanceConfirm={runnerManager.handleRunnerAdvanceConfirm}
+                onAdvanceConfirm={async (results) => {
+                  await runnerManager.handleRunnerAdvanceConfirm(results);
+                  rememberAdvanceErrors(results);
+                }}
                 showRecordAdvanceDialog={runnerManager.showRecordAdvanceDialog}
                 occupiedRunnersForAdvance={runnerManager.occupiedRunnersForAdvance}
-                onRecordAdvanceConfirm={runnerManager.handleRecordAdvanceConfirm}
+                onRecordAdvanceConfirm={async (payload) => {
+                  await runnerManager.handleRecordAdvanceConfirm(payload);
+                  rememberAdvanceErrors(payload.results);
+                }}
                 defensePositionPlayerNames={defensePositionPlayerNames}
+                knownErrors={plateAdvanceErrors}
                 showOutDialog={runnerManager.showOutDialog}
                 pendingOuts={runnerManager.pendingOuts}
                 onOutConfirm={runnerManager.handleRunnerOutConfirm}

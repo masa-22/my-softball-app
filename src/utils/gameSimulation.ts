@@ -93,7 +93,11 @@ export const simulatePlay = (before: GameSnapshot, resultType: string, batterId:
     
     if (isOut) {
         next.outs = Math.min(3, before.outs + 1);
-        if ((resultType === 'sacrifice_fly' || resultType === 'sacrifice_bunt') && before.runners['3']) {
+        if (resultType === 'sacrifice_bunt' || resultType === 'sac_bunt') {
+            const { after, scored: s } = advanceRunnersBy(before.runners, '', 1);
+            next.runners = after;
+            scored = s;
+        } else if ((resultType === 'sacrifice_fly' || resultType === 'sac_fly') && before.runners['3']) {
             scored.push(before.runners['3']);
             next.runners['3'] = null;
         }

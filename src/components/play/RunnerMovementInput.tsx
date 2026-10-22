@@ -4,11 +4,10 @@
  */
 import React from 'react';
 import DiamondField from './runner/DiamondField';
-import AdvanceReasonDialog from './runner/AdvanceReasonDialog';
 import OutReasonDialog from './runner/OutReasonDialog';
 import FinalConfirmDialog from './runner/FinalConfirmDialog';
-import RunnerSelectDialog from './runner/RunnerSelectDialog.tsx';
 import OutRunnersSelectionDialog from './runner/OutRunnersSelectionDialog';
+import RecordAdvanceDialog from './runner/RecordAdvanceDialog';
 import { useRunnerMovement } from '../../hooks/useRunnerMovement';
 import type { RunnerMovementInputProps } from './RunnerMovementInput.types';
 
@@ -136,13 +135,12 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = (props) => {
     outDetailsLocked,
     selectedOutRunners,
     showFinalConfirm,
-    showRunnerSelectDialog,
-    selectedTargetBase,
-    candidateRunners,
-    selectedRunnerId,
-    setSelectedRunnerId,
-    showAdvanceDialog,
-    pendingAdvancements,
+    showRecordAdvanceDialog,
+    setShowRecordAdvanceDialog,
+    occupiedRunnersForAdvance,
+    advanceReasonOptions,
+    knownErrorsForDialog,
+    handleRecordAdvanceConfirm,
     showOutDialog,
     pendingOuts,
     showOutRunnerDialog,
@@ -158,11 +156,9 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = (props) => {
     getPlayerName,
     getRunnerDisplayName,
     getPositionLabelByValue,
-    handleAfterBaseClick,
     handleCompleteClick,
     handleFinalConfirm,
     handleFinalCancel,
-    handleAdvanceConfirm,
     handleOutConfirm,
     handleDialogCancel,
     handleConfirmScores,
@@ -170,8 +166,6 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = (props) => {
     handleOpenOutSelection,
     handleOutRunnerDialogCancel,
     handleOutRunnerDialogConfirm,
-    handleRunnerSelectConfirm,
-    handleRunnerSelectCancel,
     onCancel,
   } = hook;
 
@@ -199,22 +193,13 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = (props) => {
         </>
       )}
 
-      {showRunnerSelectDialog && (
-        <RunnerSelectDialog
-          selectedTargetBase={selectedTargetBase}
-          candidates={candidateRunners}
-          selectedRunnerId={selectedRunnerId}
-          setSelectedRunnerId={setSelectedRunnerId}
-          onCancel={handleRunnerSelectCancel}
-          onConfirm={handleRunnerSelectConfirm}
-        />
-      )}
-
-      {showAdvanceDialog && (
-        <AdvanceReasonDialog
-          advancements={pendingAdvancements}
-          context="batting"
-          onConfirm={handleAdvanceConfirm}
+      {showRecordAdvanceDialog && (
+        <RecordAdvanceDialog
+          occupiedRunners={occupiedRunnersForAdvance}
+          reasonOptions={advanceReasonOptions}
+          askPitchOrder={false}
+          knownErrors={knownErrorsForDialog}
+          onConfirm={handleRecordAdvanceConfirm}
           onCancel={handleDialogCancel}
         />
       )}
@@ -368,8 +353,27 @@ const RunnerMovementInput: React.FC<RunnerMovementInputProps> = (props) => {
         <div style={styles.fieldSection}>
           <div style={styles.fieldTitle}>プレー後</div>
           <div style={styles.fieldWrapper}>
-            <div style={styles.fieldContainer(false)}>
-              <DiamondField runners={afterRunners} selectedBase={hook.selectedBase} onBaseClick={handleAfterBaseClick} />
+            <div style={styles.fieldContainer(true)}>
+              <DiamondField runners={afterRunners} selectedBase={null} onBaseClick={() => {}} />
+            </div>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => setShowRecordAdvanceDialog(true)}
+                disabled={occupiedRunnersForAdvance.length === 0}
+                style={{
+                  padding: '10px 20px',
+                  background: occupiedRunnersForAdvance.length > 0 ? '#4c6ef5' : '#adb5bd',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: occupiedRunnersForAdvance.length > 0 ? 'pointer' : 'not-allowed',
+                  fontWeight: 700,
+                  fontSize: 14,
+                }}
+              >
+                進塁を記録
+              </button>
             </div>
             <div style={styles.runnerList}>
               {scoredRunners.length > 0 && (

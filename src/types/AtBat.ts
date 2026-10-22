@@ -77,6 +77,8 @@ export type RunnerEventType =
   | 'hit'
   | 'scored'
   | 'illegalpitch'
+  | 'onthrow'
+  | 'tagup'
   | 'out'
   | 'error';
 
@@ -115,6 +117,14 @@ export interface RunnerEvent {
     base: BaseType;
     threwPosition?: string;
     caughtPosition?: string;
+  };
+  /** 進塁理由がエラーのとき、どの失策で進んだか */
+  errorRef?: {
+    errorId: string;
+    /** 守備位置コード（1-9） */
+    position: string;
+    errorType?: 'throw' | 'catch';
+    sameAsResult?: boolean;
   };
 }
 

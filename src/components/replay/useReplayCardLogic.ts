@@ -1,6 +1,20 @@
-import { AtBat, normalizeScoredRunners } from '../../types/AtBat';
+import { AtBat, normalizeScoredRunners, RunnerEvent } from '../../types/AtBat';
 import { BATTING_RESULTS } from '../../data/softball/battingResults';
 import { POSITIONS } from '../../data/softball/positions';
+
+function errorAdvancePhrase(event: RunnerEvent): string {
+  const ref = event.errorRef;
+  if (!ref) return '失策';
+  if (ref.sameAsResult) {
+    const pos = POSITIONS[ref.position];
+    return pos ? `この結果の失策（${pos.name}）` : 'この結果の失策';
+  }
+  const pos = POSITIONS[ref.position];
+  const name = pos?.name ?? ref.position;
+  if (ref.errorType === 'throw') return `${name}の送球エラー`;
+  if (ref.errorType === 'catch') return `${name}の捕球エラー`;
+  return `${name}の失策`;
+}
 
 /** 外野方向コード → リプレイ用表示（レフト・右中間・センター・左中間・ライト） */
 const REPLAY_DIRECTION_LABELS: Record<string, string> = {
@@ -102,10 +116,20 @@ export const useReplayCardLogic = (atBat: AtBat) => {
         const runnerId = atBat.situationBefore.runners[base];
         if (runnerId) {
             const scoredEntry = scored.find((e) => e.runnerId === runnerId);
+            const runnerEvents = (atBat.runnerEvents ?? []).filter((e) => e.runnerId === runnerId && !e.isOut);
+            const tagEvent = runnerEvents.find((e) => e.type === 'tagup');
+            const throwEvent = runnerEvents.find((e) => e.type === 'onthrow');
+            const errorEvent = runnerEvents.find((e) => e.type === 'error' && e.errorRef);
             if (scoredEntry) {
                 if (isForceIn && !forceInAdded) {
                   movements.push('押し出しにより得点');
                   forceInAdded = true;
+                } else if (tagEvent) {
+                  movements.push(`${base}塁ランナーがタッチアップで生還`);
+                } else if (throwEvent) {
+                  movements.push(`${base}塁ランナーが送球間に生還`);
+                } else if (errorEvent) {
+                  movements.push(`${base}塁ランナーが${errorAdvancePhrase(errorEvent)}で生還`);
                 } else if (isSacFly) {
                   movements.push(`${base}塁ランナーがタッチアップで生還`);
                 } else if (!isTimelyHit) {
@@ -119,7 +143,10 @@ export const useReplayCardLogic = (atBat: AtBat) => {
                 else if (atBat.situationAfter.runners['3'] === runnerId) destBase = '3塁';
                 
                 if (destBase && destBase !== `${base}塁`) {
-                    movements.push(`${base}塁ランナーが${destBase}へ進塁`);
+                    if (tagEvent) movements.push(`${base}塁ランナーがタッチアップで${destBase}へ進塁`);
+                    else if (throwEvent) movements.push(`${base}塁ランナーが送球間に${destBase}へ進塁`);
+                    else if (errorEvent) movements.push(`${base}塁ランナーが${errorAdvancePhrase(errorEvent)}で${destBase}へ進塁`);
+                    else movements.push(`${base}塁ランナーが${destBase}へ進塁`);
                 } else if (!destBase) {
                     if (isFlyLiner) {
                         const runout = atBat.runnerEvents?.find(
