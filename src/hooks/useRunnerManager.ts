@@ -66,9 +66,14 @@ const mapAdvanceReasonToEventType = (reason: AdvanceReasonResult['reason']): Run
       return 'illegalpitch';
     case 'error':
       return 'error';
+    case 'onthrow':
+      return 'onthrow';
+    case 'tagup':
+      return 'tagup';
     case 'hit':
-    default:
       return 'hit';
+    default:
+      return 'advance';
   }
 };
 
@@ -251,6 +256,15 @@ export const useRunnerManager = ({
     results.forEach((result) => {
       const adv = advs.find((a) => a.runnerId === result.runnerId);
       if (!adv) return;
+      const errorRef =
+        result.reason === 'error' && result.errorDetail?.errorId
+          ? {
+              errorId: result.errorDetail.errorId,
+              position: positionAbbrToCode(result.errorDetail.errorBy || ''),
+              errorType: result.errorDetail.errorType,
+              sameAsResult: result.errorDetail.sameAsResult,
+            }
+          : undefined;
       builtEvents.push({
         id: createRunnerEventId(),
         pitchSeq: result.pitchOrder ?? null,
@@ -260,17 +274,18 @@ export const useRunnerManager = ({
         fromBase: adv.fromBase,
         toBase: adv.toBase,
         isOut: false,
+        ...(errorRef ? { errorRef } : {}),
       });
     });
 
-    // 1つのエラーで複数走者が進んだ場合に二重計上しないよう、同一位置・同一種類はまとめる
     const errorFielding: FieldingAction[] = [];
+    const seenErrorIds = new Set<string>();
     results.forEach((result) => {
       if (result.reason !== 'error') return;
-      const { errorBy, errorType } = result.errorDetail ?? {};
-      if (!errorBy || !errorType) return;
+      const { errorId, errorBy, errorType, countsAsNew } = result.errorDetail ?? {};
+      if (!countsAsNew || !errorId || !errorBy || !errorType || seenErrorIds.has(errorId)) return;
+      seenErrorIds.add(errorId);
       const position = positionAbbrToCode(errorBy);
-      if (errorFielding.some((f) => f.position === position && f.action === errorType)) return;
       const playerId = defensiveLineup.find((e) => e.position === position)?.playerId?.trim();
       errorFielding.push({
         ...(playerId ? { playerId } : {}),

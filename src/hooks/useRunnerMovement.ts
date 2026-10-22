@@ -5,9 +5,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { getPlayers } from '../services/playerService';
 import { BATTING_RESULTS } from '../data/softball/battingResults';
 import type { ScoredRunnerEntry } from '../types/AtBat';
-import type { RunnerMovementInputProps, RunnerMovementResult, AdvanceErrorDetail, BaseKey } from '../components/play/RunnerMovementInput.types';
-import type { RunnerAdvancement, AdvanceReasonResult } from '../components/play/runner/AdvanceReasonDialog';
+import type { RunnerMovementInputProps, RunnerMovementResult, AdvanceErrorDetail, BaseKey, ExtraAdvance } from '../components/play/RunnerMovementInput.types';
+import type { AdvanceReasonCode, AdvanceReasonResult } from '../components/play/runner/AdvanceReasonDialog';
+import type { RecordAdvanceConfirmPayload } from '../components/play/runner/RecordAdvanceDialog';
 import type { RunnerOut, OutReasonResult } from '../components/play/runner/OutReasonDialog';
+import { resultErrorOption, toPriorError, type AdvanceErrorOption } from '../utils/advanceErrors';
 
 function getAdvanceDistance(result: string): number {
   switch (result) {
@@ -74,13 +76,18 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     battingResultLabel: externalBattingResultLabel,
     offenseTeamId,
     playDetails,
+    knownErrors = [],
   } = props;
 
   const [beforeRunners] = useState(initialRunners);
 
   const getInitialAfterRunners = (): { '1': string | null; '2': string | null; '3': string | null } => {
+    if (battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt') {
+      const { after } = advanceRunnersBy(initialRunners, null, 1);
+      return after;
+    }
     const n = getAdvanceDistance(battingResult);
-    if (battingResult === 'sacrifice_fly' || battingResult === 'sacrifice_bunt') {
+    if (battingResult === 'sacrifice_fly' || battingResult === 'sac_fly') {
       const after = { ...initialRunners };
       if (after['3']) after['3'] = null;
       return after;
@@ -107,8 +114,11 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const [scoredRunners, setScoredRunners] = useState<ScoredRunnerEntry[]>([]);
   const [showScoreConfirm, setShowScoreConfirm] = useState(false);
   const [pendingScores, setPendingScores] = useState<string[]>([]);
-  const [scoredRunnerReasons, setScoredRunnerReasons] = useState<Record<string, 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball'>>({});
+  const [scoredRunnerReasons, setScoredRunnerReasons] = useState<Record<string, AdvanceReasonCode>>({});
   const [advanceErrorDetails, setAdvanceErrorDetails] = useState<AdvanceErrorDetail[]>([]);
+  const [extraAdvances, setExtraAdvances] = useState<ExtraAdvance[]>([]);
+  const [sessionErrors, setSessionErrors] = useState<AdvanceErrorOption[]>([]);
+  const [showRecordAdvanceDialog, setShowRecordAdvanceDialog] = useState(false);
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false);
   const [showOutDialog, setShowOutDialog] = useState(false);
   const [pendingAdvancements, setPendingAdvancements] = useState<RunnerAdvancement[]>([]);
@@ -263,11 +273,17 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
       if (batterId && !Object.values(afterRunners).includes(batterId) && !outRunnerIds.has(batterId)) {
         scored.push(batterId);
       }
-    } else if (battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
+    } else if (battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt' || battingResult === 'sacrifice_fly' || battingResult === 'sac_fly') {
       const runner3 = beforeRunners['3'];
       if (runner3 && !Object.values(afterRunners).includes(runner3) && !outRunnerIds.has(runner3)) {
         scored.push(runner3);
       }
+    } else {
+      (['1', '2', '3'] as const).forEach((base) => {
+        const pid = beforeRunners[base];
+        if (!pid) return;
+        if (!Object.values(afterRunners).includes(pid) && !outRunnerIds.has(pid)) scored.push(pid);
+      });
     }
     if (scored.length > 0) {
       const merged = [...scored];
@@ -282,7 +298,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
       ) {
         setShowScoreConfirm(true);
       }
-    } else if (n > 0 || battingResult === 'sacrifice_bunt' || battingResult === 'sacrifice_fly') {
+    } else if (n > 0 || battingResult === 'sacrifice_bunt' || battingResult === 'sac_bunt' || battingResult === 'sacrifice_fly' || battingResult === 'sac_fly') {
       setPendingScores((prev) => prev.filter((id) => !outRunnerIds.has(id)));
     }
   }, [beforeRunners, afterRunners, battingResult, batterId, scoredRunners, showScoreConfirm, outRunnerIds]);
@@ -416,6 +432,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
         outDetails,
         scoredRunnerReasons: Object.keys(scoredRunnerReasons).length > 0 ? scoredRunnerReasons : undefined,
         advanceErrorDetails: advanceErrorDetails.length > 0 ? advanceErrorDetails : undefined,
+        extraAdvances: extraAdvances.length > 0 ? extraAdvances : undefined,
       };
       onComplete(result);
     }
@@ -427,23 +444,82 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
   const handleAdvanceConfirm = (results: AdvanceReasonResult[]) => {
     const newReasons = { ...scoredRunnerReasons };
     results.forEach((result) => {
-      if (['hit', 'error', 'steal', 'wildpitch', 'passball'].includes(result.reason)) {
-        newReasons[result.runnerId] = result.reason as 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball';
-      }
+      newReasons[result.runnerId] = result.reason;
     });
     setScoredRunnerReasons(newReasons);
     const newErrorDetails = [...advanceErrorDetails];
     results.forEach((r) => {
-      if (r.reason === 'error' && r.errorDetail?.errorBy && r.errorDetail?.errorType) {
-        newErrorDetails.push({
-          position: r.errorDetail.errorBy,
-          errorType: r.errorDetail.errorType as 'throw' | 'catch',
-        });
-      }
+      if (r.reason !== 'error' || !r.errorDetail?.errorId) return;
+      if (newErrorDetails.some((d) => d.id === r.errorDetail?.errorId)) return;
+      newErrorDetails.push({
+        id: r.errorDetail.errorId,
+        position: r.errorDetail.errorBy || '',
+        errorType: r.errorDetail.errorType,
+        countsAsNew: !!r.errorDetail.countsAsNew,
+        sameAsResult: r.errorDetail.sameAsResult,
+      });
     });
     setAdvanceErrorDetails(newErrorDetails);
     setShowAdvanceDialog(false);
     setPendingAdvancements([]);
+  };
+
+  const handleRecordAdvanceConfirm = (payload: RecordAdvanceConfirmPayload) => {
+    const next = { ...afterRunners };
+    payload.advancements.forEach((adv) => {
+      (['1', '2', '3'] as const).forEach((base) => {
+        if (next[base] === adv.runnerId) next[base] = null;
+      });
+    });
+    payload.advancements.forEach((adv) => {
+      if (adv.toBase === '1' || adv.toBase === '2' || adv.toBase === '3') {
+        next[adv.toBase] = adv.runnerId;
+      }
+    });
+    setAfterRunners(next);
+
+    const newReasons = { ...scoredRunnerReasons };
+    const newExtras = [...extraAdvances];
+    const newErrorDetails = [...advanceErrorDetails];
+    payload.results.forEach((result) => {
+      const adv = payload.advancements.find((a) => a.runnerId === result.runnerId);
+      if (!adv) return;
+      newReasons[result.runnerId] = result.reason;
+      const errorDetail: AdvanceErrorDetail | undefined =
+        result.reason === 'error' && result.errorDetail?.errorId
+          ? {
+              id: result.errorDetail.errorId,
+              position: result.errorDetail.errorBy || '',
+              errorType: result.errorDetail.errorType,
+              countsAsNew: !!result.errorDetail.countsAsNew,
+              sameAsResult: result.errorDetail.sameAsResult,
+            }
+          : undefined;
+      newExtras.push({
+        runnerId: result.runnerId,
+        fromBase: adv.fromBase,
+        toBase: adv.toBase,
+        reason: result.reason,
+        errorDetail,
+      });
+      if (errorDetail && !newErrorDetails.some((d) => d.id === errorDetail.id)) {
+        newErrorDetails.push(errorDetail);
+      }
+    });
+    setScoredRunnerReasons(newReasons);
+    setExtraAdvances(newExtras);
+    setAdvanceErrorDetails(newErrorDetails);
+    setSessionErrors((prev) => {
+      const nextErrors = [...prev];
+      payload.results.forEach((result) => {
+        const prior = result.errorDetail ? toPriorError(result.errorDetail) : null;
+        if (prior && !nextErrors.some((e) => e.id === prior.id) && !knownErrors.some((e) => e.id === prior.id)) {
+          nextErrors.push(prior);
+        }
+      });
+      return nextErrors;
+    });
+    setShowRecordAdvanceDialog(false);
   };
 
   const handleOutConfirm = (_results: OutReasonResult[]) => {
@@ -453,6 +529,7 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
 
   const handleDialogCancel = () => {
     setShowAdvanceDialog(false);
+    setShowRecordAdvanceDialog(false);
     setShowOutDialog(false);
     setPendingAdvancements([]);
     setPendingOuts([]);
@@ -573,6 +650,51 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     setCandidateRunners([]);
   };
 
+  const occupiedRunnersForAdvance = useMemo(() => {
+    const list: Array<{ runnerId: string; runnerName: string; fromBase: '1' | '2' | '3' }> = [];
+    (['1', '2', '3'] as const).forEach((base) => {
+      const runnerId = afterRunners[base];
+      if (!runnerId || outRunnerIds.has(runnerId)) return;
+      list.push({
+        runnerId,
+        runnerName: getRunnerDisplayName(runnerId) || (base === '1' ? '一塁走者' : base === '2' ? '二塁走者' : '三塁走者'),
+        fromBase: base,
+      });
+    });
+    return list;
+  }, [afterRunners, outRunnerIds, offensePlayers, batterId, currentBatter]);
+
+  const hasRunnersBefore = !!(beforeRunners['1'] || beforeRunners['2'] || beforeRunners['3']);
+  const advanceReasonOptions = useMemo(() => {
+    const options: Array<{ value: AdvanceReasonCode; label: string }> = [
+      { value: 'hit', label: 'ヒット' },
+      { value: 'error', label: 'エラー' },
+      { value: 'steal', label: '盗塁' },
+      { value: 'wildpitch', label: 'ワイルドピッチ' },
+      { value: 'passball', label: 'パスボール' },
+      { value: 'onthrow', label: '送球間' },
+    ];
+    if ((battingResult === 'flyout' || battingResult === 'linerout') && hasRunnersBefore) {
+      options.push({ value: 'tagup', label: 'タッチアップ' });
+    }
+    return options;
+  }, [battingResult, hasRunnersBefore]);
+
+  const knownErrorsForDialog = useMemo(() => {
+    const list: AdvanceErrorOption[] = [];
+    if (battingResult === 'error' && playDetails?.position) {
+      const resultError = resultErrorOption(playDetails.position);
+      if (resultError) list.push(resultError);
+    }
+    knownErrors.forEach((err) => {
+      if (!list.some((item) => item.id === err.id)) list.push(err);
+    });
+    sessionErrors.forEach((err) => {
+      if (!list.some((item) => item.id === err.id)) list.push(err);
+    });
+    return list;
+  }, [battingResult, playDetails?.position, knownErrors, sessionErrors]);
+
   return {
     beforeRunners,
     afterRunners,
@@ -595,6 +717,12 @@ export function useRunnerMovement(props: RunnerMovementInputProps) {
     selectedRunnerId,
     setSelectedRunnerId,
     showAdvanceDialog,
+    showRecordAdvanceDialog,
+    setShowRecordAdvanceDialog,
+    occupiedRunnersForAdvance,
+    advanceReasonOptions,
+    knownErrorsForDialog,
+    handleRecordAdvanceConfirm,
     pendingAdvancements,
     showOutDialog,
     pendingOuts,

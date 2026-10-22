@@ -4,6 +4,7 @@ import RunnerStatus from '../RunnerStatus';
 import PlayResultPanel from '../PlayResultPanel';
 import RunnerMovementInput, { RunnerMovementResult } from '../RunnerMovementInput';
 import { PitchData } from '../../../types/PitchData';
+import type { AdvanceErrorOption } from '../../../utils/advanceErrors';
 
 import { PitchType } from '../../../types/PitchType';
 
@@ -73,6 +74,7 @@ interface CenterPanelProps {
     results: any[];
   }) => void;
   defensePositionPlayerNames?: Record<string, string>;
+  knownErrors?: AdvanceErrorOption[];
   showOutDialog: boolean;
   pendingOuts: any[]; // RunnerOut[]
   onOutConfirm: (results: any[]) => void; // OutReasonResult[]
@@ -130,6 +132,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
   occupiedRunnersForAdvance,
   onRecordAdvanceConfirm,
   defensePositionPlayerNames,
+  knownErrors,
   showOutDialog,
   pendingOuts,
   onOutConfirm,
@@ -163,6 +166,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
           pitches={pitches}
           offenseTeamId={offenseTeamId} // 追加
           playDetails={playDetails} // 追加
+          knownErrors={knownErrors}
         />
       ) : !showPlayResult ? (
         <>
@@ -239,6 +243,7 @@ const CenterPanel: React.FC<CenterPanelProps> = ({
                 occupiedRunnersForAdvance={occupiedRunnersForAdvance}
                 onRecordAdvanceConfirm={onRecordAdvanceConfirm}
                 defensePositionPlayerNames={defensePositionPlayerNames}
+                knownErrors={knownErrors}
                 // アウト理由ダイアログ
                 showOutDialog={showOutDialog}
                 pendingOuts={pendingOuts}

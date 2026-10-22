@@ -3,12 +3,18 @@
  */
 import React, { useMemo, useState } from 'react';
 import { PitchData } from '../../../types/PitchData';
+import type { AdvanceErrorDetail, AdvanceErrorOption } from '../../../utils/advanceErrors';
+import ErrorAdvancePicker from './ErrorAdvancePicker';
 
-// 進塁理由（1球ごと）
-type PitchAdvanceReason = 'steal' | 'wildpitch' | 'passball' | 'illegalpitch';
-
-// 進塁理由（打撃後）
-type BattingAdvanceReason = 'hit' | 'error' | 'steal' | 'wildpitch' | 'passball';
+export type AdvanceReasonCode =
+  | 'steal'
+  | 'wildpitch'
+  | 'passball'
+  | 'illegalpitch'
+  | 'hit'
+  | 'error'
+  | 'onthrow'
+  | 'tagup';
 
 export interface RunnerAdvancement {
   runnerId: string;
@@ -17,18 +23,14 @@ export interface RunnerAdvancement {
   toBase: '1' | '2' | '3' | 'home';
 }
 
-/** エラーの種類（送球・捕球） */
-export type ErrorType = 'throw' | 'catch';
+export type { ErrorType } from '../../../utils/advanceErrors';
 
 export interface AdvanceReasonResult {
   runnerId: string;
-  reason: PitchAdvanceReason | BattingAdvanceReason;
+  reason: AdvanceReasonCode;
   pitchOrder: number | null;
   eventSource: 'pitch' | 'non_pitch';
-  errorDetail?: {
-    errorBy?: string;   // エラーした守備位置
-    errorType?: ErrorType; // 送球・捕球
-  };
+  errorDetail?: AdvanceErrorDetail;
 }
 
 interface AdvanceReasonDialogProps {
@@ -38,6 +40,9 @@ interface AdvanceReasonDialogProps {
   onCancel: () => void;
   pitches?: PitchData[];
   defaultPitchOrder?: number | null;
+  knownErrors?: AdvanceErrorOption[];
+  positionPlayerNames?: Record<string, string>;
+  extraReasonOptions?: Array<{ value: AdvanceReasonCode; label: string }>;
 }
 
 const styles = {
@@ -158,8 +163,13 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
   onCancel,
   pitches = [],
   defaultPitchOrder = null,
+  knownErrors = [],
+  positionPlayerNames = {},
+  extraReasonOptions = [],
 }) => {
   const [results, setResults] = useState<Record<string, AdvanceReasonResult>>({});
+  const [addedErrors, setAddedErrors] = useState<AdvanceErrorOption[]>([]);
+  const errorCatalog = useMemo(() => [...knownErrors, ...addedErrors], [knownErrors, addedErrors]);
 
   const pitchOrderOptions = useMemo(() => {
     const orders = Array.from(new Set(pitches.map(p => p.order))).filter((order) => typeof order === 'number');
@@ -178,31 +188,24 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
     return pitchOrderOptions[pitchOrderOptions.length - 1];
   };
 
-  const pitchAdvanceOptions = [
+  const pitchAdvanceOptions: Array<{ value: AdvanceReasonCode; label: string }> = [
     { value: 'steal', label: '盗塁' },
     { value: 'wildpitch', label: 'ワイルドピッチ' },
     { value: 'passball', label: 'パスボール' },
     { value: 'illegalpitch', label: 'イリーガルピッチ' },
+    { value: 'onthrow', label: '送球間' },
+    { value: 'error', label: 'エラー' },
+    ...extraReasonOptions,
   ];
 
-  const battingAdvanceOptions = [
+  const battingAdvanceOptions: Array<{ value: AdvanceReasonCode; label: string }> = [
     { value: 'hit', label: 'ヒット' },
     { value: 'error', label: 'エラー' },
     { value: 'steal', label: '盗塁' },
     { value: 'wildpitch', label: 'ワイルドピッチ' },
     { value: 'passball', label: 'パスボール' },
-  ];
-
-  const positionOptions = [
-    { value: 'P', label: '投手' },
-    { value: 'C', label: '捕手' },
-    { value: '1B', label: '一塁手' },
-    { value: '2B', label: '二塁手' },
-    { value: '3B', label: '三塁手' },
-    { value: 'SS', label: '遊撃手' },
-    { value: 'LF', label: '左翼手' },
-    { value: 'CF', label: '中堅手' },
-    { value: 'RF', label: '右翼手' },
+    { value: 'onthrow', label: '送球間' },
+    ...extraReasonOptions,
   ];
 
   const handleReasonSelect = (runnerId: string, reason: string) => {
@@ -215,19 +218,26 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
         reason: reason as any,
         pitchOrder: needsPitchOrder ? resolvedDefault : null,
         eventSource: context === 'pitch' && resolvedDefault !== null ? 'pitch' : 'non_pitch',
-        errorDetail: reason === 'error' ? prev[runnerId]?.errorDetail ?? {} : {},
+        errorDetail: reason === 'error' ? prev[runnerId]?.errorDetail : undefined,
       },
     }));
   };
 
-  const handleErrorDetailChange = (runnerId: string, field: 'errorBy' | 'errorType', value: string) => {
+  const handleErrorSelect = (runnerId: string, errorId: string) => {
+    const selected = errorCatalog.find((e) => e.id === errorId);
+    if (!selected) return;
     setResults(prev => ({
       ...prev,
       [runnerId]: {
         ...prev[runnerId],
+        runnerId,
+        reason: 'error',
         errorDetail: {
-          ...prev[runnerId]?.errorDetail,
-          [field]: value,
+          errorId: selected.id,
+          errorBy: selected.positionAbbr,
+          errorType: selected.errorType,
+          sameAsResult: selected.origin === 'result',
+          countsAsNew: selected.countsAsNew,
         },
       },
     }));
@@ -245,7 +255,7 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
       
       // エラーの場合、守備位置と送球/捕球の選択が必須
       if (result.reason === 'error') {
-        return !!result.errorDetail?.errorBy && !!result.errorDetail?.errorType;
+        return !!result.errorDetail?.errorId && errorCatalog.some((e) => e.id === result.errorDetail?.errorId);
       }
 
       if (requiresPitchOrder(result.reason)) {
@@ -342,40 +352,32 @@ const AdvanceReasonDialog: React.FC<AdvanceReasonDialogProps> = ({
 
               {/* エラー詳細入力 */}
               {currentReason === 'error' && (
-                <>
-                  <div style={styles.detailGroup}>
-                    <div style={styles.detailLabel}>エラーした守備位置 *</div>
-                    <select
-                      value={errorDetail?.errorBy || ''}
-                      onChange={(e) => handleErrorDetailChange(advancement.runnerId, 'errorBy', e.target.value)}
-                      style={styles.select}
-                    >
-                      <option value="">選択してください</option>
-                      {positionOptions.map(pos => (
-                        <option key={pos.value} value={pos.value}>{pos.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={styles.detailGroup}>
-                    <div style={styles.detailLabel}>どういうエラーか *</div>
-                    <div style={styles.reasonOptions}>
-                      <button
-                        type="button"
-                        onClick={() => handleErrorDetailChange(advancement.runnerId, 'errorType', 'throw')}
-                        style={styles.reasonButton(errorDetail?.errorType === 'throw')}
-                      >
-                        送球
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleErrorDetailChange(advancement.runnerId, 'errorType', 'catch')}
-                        style={styles.reasonButton(errorDetail?.errorType === 'catch')}
-                      >
-                        捕球
-                      </button>
-                    </div>
-                  </div>
-                </>
+                <ErrorAdvancePicker
+                  catalog={errorCatalog}
+                  selectedId={errorDetail?.errorId}
+                  positionPlayerNames={positionPlayerNames}
+                  onSelect={(errorId) => handleErrorSelect(advancement.runnerId, errorId)}
+                  onAdd={(error) => {
+                    setAddedErrors((prev) => [...prev, error]);
+                    setResults((prev) => ({
+                      ...prev,
+                      [advancement.runnerId]: {
+                        ...prev[advancement.runnerId],
+                        runnerId: advancement.runnerId,
+                        reason: 'error',
+                        pitchOrder: prev[advancement.runnerId]?.pitchOrder ?? null,
+                        eventSource: prev[advancement.runnerId]?.eventSource ?? 'non_pitch',
+                        errorDetail: {
+                          errorId: error.id,
+                          errorBy: error.positionAbbr,
+                          errorType: error.errorType,
+                          sameAsResult: false,
+                          countsAsNew: true,
+                        },
+                      },
+                    }));
+                  }}
+                />
               )}
             </div>
           );

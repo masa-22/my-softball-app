@@ -4,12 +4,13 @@
  */
 import React, { useMemo, useState } from 'react';
 import { PitchData } from '../../../types/PitchData';
-import { POSITIONS } from '../../../data/softball/positions';
-import type { AdvanceReasonResult, ErrorType, RunnerAdvancement } from './AdvanceReasonDialog';
+import type { AdvanceReasonCode, AdvanceReasonResult, RunnerAdvancement } from './AdvanceReasonDialog';
+import { errorDetailFromOption, type AdvanceErrorOption } from '../../../utils/advanceErrors';
+import ErrorAdvancePicker from './ErrorAdvancePicker';
 
 type FromBase = '1' | '2' | '3';
 type ToBase = '1' | '2' | '3' | 'home';
-type PitchAdvanceReason = 'steal' | 'wildpitch' | 'passball' | 'illegalpitch' | 'error';
+type PitchAdvanceReason = AdvanceReasonCode;
 
 export type RecordAdvanceConfirmPayload = {
   advancements: RunnerAdvancement[];
@@ -30,25 +31,28 @@ interface RecordAdvanceDialogProps {
   defaultPitchOrder?: number | null;
   /** 守備位置の略称（P, C, 1B...）→ その時点の守備者名 */
   positionPlayerNames?: Record<string, string>;
+  /** 未指定なら打席中の理由。プレー後は呼び出し側が渡す */
+  reasonOptions?: Array<{ value: AdvanceReasonCode; label: string }>;
+  /** プレー後は false。盗塁などの球数選択を出さない */
+  askPitchOrder?: boolean;
+  knownErrors?: AdvanceErrorOption[];
 }
 
 type RowState = {
   toBase: ToBase | '';
   reason: PitchAdvanceReason | '';
   pitchOrder: number | null | undefined;
-  errorBy?: string;
-  errorType?: ErrorType;
+  errorId?: string;
 };
 
-const REASON_OPTIONS: Array<{ value: PitchAdvanceReason; label: string }> = [
+const DEFAULT_REASON_OPTIONS: Array<{ value: AdvanceReasonCode; label: string }> = [
   { value: 'steal', label: '盗塁' },
   { value: 'wildpitch', label: 'ワイルドピッチ' },
   { value: 'passball', label: 'パスボール' },
   { value: 'illegalpitch', label: 'イリーガルピッチ' },
+  { value: 'onthrow', label: '送球間' },
   { value: 'error', label: 'エラー' },
 ];
-
-const FIELD_POSITIONS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((code) => POSITIONS[code]);
 
 const baseLabel = (b: FromBase | ToBase | '') => {
   if (!b) return '';
@@ -66,7 +70,7 @@ const allowedToBases = (from: FromBase): ToBase[] => {
   return ['home'];
 };
 
-const requiresPitchOrder = (reason?: string) =>
+const pitchOrderReasons = (reason?: string) =>
   !!reason && ['steal', 'wildpitch', 'passball'].includes(reason);
 
 const styles = {
@@ -168,7 +172,12 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
   pitches = [],
   defaultPitchOrder = null,
   positionPlayerNames = {},
+  reasonOptions = DEFAULT_REASON_OPTIONS,
+  askPitchOrder = true,
+  knownErrors = [],
 }) => {
+  const [addedErrors, setAddedErrors] = useState<AdvanceErrorOption[]>([]);
+  const errorCatalog = useMemo(() => [...knownErrors, ...addedErrors], [knownErrors, addedErrors]);
   const [rows, setRows] = useState<Record<string, RowState>>(() => {
     const init: Record<string, RowState> = {};
     occupiedRunners.forEach((r) => {
@@ -194,9 +203,12 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
     setRows((prev) => ({ ...prev, [runnerId]: { ...prev[runnerId], ...patch } }));
   };
 
+  const requiresPitchOrder = (reason?: string) => askPitchOrder && pitchOrderReasons(reason);
+
   const applyBulkReason = (reason: PitchAdvanceReason) => {
     const needsPitch = requiresPitchOrder(reason);
     const pitchOrder = needsPitch ? resolveDefaultPitchOrder() : null;
+    const bulkErrorId = reason === 'error' && errorCatalog.length === 1 ? errorCatalog[0].id : undefined;
     setRows((prev) => {
       const next = { ...prev };
       occupiedRunners.forEach((r) => {
@@ -206,6 +218,7 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
           ...row,
           reason,
           pitchOrder: needsPitch ? pitchOrder : null,
+          errorId: reason === 'error' ? bulkErrorId : undefined,
         };
       });
       return next;
@@ -235,8 +248,8 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
       if (requiresPitchOrder(row.reason) && row.pitchOrder === undefined) {
         return `${runner.runnerName}の球数を選択してください`;
       }
-      if (row.reason === 'error' && (!row.errorBy || !row.errorType)) {
-        return `${runner.runnerName}のエラーした守備位置と種類を選択してください`;
+      if (row.reason === 'error' && !errorCatalog.some((e) => e.id === row.errorId)) {
+        return `${runner.runnerName}のエラーを選択してください`;
       }
     }
 
@@ -277,7 +290,7 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
     }
 
     return null;
-  }, [advancing, occupiedRunners, rows]);
+  }, [advancing, occupiedRunners, rows, errorCatalog, askPitchOrder]);
 
   const handleConfirm = () => {
     if (validationError) {
@@ -301,7 +314,7 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
         pitchOrder,
         eventSource: needsPitch && pitchOrder !== null ? 'pitch' : 'non_pitch',
         ...(row.reason === 'error'
-          ? { errorDetail: { errorBy: row.errorBy, errorType: row.errorType } }
+          ? { errorDetail: errorDetailFromOption(errorCatalog.find((e) => e.id === row.errorId)!) }
           : {}),
       };
     });
@@ -317,7 +330,7 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
 
         <div style={styles.bulkRow}>
           <span style={styles.bulkLabel}>進塁指定中の全員に理由を一括:</span>
-          {REASON_OPTIONS.map((opt) => (
+          {reasonOptions.map((opt) => (
             <button
               key={opt.value}
               type="button"
@@ -363,7 +376,7 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
                 <>
                   <div style={styles.label}>進塁理由 *</div>
                   <div style={styles.options}>
-                    {REASON_OPTIONS.map((opt) => (
+                    {reasonOptions.map((opt) => (
                       <button
                         key={opt.value}
                         type="button"
@@ -412,41 +425,16 @@ const RecordAdvanceDialog: React.FC<RecordAdvanceDialogProps> = ({
                   )}
 
                   {row.reason === 'error' && (
-                    <div style={styles.detail}>
-                      <div style={styles.label}>エラーした守備位置 *</div>
-                      <select
-                        value={row.errorBy || ''}
-                        onChange={(e) => updateRow(runner.runnerId, { errorBy: e.target.value || undefined })}
-                        style={{ ...styles.select, marginBottom: 10 }}
-                      >
-                        <option value="">選択してください</option>
-                        {FIELD_POSITIONS.map((pos) => {
-                          const name = positionPlayerNames[pos.abbr];
-                          return (
-                            <option key={pos.abbr} value={pos.abbr}>
-                              {name ? `${pos.name}（${name}）` : pos.name}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      <div style={styles.label}>どういうエラーか *</div>
-                      <div style={{ ...styles.options, marginBottom: 0 }}>
-                        <button
-                          type="button"
-                          onClick={() => updateRow(runner.runnerId, { errorType: 'throw' })}
-                          style={styles.chip(row.errorType === 'throw')}
-                        >
-                          送球
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateRow(runner.runnerId, { errorType: 'catch' })}
-                          style={styles.chip(row.errorType === 'catch')}
-                        >
-                          捕球
-                        </button>
-                      </div>
-                    </div>
+                    <ErrorAdvancePicker
+                      catalog={errorCatalog}
+                      selectedId={row.errorId}
+                      positionPlayerNames={positionPlayerNames}
+                      onSelect={(errorId) => updateRow(runner.runnerId, { errorId })}
+                      onAdd={(error) => {
+                        setAddedErrors((prev) => [...prev, error]);
+                        updateRow(runner.runnerId, { errorId: error.id });
+                      }}
+                    />
                   )}
                 </>
               )}

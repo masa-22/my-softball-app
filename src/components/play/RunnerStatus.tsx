@@ -10,6 +10,7 @@ import RunnerStatusSidebar from './runner/RunnerStatusSidebar';
 import RunnerFieldPanel from './runner/RunnerFieldPanel';
 import AddOutDialog from './runner/AddOutDialog.tsx';
 import { PitchData } from '../../types/PitchData';
+import type { AdvanceErrorOption } from '../../utils/advanceErrors';
 
 type BaseKey = '1' | '2' | '3' | 'home';
 
@@ -44,6 +45,7 @@ interface RunnerStatusProps {
   onRecordAdvanceConfirm: (payload: RecordAdvanceConfirmPayload) => void;
   /** 守備位置の略称 → 守備者名（エラー入力時の表示用） */
   defensePositionPlayerNames?: Record<string, string>;
+  knownErrors?: AdvanceErrorOption[];
 
   // アウト理由ダイアログ（親制御）
   showOutDialog: boolean;
@@ -105,6 +107,7 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
   occupiedRunnersForAdvance,
   onRecordAdvanceConfirm,
   defensePositionPlayerNames,
+  knownErrors,
   showOutDialog,
   pendingOuts,
   onOutConfirm,
@@ -131,6 +134,7 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
           pitches={pitches}
           defaultPitchOrder={latestPitchOrder}
           positionPlayerNames={defensePositionPlayerNames}
+          knownErrors={knownErrors}
           onConfirm={onRecordAdvanceConfirm}
           onCancel={onDialogCancel}
         />
@@ -143,6 +147,8 @@ const RunnerStatus: React.FC<RunnerStatusProps> = ({
           context="pitch"
           pitches={pitches}
           defaultPitchOrder={latestPitchOrder}
+          knownErrors={knownErrors}
+          positionPlayerNames={defensePositionPlayerNames}
           onConfirm={onAdvanceConfirm}
           onCancel={onDialogCancel}
         />
